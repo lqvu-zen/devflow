@@ -1,0 +1,17 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "devflow",
+  "description": "The devflow plugin: the RYOS working method, for any project.",
+  "owner": {
+    "name": "Quang-Vu Le"
+  },
+  "plugins": [
+    {
+      "name": "devflow",
+      "source": "./",
+      "description": "Locate, design, implement, review and commit through fresh agents; a behaviour map; claimable plan steps; a secretary; releases through a tested candidate; guard hooks.",
+      "version": "0.1.0",
+      "license": "MIT"
+    }
+  ]
+}
