@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import posixpath
@@ -123,6 +124,7 @@ ALWAYS_WHOLE_TREE = frozenset({".", "./", ":/", ":/.", "*"})
 REF_NAMES = ("APPDATA", "LOCALAPPDATA", "USERPROFILE", "HOME", "XDG_DATA_HOME",
              "XDG_CONFIG_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "TMPDIR", "TEMP", "TMP")
 WINDOWS_ALIASES = {"APPDATA": "AppData/Roaming", "LOCALAPPDATA": "AppData/Local"}
+READ_TOOLS = frozenset({"Read", "Grep", "Glob"})
 NEVER = re.compile(r"(?!x)x")
 
 _DRIVE = re.compile(r"(?<![\w.:/~$-])/([a-z])(?=/|$|[\s\"'`;|&)])")
@@ -303,6 +305,22 @@ def names_place(text: str, roots: tuple[str, ...] | list[str]) -> bool:
 
 def names_key_path(text: str, rules: Rules) -> bool:
     return bool(rules.key_path.search(text))
+
+
+def glob_names_place(text: str, roots: tuple[str, ...] | list[str]) -> bool:
+    if not any(c in text for c in "*?["):
+        return False
+    parts = text.split("/")
+    for root in roots:
+        root_parts = root.split("/")
+        if root_parts != [""] and len(parts) >= len(root_parts) and all(
+                fnmatch.fnmatchcase(r, p) for p, r in zip(parts, root_parts)):
+            return True
+    return False
+
+
+def hides_real_data(text: str, roots: tuple[str, ...]) -> bool:
+    return any(root.rsplit("/", 1)[0] in text for root in roots if "/" in root)
 
 
 def _file_operands(words: list[str]) -> list[str]:
@@ -1107,8 +1125,10 @@ def _segment_verdict(segment: Segment, rules: Rules, assigned: dict[str, str],
     text = flat(" ".join(expanded + redirects))
     name = command_name(expanded[0]) if expanded else ""
     body = flat(expand_refs(segment.body, places.refs, before)) if name in INTERPRETERS else ""
+    spelled = [flat(w) for w in expanded + redirects]
     if names_place(text, places.keys) or names_place(body, places.keys) \
-            or names_key_file(expanded, redirects, rules) or names_key_path(body, rules):
+            or names_key_file(expanded, redirects, rules) or names_key_path(body, rules) \
+            or any(glob_names_place(w, places.keys) for w in spelled):
         return Verdict("deny", f"guard.py refused: this names a secret ({rules.secret_names}). "
                                f"{rules.maintainer} keeps it; Claude never reads, copies or uses "
                                "it."), False
@@ -1134,7 +1154,9 @@ def _segment_verdict(segment: Segment, rules: Rules, assigned: dict[str, str],
     names_real = (names_place(text, places.real_data) or names_place(body, places.real_data)
                   or names_place(flat(" ".join(located + located_redirects)), places.real_data)
                   or (location.absolute is not None
-                      and names_place(location.absolute, places.real_data)))
+                      and names_place(location.absolute, places.real_data))
+                  or any(glob_names_place(w, places.real_data)
+                         for w in located + located_redirects))
     tainted_out = False
     if expanded and (names_real or tainted_in):
         if name in ("git", "gh"):
@@ -1147,6 +1169,12 @@ def _segment_verdict(segment: Segment, rules: Rules, assigned: dict[str, str],
                                    f"{rules.name}'s real data ({rules.real_data_names}). Only "
                                    "reads and copies out of it are allowed; work on a copy in a "
                                    "scratch folder."), False
+    if (expanded and segment.substitution and not names_real and name not in ("git", "gh")
+            and hides_real_data(text, places.real_data)
+            and not is_read_only(located, located_redirects, places, rules.self_guarding)):
+        return Verdict("deny", f"guard.py refused: a command substitution may be building a "
+                               f"path into {rules.name}'s real data ({rules.real_data_names}); "
+                               "write the path out in full so it can be checked."), False
     if rules.app is not None and starts_app(expanded, rules.app):
         app = rules.app
         if not app.isolate_env or any(_not_isolated(assigned.get(v), app, places)
@@ -1178,13 +1206,16 @@ def command_verdict(command: str, shell: str, rules: Rules,
     return asked or ALLOW
 
 
-def file_verdict(path: str, rules: Rules) -> Verdict:
+def file_verdict(path: str, rules: Rules, reading: bool = False) -> Verdict:
     places = rules.places
     form = flat(expand_refs(path, places.refs, {}))
-    if names_place(form, places.keys) or rules.key_end.search(form):
+    if names_place(form, places.keys) or glob_names_place(form, places.keys) \
+            or rules.key_end.search(form):
         return Verdict("deny", f"guard.py refused: this file is (or is beside) a secret "
                                f"({rules.secret_names}). {rules.maintainer} keeps it; Claude "
                                "never reads or writes it.")
+    if reading:
+        return ALLOW
     if names_place(form, places.real_data):
         return Verdict("deny", f"guard.py refused: this file is in {rules.name}'s real data "
                                f"({rules.real_data_names}). Work on a copy in a scratch folder.")
@@ -1198,6 +1229,15 @@ def decide(tool_name: str, tool_input: Mapping, env: Mapping[str, str],
         command = tool_input.get("command") or ""
         shell = "bash" if tool_name == "Bash" else "powershell"
         return command_verdict(command, shell, rules, secretary_dirty)
+    if tool_name in READ_TOOLS:
+        keys = {"Read": ("file_path",), "Grep": ("path", "glob"), "Glob": ("path", "pattern")}
+        for key in keys[tool_name]:
+            value = tool_input.get(key)
+            if isinstance(value, str) and value:
+                result = file_verdict(value, rules, reading=True)
+                if result.kind != "allow":
+                    return result
+        return ALLOW
     if tool_name in ("Write", "Edit", "MultiEdit", "NotebookEdit"):
         path = tool_input.get("file_path") or tool_input.get("notebook_path") or ""
         return file_verdict(path, rules)
@@ -1247,8 +1287,7 @@ def main() -> int:
         verdict = decide(data.get("tool_name", ""), data.get("tool_input") or {}, os.environ,
                          lambda: secretary_changes(project, secretary_files(config)), config)
     except Exception as error:
-        print(f"guard.py failed: {type(error).__name__}: {error} -- not checked", file=sys.stderr)
-        return 1
+        verdict = Verdict("ask", f"guard.py failed: {type(error).__name__}: {error} -- not checked")
     if verdict.kind == "deny":
         print(verdict.reason, file=sys.stderr)
         return 2

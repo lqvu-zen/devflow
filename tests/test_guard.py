@@ -177,6 +177,26 @@ class TestGuardRefuses(unittest.TestCase):
         self.assertEqual(file_verdict("x.pem").kind, "deny")
         self.assertEqual(file_verdict(r"C:\Users\Tester\ryos-keys\notes.txt", "Edit").kind, "deny")
 
+    def test_a_substitution_that_builds_a_path_into_real_data(self):
+        self.assertRefused('rm -rf "$(echo $APPDATA)/RYOS"')
+        self.assertRefused("rm -rf `echo $LOCALAPPDATA`/RYOS/updates")
+
+    def test_a_glob_that_reaches_real_data_or_a_secret(self):
+        self.assertRefused("rm -rf $APPDATA/RY*")
+        self.assertRefused("cat ~/ryos-k*/notes.txt")
+        self.assertRefused("ls ~/ryos-key?")
+
+    def test_reading_a_secret_with_the_read_tools(self):
+        for tool, payload in (
+                ("Read", {"file_path": r"C:\Users\Tester\ryos-keys\notes.txt"}),
+                ("Read", {"file_path": "x.pem"}),
+                ("Grep", {"pattern": "a", "path": "~/ryos-keys"}),
+                ("Grep", {"pattern": "a", "path": ".", "glob": "*.pem"}),
+                ("Glob", {"pattern": "~/ryos-k*/*"}),
+                ("Glob", {"pattern": "**/*.key"})):
+            result = guard.decide(tool, payload, ENV, clean, RYOS)
+            self.assertEqual(result.kind, "deny", f"{tool} {payload}")
+
     def test_maintainer_only_scripts(self):
         reason = self.assertRefused(
             "uv run --with cryptography python tools/sign_release.py sign k")
@@ -243,6 +263,21 @@ class TestGuardAllows(unittest.TestCase):
         self.assertAllowed('$log = "$env:APPDATA\\RYOS\\logs\\ryos.log"; '
                            "Select-String -Path $log -Pattern 'starting' | Select-Object -Last 12",
                            "PowerShell")
+
+    def test_read_tools_on_ordinary_files_and_real_data(self):
+        for tool, payload in (
+                ("Read", {"file_path": "docs/STATUS.md"}),
+                ("Read", {"file_path": r"C:\Users\Tester\AppData\Roaming\RYOS\settings.json"}),
+                ("Grep", {"pattern": "ryos-keys", "path": "src"}),
+                ("Glob", {"pattern": "**/*.py"})):
+            result = guard.decide(tool, payload, ENV, clean, RYOS)
+            self.assertEqual(result.kind, "allow", f"{tool} {payload}")
+
+    def test_substitutions_and_globs_that_stay_clear_of_real_data(self):
+        self.assertEqual(verdict('rm -rf "$(mktemp -d)/x"').kind, "allow")
+        self.assertEqual(verdict("ls $APPDATA/RY*").kind, "allow")
+        self.assertEqual(verdict("rm -rf build/*").kind, "allow")
+        self.assertEqual(verdict('git commit -m "$(echo $APPDATA)"').kind, "allow")
 
     def test_write_tools_elsewhere(self):
         self.assertEqual(file_verdict(SCRATCH + r"\appdata\RYOS\settings.json").kind, "allow")
@@ -470,17 +505,68 @@ class TestGuardMain(unittest.TestCase):
             shutil.rmtree(bare, ignore_errors=True)
         self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
 
-    def test_a_crash_fails_open_visibly(self):
-        result = self.run_hook({}, stdin="not json")
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("guard.py failed", result.stderr)
-        self.assertIn("not checked", result.stderr)
+    def assertAsksNotChecked(self, result: subprocess.CompletedProcess, needle: str) -> None:
+        self.assertEqual(result.returncode, 0)
+        output = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertEqual(output["permissionDecision"], "ask")
+        self.assertIn(needle, output["permissionDecisionReason"])
+        self.assertIn("not checked", output["permissionDecisionReason"])
 
-    def test_a_broken_config_fails_open_visibly(self):
+    def test_a_crash_asks_instead_of_passing_silently(self):
+        self.assertAsksNotChecked(self.run_hook({}, stdin="not json"), "guard.py failed")
+
+    def test_a_broken_config_asks_instead_of_passing_silently(self):
         (self.project / ".claude" / "devflow.json").write_text("{ nope", encoding="utf-8")
         result = self.run_hook({"tool_name": "Bash", "tool_input": {"command": "ls"}})
-        self.assertEqual(result.returncode, 1)
-        self.assertIn("not checked", result.stderr)
+        self.assertAsksNotChecked(result, "guard.py failed")
+
+
+@unittest.skipUnless(shutil.which("sh") and shutil.which("uv"), "needs sh and uv")
+class TestGuardHookCommand(unittest.TestCase):
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="devflow-hook-"))
+        self.project = self.base / "project"
+        (self.project / ".claude").mkdir(parents=True)
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps(RYOS), encoding="utf-8")
+        hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        self.command = hooks["hooks"]["PreToolUse"][0]["hooks"][0]["command"]
+        self.matcher = hooks["hooks"]["PreToolUse"][0]["matcher"]
+
+    def tearDown(self):
+        shutil.rmtree(self.base, ignore_errors=True)
+
+    def run_command(self, plugin_root: Path, payload: dict) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(self.project)
+        env["CLAUDE_PLUGIN_ROOT"] = str(plugin_root)
+        return subprocess.run(["sh", "-c", self.command], input=json.dumps(payload),
+                              capture_output=True, text=True, encoding="utf-8", env=env,
+                              timeout=60)
+
+    def test_the_matcher_covers_the_read_tools(self):
+        for tool in ("Bash", "PowerShell", "Write", "Edit", "MultiEdit", "NotebookEdit",
+                     "Read", "Grep", "Glob"):
+            self.assertIn(tool, self.matcher.split("|"))
+
+    def test_a_guard_that_cannot_start_asks(self):
+        broken = self.base / "plugin"
+        (broken / "hooks").mkdir(parents=True)
+        (broken / "hooks" / "guard.py").write_text("def (:\n", encoding="utf-8")
+        result = self.run_command(broken, {"tool_name": "Bash", "tool_input": {"command": "ls"}})
+        self.assertEqual(result.returncode, 0)
+        output = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertEqual(output["permissionDecision"], "ask")
+        self.assertIn("not checked", output["permissionDecisionReason"])
+
+    def test_a_refusal_still_exits_2(self):
+        result = self.run_command(ROOT, {"tool_name": "Bash", "tool_input": {
+            "command": "uv run ryos list"}})
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("APPDATA", result.stderr)
+
+    def test_an_allowed_call_is_silent(self):
+        result = self.run_command(ROOT, {"tool_name": "Bash", "tool_input": {"command": "ls"}})
+        self.assertEqual((result.returncode, result.stdout), (0, ""))
 
 
 if __name__ == "__main__":

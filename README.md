@@ -18,7 +18,7 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | Agent | `devflow:reviewer` | Opus, high effort. Diff review, or a release review before publishing. |
 | Agent | `devflow:planner` | Opus, high effort, read-only. Drafts release plans for the secretary. |
 | Agent | `devflow:tester` | Sonnet, read-only. Uses a candidate the way a user would. |
-| Hook | guard (PreToolUse) | Refuses writes to the project's real data, anything touching secrets, maintainer-only scripts, and reverting the secretary's uncommitted edits. Asks before `gh release` writes and forced pushes. |
+| Hook | guard (PreToolUse) | Refuses writes to the project's real data, anything touching or reading secrets (shell, file tools, Read, Grep, Glob), maintainer-only scripts, and reverting the secretary's uncommitted edits. Asks before `gh release` writes and forced pushes. |
 | Hook | session start | Shows the branch, uncommitted files, CI on HEAD, and the plan's next open step (skipping steps another tab has claimed). |
 | Tool | `tools/devflow_checks.py` | A CI check. It fails a commit that changes the version unless the commit is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`, and fails new Python comment lines in the listed folders. |
 
@@ -30,6 +30,10 @@ Facts about each project live in that project, in two files that `/devflow:setup
 - **`.claude/devflow.json`** configures the guard and the CI check: real data folders, secrets, maintainer-only scripts, how the product starts and which environment variables must point at a scratch folder, and the version files. See `templates/devflow.json`. **The hooks do nothing in a project without this file**, so installing the plugin for your user account is safe.
 
 The method also expects `docs/BEHAVIOUR.md` (the behaviour map), `docs/STATUS.md` (the status file), `docs/plans/` and `docs/archive/`. The status file and plans folder can be moved in `devflow.json`.
+
+## What the guard is
+
+The guard is a guardrail against accidents, not a sandbox. It reads the command text, so it catches the ways an agent normally reaches real data or a secret: variables, `~`, globs, wrappers, heredocs, `cd`, and command substitutions that build a path. It cannot see a path assembled at run time inside a script (`python -c "... 'My' + 'App' ..."`). If the guard cannot run (an exception, a broken config, `uv` missing), the call is not allowed silently: the user is asked, with the reason "not checked". Keep real secrets out of reach of the agent's OS account as well if they matter.
 
 ## Install
 

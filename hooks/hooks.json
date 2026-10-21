@@ -1,13 +1,13 @@
 {
-  "description": "devflow guard (refuses writes to real data, touching secrets and reverting secretary edits; asks before release and forced-push commands) and the session-start summary (branch, uncommitted files, CI on HEAD, the plan's next open step). Both do nothing in a project without .claude/devflow.json.",
+  "description": "devflow guard (refuses writes to real data, touching or reading secrets and reverting secretary edits; asks before release and forced-push commands) and the session-start summary (branch, uncommitted files, CI on HEAD, the plan's next open step). Both do nothing in a project without .claude/devflow.json.",
   "hooks": {
     "PreToolUse": [
       {
-        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit",
+        "matcher": "Bash|PowerShell|Write|Edit|MultiEdit|NotebookEdit|Read|Grep|Glob",
         "hooks": [
           {
             "type": "command",
-            "command": "if [ -f \"$CLAUDE_PROJECT_DIR/.claude/devflow.json\" ]; then uv run --no-project --quiet python \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.py\"; fi",
+            "command": "if [ -f \"$CLAUDE_PROJECT_DIR/.claude/devflow.json\" ]; then if command -v uv >/dev/null 2>&1; then uv run --no-project --quiet python \"${CLAUDE_PLUGIN_ROOT}/hooks/guard.py\"; rc=$?; else rc=127; fi; if [ \"$rc\" -ne 0 ] && [ \"$rc\" -ne 2 ]; then printf '{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"devflow guard did not run (exit %s) -- not checked\"}}' \"$rc\"; exit 0; fi; exit \"$rc\"; fi",
             "timeout": 10
           }
         ]
