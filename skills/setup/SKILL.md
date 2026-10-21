@@ -40,6 +40,7 @@ One `AskUserQuestion` call, at most four questions, only those whose answers you
 
 - the maintainer's name and time zone (for the decision log);
 - whether the project ships releases, and through what (GitHub releases, a package registry, a store);
+- if it ships through GitHub releases: whether its release gate can write a pass stamp (a JSON file with the full HEAD SHA, the SHA-256 of the artifact checksum file and the case count, written only when every case passes and deleted when a run or build starts);
 - where the real user data lives, if the code doesn't make it obvious;
 - which areas are risky enough to escalate (migrations, packaging, concurrency, security, payments).
 
@@ -57,6 +58,7 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
    - `guard.secret_dirs`, `guard.secret_extensions`, `guard.maintainer_only` (scripts only the maintainer runs, with the subcommands that matter, e.g. `sign`);
    - `guard.app`: the commands and Python modules that start the product, the harmless arguments (`--version`, `--help`), `isolate_env` (the variables that must point at a scratch folder in the same command) and `data_folder` (the product's folder inside that variable). Leave `isolate_env` empty to refuse starting the product at all. Leave `app` out for a library;
    - `guard.self_guarding_scripts`: the project's own harnesses that protect real data themselves;
+   - `guard.release_stamp` (`path`, `binds`, optional `gate`): only if the gate writes a stamp, or the maintainer wants it added to the gate now; the guard then refuses to publish a release without a stamp for the current HEAD and the current hash of `binds`. If the gate can't write one, leave the key out: publishing stays an ask. Record the choice in **Release** under **Stamp**;
    - `checks.version_files` (path and a regex whose group 1 is the version; `numbers_only` for files that take `X.Y.Z` only) and `checks.no_new_python_comments` (folders, Python only).
 3. **`docs/BEHAVIOUR.md`** from `templates/BEHAVIOUR.md`. Start small and true: the surfaces the product really has, and the main areas with a few rows each, every row with the test that guards it today or **untested**. Tell the maintainer the map grows with every change from here on and that they should review it.
 4. **`docs/STATUS.md`** from `templates/STATUS.md`, and an empty `docs/plans/` and `docs/archive/` (a `.gitkeep` each). Skip any that already exist.

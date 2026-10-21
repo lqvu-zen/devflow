@@ -17,7 +17,12 @@
       "isolate_env": ["APPDATA"],
       "data_folder": "MyApp"
     },
-    "ask_release": true
+    "ask_release": true,
+    "release_stamp": {
+      "path": "dist/release_check.passed",
+      "binds": "dist/SHA256SUMS.txt",
+      "gate": "uv run python tests/release_check.py"
+    }
   },
   "checks": {
     "version_files": [

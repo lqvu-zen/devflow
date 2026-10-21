@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import fnmatch
+import hashlib
 import json
 import os
 import posixpath
@@ -33,6 +34,13 @@ class App(NamedTuple):
     data_folder: str
 
 
+class Stamp(NamedTuple):
+    path: str
+    binds: str
+    gate: str = ""
+    problem: str = ""
+
+
 class Rules(NamedTuple):
     name: str
     maintainer: str
@@ -50,6 +58,8 @@ class Rules(NamedTuple):
     set_names: tuple[str, ...]
     app: App | None
     ask_release: bool
+    release_stamp: Stamp | None = None
+    project_dir: str = ""
 
 
 class Location:
@@ -231,6 +241,32 @@ def _app_from(config: Any) -> App | None:
     return App(commands, modules, harmless, isolate, folder)
 
 
+def _project_relative(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip():
+        return None
+    form = value.strip().replace("\\", "/")
+    if _is_absolute(form.lower()) or re.match(r"^[a-z]:", form.lower()):
+        return None
+    normal = posixpath.normpath(form)
+    if normal == "." or ".." in normal.split("/"):
+        return None
+    return normal
+
+
+def _stamp_from(config: Any) -> Stamp | None:
+    if config is None:
+        return None
+    if not isinstance(config, Mapping):
+        return Stamp("", "", problem="guard.release_stamp must be an object with `path` and `binds`")
+    path = _project_relative(config.get("path"))
+    binds = _project_relative(config.get("binds"))
+    if path is None or binds is None:
+        return Stamp("", "", problem="guard.release_stamp needs `path` and `binds`, both "
+                                     "relative to the project and inside it")
+    gate = config.get("gate") if isinstance(config.get("gate"), str) else ""
+    return Stamp(path, binds, gate.strip())
+
+
 def rules_from(config: Mapping[str, Any], env: Mapping[str, str]) -> Rules:
     guard_config = config.get("guard") if isinstance(config.get("guard"), Mapping) else {}
     real_entries = _strings(guard_config.get("real_data"))
@@ -289,6 +325,8 @@ def rules_from(config: Mapping[str, Any], env: Mapping[str, str]) -> Rules:
         set_names=set_names,
         app=app,
         ask_release=guard_config.get("ask_release", True) is not False,
+        release_stamp=_stamp_from(guard_config.get("release_stamp")),
+        project_dir=env.get("CLAUDE_PROJECT_DIR") or "",
     )
 
 
@@ -1047,34 +1085,87 @@ def reverts_secretary_files(words: list[str], dirty: Callable[[], list[str]],
     return None
 
 
+def _gh_rest(words: list[str]) -> list[str] | None:
+    if not words or command_name(words[0]) != "gh":
+        return None
+    index = 1
+    while index < len(words) and words[index].startswith("-"):
+        index += 2 if words[index] in ("-R", "--repo") else 1
+    return words[index:]
+
+
+def _api_write_method(rest: list[str]) -> str | None:
+    if not rest or rest[0] != "api" or not any("releases" in w for w in rest):
+        return None
+    method = "GET"
+    fields = False
+    for i, word in enumerate(rest):
+        if word in ("-X", "--method") and i + 1 < len(rest):
+            method = rest[i + 1].upper()
+        elif word.startswith("-X") and len(word) > 2:
+            method = word[2:].upper()
+        elif word.startswith("--method="):
+            method = word.split("=", 1)[1].upper()
+        elif word in ("-f", "-F", "--field", "--raw-field", "--input"):
+            fields = True
+    explicit = any(w in ("-X", "--method") or w.startswith(("-X", "--method=")) for w in rest)
+    if method != "GET":
+        return method
+    return "POST" if fields and not explicit else None
+
+
+def _edit_publishes(rest: list[str]) -> bool:
+    for i, word in enumerate(rest):
+        name, equals, value = word.partition("=")
+        if name not in ("--draft", "--prerelease", "--latest"):
+            continue
+        if not equals:
+            following = rest[i + 1].lower() if i + 1 < len(rest) else ""
+            value = following if following in ("true", "false") else "true"
+        if name == "--latest" and value.lower() != "false":
+            return True
+        if name != "--latest" and value.lower() == "false":
+            return True
+    return False
+
+
+def publishing(words: list[str]) -> str | None:
+    rest = _gh_rest(words)
+    if not rest:
+        return None
+    if len(rest) > 1 and rest[0] == "release":
+        if rest[1] in ("create", "upload"):
+            return f"gh release {rest[1]}"
+        if rest[1] == "edit" and _edit_publishes(rest[2:]):
+            return "gh release edit"
+    if _api_write_method(rest) in ("POST", "PUT", "PATCH"):
+        return "gh api (writing to releases)"
+    return None
+
+
+def _release_target(words: list[str]) -> str:
+    rest = _gh_rest(words) or []
+    if rest[:2] != ["release", "create"]:
+        return ""
+    for i, word in enumerate(rest):
+        if word == "--target" and i + 1 < len(rest):
+            return rest[i + 1]
+        if word.startswith("--target="):
+            return word.split("=", 1)[1]
+    return ""
+
+
 def release_ask(words: list[str], maintainer: str) -> str | None:
     if not words:
         return None
-    name = command_name(words[0])
-    if name == "gh":
-        index = 1
-        while index < len(words) and words[index].startswith("-"):
-            index += 2 if words[index] in ("-R", "--repo") else 1
-        rest = words[index:]
+    rest = _gh_rest(words)
+    if rest is not None:
         if len(rest) > 1 and rest[0] == "release" and rest[1] in (
                 "create", "edit", "delete", "delete-asset", "upload"):
             return f"`gh release {rest[1]}` changes a published release; {maintainer} approves it."
-        if rest and rest[0] == "api" and any("releases" in w for w in rest):
-            method = "GET"
-            fields = False
-            for i, word in enumerate(rest):
-                if word in ("-X", "--method") and i + 1 < len(rest):
-                    method = rest[i + 1].upper()
-                elif word.startswith("-X") and len(word) > 2:
-                    method = word[2:].upper()
-                elif word.startswith("--method="):
-                    method = word.split("=", 1)[1].upper()
-                elif word in ("-f", "-F", "--field", "--raw-field", "--input"):
-                    fields = True
-            explicit = any(w in ("-X", "--method") or w.startswith(("-X", "--method=")) for w in rest)
-            if method != "GET" or (fields and not explicit):
-                return (f"`gh api` writing to releases changes a published release; "
-                        f"{maintainer} approves it.")
+        if _api_write_method(rest):
+            return (f"`gh api` writing to releases changes a published release; "
+                    f"{maintainer} approves it.")
         return None
     found = _git(words)
     if found and found[0] == "push":
@@ -1083,6 +1174,74 @@ def release_ask(words: list[str], maintainer: str) -> str | None:
                     or (word.startswith("-") and not word.startswith("--") and "f" in word)):
                 return (f"A forced or mirroring `git push` rewrites history on the remote; "
                         f"{maintainer} approves it.")
+    return None
+
+
+def _git_head(project_dir: str) -> str | None:
+    try:
+        result = subprocess.run(
+            ["git", "rev-parse", "HEAD"], cwd=project_dir, capture_output=True, text=True,
+            encoding="utf-8", timeout=5)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    head = result.stdout.strip().lower()
+    if result.returncode != 0 or not re.fullmatch(r"[0-9a-f]{40,64}", head):
+        return None
+    return head
+
+
+def _stamp_text(value: Any) -> str:
+    return value.strip().lower() if isinstance(value, str) else ""
+
+
+def _stamp_refusal(what: str, words: list[str], rules: Rules, location: Location) -> str | None:
+    stamp = rules.release_stamp
+    if stamp is None:
+        return None
+    lead = f"guard.py refused: `{what}` publishes, and the release gate has no pass on record"
+    if stamp.problem:
+        return f"{lead}: {stamp.problem}; fix .claude/devflow.json."
+    run = (f"Run `{stamp.gate}`" if stamp.gate
+           else "Run the Gate from .claude/devflow.md (Release section)")
+    if not rules.project_dir:
+        return f"{lead}: CLAUDE_PROJECT_DIR is not set, so the stamp cannot be found."
+    if location.relative is None:
+        return (f"{lead}: this command runs outside the project, so {rules.name}'s stamp does "
+                "not apply to it; run it from the project folder.")
+    try:
+        with open(os.path.join(rules.project_dir, stamp.path), encoding="utf-8") as handle:
+            data = json.load(handle)
+    except FileNotFoundError:
+        return f"{lead}: there is no stamp at {stamp.path}. {run} (it writes the stamp), then publish."
+    except (OSError, ValueError) as error:
+        return (f"{lead}: {stamp.path} cannot be read ({type(error).__name__}). Delete it. "
+                f"{run} again.")
+    passed = data.get("passed") if isinstance(data, dict) else None
+    if (not isinstance(data, dict) or not _stamp_text(data.get("head"))
+            or not _stamp_text(data.get("sha256sums"))
+            or isinstance(passed, bool) or not isinstance(passed, int) or passed < 1):
+        return (f"{lead}: {stamp.path} is not a pass stamp (it needs `head`, `sha256sums` and "
+                f"a `passed` count above 0). Delete it. {run} again.")
+    try:
+        with open(os.path.join(rules.project_dir, stamp.binds), "rb") as handle:
+            digest = hashlib.sha256(handle.read()).hexdigest()
+    except OSError:
+        return (f"{lead}: {stamp.binds} cannot be read, so the stamp cannot be checked. "
+                f"Rebuild it. {run} again.")
+    head = _git_head(rules.project_dir)
+    if head is None:
+        return (f"{lead}: git could not report HEAD in {rules.project_dir}, so the stamp "
+                "cannot be checked. Fix the repository, then try again.")
+    if _stamp_text(data.get("head")) != head:
+        return (f"{lead}: the stamp is for {_stamp_text(data.get('head'))[:7]} but HEAD is "
+                f"{head[:7]}. {run} again.")
+    if _stamp_text(data.get("sha256sums")) != digest:
+        return (f"{lead}: {stamp.binds} changed since the gate passed (stamp "
+                f"{_stamp_text(data.get('sha256sums'))[:12]}, file {digest[:12]}). {run} again.")
+    target = _release_target(words).lower()
+    if re.fullmatch(r"[0-9a-f]{7,64}", target) and not head.startswith(target):
+        return (f"{lead}: --target {target[:12]} is not the HEAD ({head[:7]}) the gate "
+                "passed for.")
     return None
 
 
@@ -1183,6 +1342,15 @@ def _segment_verdict(segment: Segment, rules: Rules, assigned: dict[str, str],
     reason = reverts_secretary_files(expanded, dirty, location.relative, rules)
     if reason:
         return Verdict("deny", reason), False
+    what = publishing(expanded) if rules.release_stamp is not None else None
+    if what:
+        try:
+            refusal = _stamp_refusal(what, expanded, rules, location)
+        except Exception as error:
+            refusal = (f"guard.py refused: `{what}` publishes, and the pass stamp could not be "
+                       f"checked ({type(error).__name__}: {error}).")
+        if refusal:
+            return Verdict("deny", refusal), False
     ask = release_ask(expanded, rules.maintainer) if rules.ask_release else None
     if ask:
         return Verdict("ask", ask), tainted_out
@@ -1216,6 +1384,11 @@ def file_verdict(path: str, rules: Rules, reading: bool = False) -> Verdict:
                                "never reads or writes it.")
     if reading:
         return ALLOW
+    stamp = rules.release_stamp
+    if stamp is not None and stamp.path and (
+            form == stamp.path.lower() or form.endswith("/" + stamp.path.lower())):
+        return Verdict("deny", f"guard.py refused: {stamp.path} is the release pass stamp; only "
+                               "the release gate writes it.")
     if names_place(form, places.real_data):
         return Verdict("deny", f"guard.py refused: this file is in {rules.name}'s real data "
                                f"({rules.real_data_names}). Work on a copy in a scratch folder.")

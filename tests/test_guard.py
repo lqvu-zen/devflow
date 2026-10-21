@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -449,6 +450,250 @@ class TestMinimalConfig(unittest.TestCase):
         config = {"guard": {"app": {"commands": ["tool"]}}}
         self.assertEqual(verdict("tool run", config=config).kind, "deny")
         self.assertEqual(verdict("tool --help", config=config).kind, "allow")
+
+
+GATE = "uv run python tests/release_check.py"
+STAMPED = {"guard": {"release_stamp": {"path": "dist/release_check.passed",
+                                       "binds": "dist/SHA256SUMS.txt", "gate": GATE}}}
+
+
+def git(repo: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", *args],
+        cwd=repo, capture_output=True, text=True, encoding="utf-8", check=True).stdout.strip()
+
+
+class TestReleaseStamp(unittest.TestCase):
+    def setUp(self):
+        self.repo = Path(tempfile.mkdtemp(prefix="devflow-stamp-"))
+        (self.repo / "dist").mkdir()
+        (self.repo / "sub").mkdir()
+        (self.repo / "dist" / "SHA256SUMS.txt").write_text("abc  app.zip\n", encoding="utf-8")
+        git(self.repo, "init", "-q")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "one")
+        self.head = git(self.repo, "rev-parse", "HEAD")
+        self.env = {**ENV, "CLAUDE_PROJECT_DIR": str(self.repo)}
+        self.here = str(self.repo).replace("\\", "/")
+
+    def tearDown(self):
+        shutil.rmtree(self.repo, ignore_errors=True)
+
+    def digest(self) -> str:
+        return hashlib.sha256((self.repo / "dist" / "SHA256SUMS.txt").read_bytes()).hexdigest()
+
+    def stamp(self, **changes) -> None:
+        data = {"head": self.head, "sha256sums": self.digest(), "passed": 29, "skipped": 0,
+                "python": "3.13.1"}
+        data.update(changes)
+        (self.repo / "dist" / "release_check.passed").write_text(json.dumps(data), encoding="utf-8")
+
+    def check(self, command: str, tool: str = "Bash", config=STAMPED):
+        return verdict(command, tool, config=config, env=self.env)
+
+    def assertDenied(self, command: str, needle: str = "", tool: str = "Bash",
+                     config=STAMPED) -> str:
+        result = self.check(command, tool, config)
+        self.assertEqual(result.kind, "deny", f"{tool}: {command!r} was {result}")
+        self.assertIn(needle, result.reason)
+        return result.reason
+
+    def assertAsks(self, command: str, tool: str = "Bash", config=STAMPED) -> None:
+        result = self.check(command, tool, config)
+        self.assertEqual(result.kind, "ask", f"{tool}: {command!r} was {result}")
+
+    def test_denied_with_no_stamp(self):
+        reason = self.assertDenied("gh release create v1.0.0-rc1 dist/app.zip",
+                                   "no stamp at dist/release_check.passed")
+        self.assertIn(GATE, reason)
+
+    def test_denied_without_a_gate_in_the_config_points_at_the_profile(self):
+        config = {"guard": {"release_stamp": {"path": "dist/s", "binds": "dist/SHA256SUMS.txt"}}}
+        self.assertDenied("gh release create v1", "Release section", config=config)
+
+    def test_denied_for_another_head(self):
+        self.stamp()
+        (self.repo / "more.txt").write_text("x", encoding="utf-8")
+        git(self.repo, "add", ".")
+        git(self.repo, "commit", "-q", "-m", "two")
+        self.assertDenied("gh release create v1", f"stamp is for {self.head[:7]}")
+
+    def test_denied_for_another_hash(self):
+        self.stamp()
+        (self.repo / "dist" / "SHA256SUMS.txt").write_text("def  app.zip\n", encoding="utf-8")
+        self.assertDenied("gh release create v1", "changed since the gate passed")
+
+    def test_denied_for_a_malformed_stamp(self):
+        stamp = self.repo / "dist" / "release_check.passed"
+        stamp.write_text("{ nope", encoding="utf-8")
+        self.assertDenied("gh release create v1", "cannot be read")
+        stamp.write_text("[]", encoding="utf-8")
+        self.assertDenied("gh release create v1", "is not a pass stamp")
+        stamp.write_bytes(b"\xff\xfe\x00")
+        self.assertDenied("gh release create v1", "cannot be read")
+        for changes in ({"head": ""}, {"head": 7}, {"sha256sums": None}, {"passed": 0},
+                        {"passed": True}, {"passed": "29"}):
+            with self.subTest(changes=changes):
+                self.stamp(**changes)
+                self.assertDenied("gh release create v1", "is not a pass stamp")
+
+    def test_denied_for_a_missing_bound_file(self):
+        self.stamp()
+        (self.repo / "dist" / "SHA256SUMS.txt").unlink()
+        self.assertDenied("gh release create v1", "dist/SHA256SUMS.txt cannot be read")
+
+    def test_denied_when_git_cannot_report_head(self):
+        bare = Path(tempfile.mkdtemp(prefix="devflow-nogit-"))
+        try:
+            (bare / "dist").mkdir()
+            (bare / "dist" / "SHA256SUMS.txt").write_text("x", encoding="utf-8")
+            data = {"head": self.head, "sha256sums": hashlib.sha256(b"x").hexdigest(), "passed": 1}
+            (bare / "dist" / "release_check.passed").write_text(json.dumps(data), encoding="utf-8")
+            result = verdict("gh release create v1", config=STAMPED,
+                             env={**ENV, "CLAUDE_PROJECT_DIR": str(bare)})
+        finally:
+            shutil.rmtree(bare, ignore_errors=True)
+        self.assertEqual(result.kind, "deny")
+        self.assertIn("could not report HEAD", result.reason)
+
+    def test_a_matching_stamp_still_asks(self):
+        self.stamp()
+        self.assertAsks("gh release create v1.0.0-rc1 dist/app.zip -R o/r --prerelease")
+        self.stamp(head=self.head.upper(), sha256sums=self.digest().upper())
+        self.assertAsks("gh release create v1")
+
+    def test_a_matching_stamp_with_asks_turned_off_allows(self):
+        self.stamp()
+        config = {"guard": {**STAMPED["guard"], "ask_release": False}}
+        self.assertEqual(self.check("gh release create v1", config=config).kind, "allow")
+
+    def test_asks_turned_off_still_denies_without_a_stamp(self):
+        config = {"guard": {**STAMPED["guard"], "ask_release": False}}
+        self.assertDenied("gh release create v1", "no stamp", config=config)
+
+    def test_every_publishing_form_needs_the_stamp(self):
+        commands = [
+            "gh release create v1 --draft",
+            "gh release upload v1 dist/app.zip.sig",
+            "gh release edit v1 --draft=false",
+            "gh release edit v1 --draft false",
+            "gh release edit v1 --prerelease=false",
+            "gh release edit v1 --latest",
+            "gh release edit v1 --latest=true",
+            "gh api repos/o/r/releases -f tag_name=v1",
+            "gh api -X POST repos/o/r/releases",
+            "gh api --method PATCH repos/o/r/releases/1 -f draft=false",
+            "gh api -XPUT repos/o/r/releases/1",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertDenied(command, "no stamp")
+
+    def test_forms_that_publish_nothing_keep_the_ask(self):
+        commands = [
+            "gh release edit v1 --notes-file notes.md",
+            "gh release edit v1 --latest=false --prerelease",
+            "gh release edit v1 --draft=true",
+            "gh release delete v1",
+            "gh release delete-asset v1 app.zip",
+            "gh api -X DELETE repos/o/r/releases/1",
+        ]
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertAsks(command)
+        self.assertEqual(self.check("gh release list").kind, "allow")
+        self.assertEqual(self.check("gh api repos/o/r/releases/latest").kind, "allow")
+        self.assertEqual(self.check("gh release view v1").kind, "allow")
+
+    def test_wrapped_forms_are_covered(self):
+        self.assertDenied("cmd /c gh release create v1", "no stamp")
+        self.assertDenied("gh -R o/r release create v1", "no stamp")
+        self.assertDenied("gh release create v1 dist/app.zip \\\n  -R o/r --prerelease", "no stamp")
+        self.assertDenied("gh release create v1 -R o/r --prerelease", "no stamp", "PowerShell")
+        self.assertDenied("git status && gh release create v1 | cat", "no stamp")
+        self.assertDenied("bash -c 'gh release create v1'", "no stamp")
+        self.stamp()
+        self.assertAsks("cmd /c gh release create v1")
+        self.assertAsks("gh -R o/r release create v1")
+        self.assertAsks("gh release create v1 -R o/r", "PowerShell")
+        self.assertAsks("bash -c 'gh release create v1'")
+
+    def test_cd_forms(self):
+        self.assertDenied(f"cd {self.here} && gh release create v1", "no stamp")
+        self.assertDenied("cd sub && gh release create v1", "no stamp")
+        self.stamp()
+        self.assertAsks(f"cd {self.here} && gh release create v1")
+        self.assertAsks("cd sub && gh release create v1")
+        self.assertAsks("cd sub; cd ..; gh release create v1", "PowerShell")
+        self.assertDenied("cd / && gh release create v1", "outside the project")
+        self.assertDenied("cd .. && gh release create v1", "outside the project")
+        self.assertDenied("cd $SOMEWHERE && gh release create v1", "outside the project")
+
+    def test_a_target_that_is_not_head_is_denied(self):
+        self.stamp()
+        self.assertAsks(f"gh release create v1 --target {self.head}")
+        self.assertAsks(f"gh release create v1 --target={self.head[:10]}")
+        self.assertAsks("gh release create v1 --target main")
+        self.assertDenied("gh release create v1 --target " + "0" * 40, "--target")
+        self.assertDenied("gh release create v1 --target=abcdef1", "--target")
+
+    def test_without_the_key_nothing_changes(self):
+        for config in (RYOS, {}, {"guard": {}}, {"guard": {"release_stamp": None}}):
+            with self.subTest(config=list(config)):
+                self.assertAsks("gh release create v1", config=config)
+                self.assertAsks("gh release upload v1 a.zip", config=config)
+                self.assertAsks("gh api repos/o/r/releases -f tag_name=v1", config=config)
+        self.assertEqual(self.check("gh release create v1", config=NOTES).kind, "allow")
+
+    def test_a_bad_key_denies_instead_of_passing(self):
+        bad = ["dist/release_check.passed", {"path": "dist/s"}, {"binds": "dist/b"},
+               {"path": "/etc/s", "binds": "dist/b"}, {"path": "dist/s", "binds": "../b"},
+               {"path": "C:/s", "binds": "dist/b"}, {"path": "", "binds": "dist/b"},
+               {"path": 3, "binds": "dist/b"}, {"path": ".", "binds": "dist/b"}]
+        for value in bad:
+            with self.subTest(value=value):
+                self.assertDenied("gh release create v1", "devflow.json",
+                                  config={"guard": {"release_stamp": value}})
+
+    def test_no_project_dir_denies(self):
+        result = verdict("gh release create v1", config=STAMPED, env=ENV)
+        self.assertEqual(result.kind, "deny")
+        self.assertIn("CLAUDE_PROJECT_DIR", result.reason)
+
+    def test_the_file_tools_may_not_write_the_stamp(self):
+        for tool in ("Write", "Edit", "MultiEdit"):
+            with self.subTest(tool=tool):
+                result = guard.decide(tool, {"file_path": str(self.repo / "dist" / "release_check.passed"),
+                                             "content": "{}"}, self.env, clean, STAMPED)
+                self.assertEqual(result.kind, "deny")
+                self.assertIn("only the release gate writes it", result.reason)
+        relative = guard.decide("Write", {"file_path": "dist/release_check.passed"}, self.env,
+                                clean, STAMPED)
+        self.assertEqual(relative.kind, "deny")
+        read = guard.decide("Read", {"file_path": str(self.repo / "dist" / "release_check.passed")},
+                            self.env, clean, STAMPED)
+        self.assertEqual(read.kind, "allow")
+        other = guard.decide("Write", {"file_path": str(self.repo / "dist" / "notes.txt")},
+                             self.env, clean, STAMPED)
+        self.assertEqual(other.kind, "allow")
+
+    def test_the_hook_exits_2_with_the_reason(self):
+        (self.repo / ".claude").mkdir()
+        (self.repo / ".claude" / "devflow.json").write_text(json.dumps(STAMPED), encoding="utf-8")
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(self.repo)
+        payload = {"tool_name": "PowerShell", "tool_input": {"command": "gh release create v1"}}
+        result = subprocess.run([sys.executable, str(GUARD_PATH)], input=json.dumps(payload),
+                                capture_output=True, text=True, encoding="utf-8", env=env,
+                                timeout=30)
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("no stamp at dist/release_check.passed", result.stderr)
+        self.stamp()
+        result = subprocess.run([sys.executable, str(GUARD_PATH)], input=json.dumps(payload),
+                                capture_output=True, text=True, encoding="utf-8", env=env,
+                                timeout=30)
+        self.assertEqual(result.returncode, 0)
+        self.assertEqual(json.loads(result.stdout)["hookSpecificOutput"]["permissionDecision"], "ask")
 
 
 class TestGuardMain(unittest.TestCase):

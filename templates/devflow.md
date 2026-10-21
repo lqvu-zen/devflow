@@ -67,6 +67,10 @@ Leave this section out if the project doesn't ship releases.
 - **Version files:** `<path>` (`__version__ = "X.Y.Z-rcN"`); `<path>` (numbers only: `X.Y.Z`).
 - **Build:** `<command>`; it ends with `<success line>`.
 - **Gate:** `<command>` on throwaway data; it ends with `<success line>`.
+- **Stamp:** <none | `<dist/gate.passed>`, written by **Gate** and read by the guard (`guard.release_stamp` in `.claude/devflow.json`)>.
+  - Format: a JSON object with `head` (the full SHA of HEAD), `sha256sums` (the SHA-256 hex of the file the stamp binds, e.g. `dist/SHA256SUMS.txt`) and `passed` (the case count, above 0). Extra fields such as `skipped` and `python` are allowed and ignored.
+  - **Gate** writes it only when every case passes and neither HEAD nor the bound file changed during the run. It deletes any old stamp when a run starts, and **Build** deletes it too, so a failed or interrupted run leaves none.
+  - With a stamp configured the guard refuses `gh release create`, `upload`, a publishing `edit` and `gh api` writes to releases unless the stamp names the current HEAD and the bound file's current hash. Without one, those commands only ask the maintainer.
 - **Sign:** <none | the maintainer runs `<command>`; Claude never signs or reads the key>.
 - **Artifacts:** `<dist/app-windows.zip>`, `<dist/SHA256SUMS.txt>`.
 - **Notes:** every release's notes carry: <"Which download?", "Check your download", "Updating">.

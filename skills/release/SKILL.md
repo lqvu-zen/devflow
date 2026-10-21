@@ -17,6 +17,7 @@ Read **`.claude/devflow.md`** first, above all its **Release** and **Try it** se
 - **Version files**: each file that holds the version, the line to change, and whether it takes the `-rcN` suffix or numbers only.
 - **Build**: the command that builds every artifact from clean, and how it says it succeeded.
 - **Gate**: the command that checks the built artifacts on throwaway data, and the line it ends with on success.
+- **Stamp**: the pass stamp **Gate** writes, if the project has one (the guard reads it from `guard.release_stamp` in `.claude/devflow.json`).
 - **Sign**: whether the maintainer signs anything, and the command **they** run. Claude never signs, never reads a key, never asks for a passphrase.
 - **Artifacts**: the files to attach to the release.
 - **Lineup**: each artifact, what it must contain and what it must not.
@@ -75,6 +76,8 @@ Stop and ask the maintainer to run **Sign** themselves. The key and its passphra
 
 Run **Gate**, with nothing else running that touches the data it checks. It must end with the success line **Gate** names. **Any failure is a stop**: fix it with `fix-bug`, and start again from A2 with N+1.
 
+If **Stamp** is set, a passing run leaves the stamp: HEAD, the hash of the bound artifact file and the case count. Never write, edit or copy the stamp yourself; only **Gate** makes it. A rebuild or a new commit makes it stale, so build, sign if needed, and run **Gate** last, on the commit you publish.
+
 ### A5. Publish the pre-release
 
 Only once CI is green on the candidate commit. Write the notes to a file in your scratchpad (backticks and `$` get mangled on the command line), with the sections **Notes** lists, and a first line saying this is a release candidate for testing:
@@ -84,7 +87,7 @@ gh release create vX.Y.Z-rcN <artifacts> -R <repo> --prerelease --latest=false \
   --target <full sha of HEAD> --title "vX.Y.Z-rcN" --notes-file <notes.md>
 ```
 
-The guard hook asks the maintainer before any `gh release` write; that is expected. Record the time it was published.
+The guard hook asks the maintainer before any `gh release` write; that is expected. If **Stamp** is set, it first refuses to publish (`gh release create`, `upload`, a publishing `edit`, `gh api` writes) unless the stamp names the current HEAD and the current hash of the bound file; if it refuses, run A4 again, don't work around it. Record the time it was published.
 
 ### A6. Test the candidate (hard gate)
 
@@ -128,7 +131,7 @@ Wait for CI to go green on it.
 
 ### B3. Rebuild and check again (hard gate)
 
-A3, A3b and A4 again, on this commit.
+A3, A3b and A4 again, on this commit; **Gate** makes a fresh **Stamp**, and B5 needs it.
 
 ### B4. Release review (hard gate)
 
