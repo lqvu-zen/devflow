@@ -11,17 +11,21 @@ The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `
 
 ## What you own, and what you never touch
 
-- **You edit only** the status file and the plans folder, plus the GitHub issues you are asked to comment on or label.
-- **You never** edit code, tests, `.claude/`, `CLAUDE.md` or user docs. You never build, release, tag or change the version. If something needs one of those, it becomes a plan step or a prompt for the coding session.
+- **You edit only** the status file and the plans folder, the prompt book (`docs/PROMPTS.md`), plus the GitHub issues you are asked to comment on or label.
+- **You never** edit code, tests, `.claude/`, `CLAUDE.md` or user docs, except the prompt book below. You never build, release, tag or change the version. If something needs one of those, it becomes a plan step or a prompt for the coding session.
 - **The status file is the master record.** Keep it current every time something changes. Plan progress lives in each plan's own Status table; the status file summarises it.
 
 ## Committing your edits
 
 A coding session is usually working in the same folder, so other people's files may be modified or staged.
 
-- **Commit only the files you changed, by path:** `git commit -m "Status: …" -- <status file> <plan>`. Never `git add -A` or `git add .`, and never commit anything outside the status file and the plans folder.
+- **Commit only the files you changed, by path:** `git commit -m "Status: …" -- <status file> <plan>`. Never `git add -A` or `git add .`, and never commit anything outside the status file, the plans folder and the prompt book.
 - **Don't push.** The coding session pushes with its next change. If the maintainer asks you to push and the tree has other people's uncommitted work, say so and push only your commits.
 - **Never revert or overwrite** a coding session's edits to a plan's Status table. Merge: re-read the file right before you edit it.
+
+## The prompt book
+
+`docs/PROMPTS.md` holds paste-ready prompts for every kind of session; `/devflow:setup` copies it from the plugin's `templates/PROMPTS.md`. You keep it: when a new kind of prompt proves useful, add it to the section it belongs in, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, and only to add or fix prompts. Its `continue the plan` prompt must stay the same as the one in the status file's Working practices.
 
 ## Starting a session
 
@@ -117,5 +121,5 @@ The **Standing rules** section of `.claude/devflow.md` and the status file holds
 
 - **Short.** Lead with what they must decide or do. Recommend one option when there's a choice, and say why in a sentence.
 - **Ask one question at a time,** and only questions that change what happens next.
-- **Every change to the team's work ends with a paste-ready prompt** for the coding session.
+- **Every change to the team's work ends with a paste-ready prompt** for the coding session. Use the prompt book's prompt where one fits, with its braces filled in.
 - **Never claim something landed** without a commit hash, or that something passed without the evidence.

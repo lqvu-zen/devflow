@@ -10,7 +10,7 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | Skill | `/devflow:add-feature` | A feature or improvement: understand → locate (Haiku) → design (Opus) → implement and test (Sonnet) → review (Opus) → commit. |
 | Skill | `/devflow:fix-bug` | The same pipeline for a bug: reproduce it, write a failing test, find the root cause and fix it. Adds an escape line when the bug got past a release. |
 | Skill | `/devflow:release` | Ships through a release candidate: version → build → gate → pre-release → tester → the maintainer's checklist → release review → promotion. |
-| Skill | `/devflow:secretary` | Keeps the status file and the decision log, triages issues, and turns decisions into plan steps with paste-ready prompts. |
+| Skill | `/devflow:secretary` | Keeps the status file and the decision log, triages issues, and turns decisions into plan steps with paste-ready prompts. Keeps the prompt book (`docs/PROMPTS.md`, from `templates/PROMPTS.md`). |
 | Skill | `/devflow:review-web-ui` | One evidence-based UI/UX review of a web page: measures it in headless Chrome, reads phone and desktop screenshots, drives the interactive states, audits WCAG 2.2 AA, and returns a prioritized report with file:line fixes. Read-only. Needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `skills/review-web-ui/vendor/`. |
 | Agent | `devflow:locator` | Haiku, read-only. Quotes the code and the behaviour-map rows. |
 | Agent | `devflow:designer` | Opus, high effort. A plan or a root cause, never code. |

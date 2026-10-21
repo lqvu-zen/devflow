@@ -14,6 +14,7 @@ Kept by the secretary (`/devflow:secretary`). **This file is the master.** Codin
 - **Coding sessions:** one fresh conversation per plan step, on Sonnet; the agents' models come from the plugin. The prompt to continue, which names no plan file:
   > Read docs/STATUS.md to find the current plan, then continue with its next open step in Order that is not already in progress. Claim it first, and update the Status table when it's done.
 - **The secretary:** run `/devflow:secretary` at the start of each working day, so this file catches up with the plans' Status tables and the git log.
+- **Prompts:** paste-ready prompts for every kind of session are in `docs/PROMPTS.md`.
 - **Secretary edits** (`docs/plans/*.md`, `docs/STATUS.md`) may arrive uncommitted. Coding sessions commit them with their next change and never revert them.
 
 ## Releases: only two plans
