@@ -230,6 +230,10 @@ def is_claimed(state: str) -> bool:
     return lowered.startswith("started") or lowered.startswith("in progress")
 
 
+def has_note(state: str) -> bool:
+    return state.strip() not in ("", "—", "–", "-")
+
+
 def next_open(order: list[int], states: dict[int, tuple[str, str]]) -> int | None:
     for number in _in_order(order, states):
         state = states[number][1]
@@ -259,6 +263,8 @@ def plan_lines(plan: str | None, plan_md: str | None,
     number = next_open(order, states)
     if number is not None:
         lines.append(f"Next open step in Order: {number} {states[number][0]}")
+        if has_note(states[number][1]):
+            lines.append(f"  Last state: {states[number][1].strip()}")
     elif not claimed:
         return lines + [f"Every step of {plan} is done."]
     else:

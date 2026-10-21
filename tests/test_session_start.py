@@ -103,6 +103,23 @@ class TestPlanReading(unittest.TestCase):
             "In progress (claimed by another tab, don't take): 33 The plan as a graph",
         ])
 
+    def test_a_stopped_step_shows_its_last_state(self):
+        note = "stopped 2026-10-21: still red after two fix rounds"
+        plan = PLAN.replace("| 31 Harness: permissions, hooks, checks | — |",
+                            f"| 31 Harness: permissions, hooks, checks | {note} |")
+        lines = session_start.plan_lines("docs/plans/release-2.4.0.md", plan)
+        self.assertEqual(lines[1], "Next open step in Order: 31 Harness: permissions, hooks, checks")
+        self.assertEqual(lines[2], f"  Last state: {note}")
+        self.assertEqual(lines[3], "In progress (claimed by another tab, don't take): "
+                                   "33 The plan as a graph")
+
+    def test_a_bare_dash_shows_no_last_state(self):
+        for dash in ("—", "–", "-"):
+            plan = PLAN.replace("| 31 Harness: permissions, hooks, checks | — |",
+                                f"| 31 Harness: permissions, hooks, checks | {dash} |")
+            lines = session_start.plan_lines("docs/plans/release-2.4.0.md", plan)
+            self.assertFalse(any("Last state" in line for line in lines), dash)
+
     def test_a_claimed_step_is_skipped(self):
         plan = PLAN.replace("| 31 Harness: permissions, hooks, checks | — |",
                             "| 31 Harness: permissions, hooks, checks | in progress (2026-10-19 23:30) |")
