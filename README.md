@@ -32,14 +32,14 @@ The method also expects `docs/BEHAVIOUR.md` (the behaviour map), `docs/STATUS.md
 
 ## Install
 
-The repository is its own marketplace. From a local clone:
+The repository is its own marketplace:
 
 ```
-/plugin marketplace add D:/Projects/devflow
+/plugin marketplace add lqvu-zen/devflow
 /plugin install devflow@devflow
 ```
 
-Once the repo is on GitHub, add it by name instead: `/plugin marketplace add <owner>/devflow`. To turn it off in one project, add `"enabledPlugins": {"devflow@devflow": false}` to that project's `.claude/settings.json`.
+From a local clone, give its path instead: `/plugin marketplace add D:/Projects/devflow`. To turn it off in one project, add `"enabledPlugins": {"devflow@devflow": false}` to that project's `.claude/settings.json`.
 
 Then, in a project: `/devflow:setup`.
 
