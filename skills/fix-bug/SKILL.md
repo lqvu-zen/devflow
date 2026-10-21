@@ -71,6 +71,52 @@ You can't fix what you can't see fail. Pin down, from the user, the exact steps,
 
 If you genuinely cannot reproduce it, say so and ask the user for more detail (OS, version, exact input, settings) instead of speculating a fix. State the confirmed repro in one sentence before moving on.
 
+#### When the bug is a red CI run
+
+The failed run is the repro; the log is the traceback, so don't ask the user for either. Triage it with `gh` before anything else, in this order. Each answer goes into the diagnosis brief.
+
+1. **The line that set the exit code.** Read the failed steps' log:
+
+   ```bash
+   gh run view <id> --log-failed
+   ```
+
+   Find the `exit code` line that ends the failing step, then read upward to the command that returned it. Name that command and its output. A warning or an error that the step went on past is not the failure.
+
+2. **Flaky or not.** Judge the failed *job*, not the workflow: a workflow can be red for one job while the others are steady. List recent runs, then look up that job in each:
+
+   ```bash
+   gh run list --workflow <file> --branch <main branch> --limit 20 --json databaseId,headSha,conclusion
+   gh run view <run id> --json headSha,jobs --jq '.headSha[0:7] as $sha | .jobs[] | select(.name == "<job>") | "\($sha)\t\(.conclusion)\t\(.databaseId)"'
+   ```
+
+   Report the job's pass rate over those runs and its last pass. A job that passes and fails across runs with no commit dividing them is flaky. If it is flaky, rerun the failed jobs once:
+
+   ```bash
+   gh run rerun <id> --failed
+   gh run watch <id> --exit-status
+   ```
+
+   If the rerun goes green, carry on with what you were asked to do, and tell the maintainer so the secretary adds a plan step to fix the flaky test. If the red run was the whole task, stop and report instead. If the rerun is red again, it is not flaky: go on to step 3.
+
+3. **The breaking commit.** From the same listing, take the last run where the job passed and the first where it failed, then list what lies between:
+
+   ```bash
+   git log --oneline <passing sha>..<failing sha>
+   ```
+
+   Confirm it both ways: every run of the job before that commit passes, and every run from it on fails. When the range holds more than one commit, or CI skipped some, run the failing command from step 1 at each one in a throwaway worktree (`git worktree add <scratch dir> <sha>`) until one commit turns it. Give the commit and its diff to the diagnosis. If you cannot confirm it both ways, say so; don't name a commit on a guess.
+
+4. **Already being fixed.** Look for an open PR and a plan step on the same failure:
+
+   ```bash
+   gh pr list --state open --search "<job name or failing test>"
+   ```
+
+   Then read the plan's Status rows. If a PR or a step covers it, say which and stop; don't start a second fix.
+
+Then the run is a bug like any other: the line from step 1 is the repro, the commit from step 3 is where the locator starts, and the phases below run as written.
+
 ### 2. Locate the code
 
 ```
