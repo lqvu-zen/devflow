@@ -74,6 +74,8 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
    - the **Order** section (bug fixes before features, the release test phase just before the release);
    - a new row in the **Status** table, `| N title | — |`.
 
+A new step has no `**Tried:**` line: coding sessions write it when they stop. When you edit an existing step, keep its Tried line exactly as it is.
+
 Then give the maintainer the paste-ready prompt for the coding session, e.g.:
 
 ```

@@ -36,7 +36,7 @@ Agent({ description: "...", subagent_type: "devflow:implementer", model: "opus",
 
 **If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the same model, `effort: "high"` for the designer and reviewer, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 
-**When the work is a step from a release plan**, paste that step's **Needs / Work / Done when** verbatim into the diagnosis, fix and review briefs, and report its "needs a human" items.
+**When the work is a step from a release plan**, paste the whole step section verbatim, from its `### N —` heading to the next heading, into the diagnosis, fix and review briefs. That includes its **Needs** and **Done when** lines and its `**Tried:**` line, if it has one. Tell the designer to read Tried and not repeat an approach it lists unless it says why this time is different. Report the step's "needs a human" items.
 
 ## The behaviour map (`docs/BEHAVIOUR.md`)
 
@@ -58,7 +58,7 @@ and adds that check in the same commit. The designer names the missing check in 
 
 ## Before you start, and where you stop
 
-**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, and the **stop rules in the loop** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row and push that alone before any work; a red CI on HEAD comes first; at most two fix rounds after the first run, and one re-review after BLOCKERS, then stop and report.
+**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, and the **stop rules in the loop** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row and push that alone before any work; a red CI on HEAD comes first; at most two fix rounds after the first run, and one re-review after BLOCKERS, then stop and report; a session that stops without finishing rewrites its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
 
 ## The workflow
 

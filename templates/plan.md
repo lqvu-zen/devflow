@@ -42,6 +42,7 @@ Behaviour map: <IDs to add or update, and their surfaces>.
 **Escalate:** <only for an area Escalate names>.
 **Gate:** <only when the maintainer must do or decide something first>.
 **Done when** <what a test proves>; <every surface>; the new map entries with their tests.
+**Tried:** <optional; written by a coding session that stopped. One clause per approach: what it was and why it failed (output: <path>); a later stop adds to the end>.
 
 ### 3 — Release X.Y.Z
 
