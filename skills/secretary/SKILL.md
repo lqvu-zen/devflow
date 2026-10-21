@@ -71,7 +71,7 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
    - the **Goals** list, if it adds a goal;
    - the **Who does what** table;
    - the release step's **Needs** line;
-   - the **Order** section (bug fixes before features, the release test phase just before the release);
+   - the **Order** section (bug fixes before features, the release test phase just before the release); a step to fix a flaky test goes first, ahead of bug fixes and features;
    - a new row in the **Status** table, `| N title | — |`.
 
 A new step has no `**Tried:**` line: coding sessions write it when they stop. When you edit an existing step, keep its Tried line exactly as it is.

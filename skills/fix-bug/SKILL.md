@@ -97,7 +97,7 @@ The failed run is the repro; the log is the traceback, so don't ask the user for
    gh run watch <id> --exit-status
    ```
 
-   If the rerun goes green, carry on with what you were asked to do, and tell the maintainer so the secretary adds a plan step to fix the flaky test. If the red run was the whole task, stop and report instead. If the rerun is red again, it is not flaky: go on to step 3.
+   If the rerun goes green, carry on with your task and tell the maintainer that the flaky test's fix is the next step; the secretary adds it first in Order. If the red run was the whole task, stop and report instead. If the rerun is red again, it is not flaky: go on to step 3.
 
 3. **The breaking commit.** From the same listing, take the last run where the job passed and the first where it failed, then list what lies between:
 
