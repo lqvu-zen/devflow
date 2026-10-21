@@ -217,6 +217,15 @@ remove, archive or keep for each, and fix links in the same commit once I
 agree.
 ```
 
+**Review recent sessions for process escapes** (secretary tab; after a release, or every couple of weeks):
+```
+Review my last {15} sessions for process escapes, as the secretary skill
+describes: extract them to the scratchpad, read them in batches, and report
+each broken rule with how often, a short quote and its session id, and a
+proposed Harness escapes line. List the rules nobody needed. I'll approve each
+proposal; change nothing yourself.
+```
+
 **Dependency updates:**
 ```
 Check for newer versions of {the dependencies, or "all of them"}. Tell me what

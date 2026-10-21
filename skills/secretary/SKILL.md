@@ -1,6 +1,6 @@
 ---
 name: secretary
-description: 'Be the project secretary: keep the status file (where we are, the decision log, open items), triage GitHub issues, and turn the maintainer''s decisions into release-plan steps, with paste-ready prompts for the coding sessions. Use when the maintainer starts a secretary session ("/devflow:secretary", "where are we?", "what''s next?", "check the issues", "add this to the plan", "log that decision", "what should I do this week?"), when they report user feedback or a new idea, or when a coding session has finished a step and the status needs updating. Calls the devflow:planner agent for heavy planning. Never writes code. Do NOT use it to build features (add-feature), fix bugs (fix-bug) or cut a release (release).'
+description: 'Be the project secretary: keep the status file (where we are, the decision log, open items), triage GitHub issues, and turn the maintainer''s decisions into release-plan steps, with paste-ready prompts for the coding sessions. Use when the maintainer starts a secretary session ("/devflow:secretary", "where are we?", "what''s next?", "check the issues", "add this to the plan", "log that decision", "what should I do this week?"), when they report user feedback or a new idea, or when a coding session has finished a step and the status needs updating. Also reviews recent sessions for process rules the agents broke ("review the sessions", "what rules are being broken?") and proposes the Harness escapes lines that would stop them, for the maintainer to approve. Calls the devflow:planner agent for heavy planning. Never writes code. Do NOT use it to build features (add-feature), fix bugs (fix-bug) or cut a release (release).'
 ---
 
 # The project secretary
@@ -106,6 +106,33 @@ The brief includes: the goal in the maintainer's words; the source document (pat
 The agent returns a draft and does not write files. **Bring its open questions to the maintainer,** apply their answers, then write the plan file yourself and log the decisions.
 
 If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` with `model: "opus"`, `effort: "high"`, and paste the plugin's `agents/planner.md` at the top of the brief.
+
+## Process escapes: review recent sessions
+
+`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke, but nothing looks for those breaks; they turn up by luck. This review reads recent sessions and finds them. It only reports: you propose lines for § Harness escapes and the maintainer decides.
+
+**When:** on request ("review the sessions", "what rules are the agents breaking?"). Suggest it after a release, or every couple of weeks of active work, once per period.
+
+1. **Extract the sessions** to your scratchpad, never into the repo, with the plugin's `tools/session_extract.py` (in `tools/`, two folders up from this skill's base directory):
+   ```bash
+   python <plugin>/tools/session_extract.py <project path> --count 15 --out <scratchpad>/sessions --exclude <this session's id>
+   ```
+   It finds `~/.claude/projects/<project folder>/*.jsonl`, takes the most recent sessions (15 to 20) without the current one, and writes one text file per session: the session id, branch and time range, then the user's and assistant's text, each tool call as one line, and each tool result cut short. Thinking is dropped. A subagent's records are kept and marked `[sub]`. It prints each file with its size; if it finds no folder, say so and stop. **Never commit transcript text**, and don't quote more of it than the short examples below.
+2. **Read them in batches.** Group the files by size into batches of roughly 200 KB each and give each to a `general-purpose` agent with `model: "sonnet"`, in parallel. Paste into every brief, verbatim:
+   - the profile's **Architecture rules**, **Edit bounds** and **Standing rules**;
+   - the project's `CLAUDE.md`;
+   - the rules every skill shares, from `add-feature`'s "Before you start, and where you stop" and its orchestrator paragraph: the orchestrator delegates and does not design, implement, test or review itself; claim the step first and commit that one line alone; check CI on HEAD first; stop at a `**Gate:**`; the stop rules (two fix rounds, one more round after BLOCKERS); a stopped step gets a `**Tried:**` line; a step's Files line limits what is edited; secretary edits are never reverted.
+
+   Tell each agent to return, per file, every place a session broke one of those rules: the rule, the file name, the line, and a quote of at most 200 characters. It reports facts, and does not judge whether the rule is a good one.
+3. **Merge the findings** into one report. For each broken rule:
+   - **how often**, and in how many sessions;
+   - **one short quoted example,** with its session id;
+   - **a proposed § Harness escapes line:** what happened, and the one thing that now stops it. Name it exactly: the guard rule (`.claude/devflow.json`), the `tools/devflow_checks.py` check, or the skill or profile wording it adds, with the file and heading. A rule that only needs a reminder gets wording, not a hook.
+
+   Then list the **rules nobody needed** (no session came near them), as a note and not a proposal to remove them.
+4. **Gate: the maintainer approves each proposal,** one at a time. Log each decision. An approved one becomes a plan step in the way "Adding a plan step" describes, with the guard, check or wording change as its content; a `deny` or `ask` rule is marked an **Escalate** step (Opus) with a `**Gate:**`. You make no code, guard, check or skill changes yourself, and the coding session that carries out the step adds the § Harness escapes line in the same commit as the change; you don't edit `docs/BEHAVIOUR.md`. Rejected proposals are logged and not raised again unless the same break shows up in later sessions.
+
+Finish with the paste-ready prompt for the first approved step.
 
 ## Standing rules
 
