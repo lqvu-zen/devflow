@@ -64,10 +64,11 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
 
 1. **A new number** (never renumber existing steps), a heading `### N — <short title>`, and an italic line saying where it came from: `_Added YYYY-MM-DD from issue #N / the maintainer's decision / user feedback._`
 2. **What and why,** with facts the team needs: files and modules if you know them, related `docs/BEHAVIOUR.md` entries and their surfaces, earlier commits. Don't prescribe the design; that's the designer's job.
-3. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated.
-4. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation to Opus for any area **Escalate** names.
-5. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on.
-6. **The plan's other sections updated to match:**
+3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence.
+4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated.
+5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation to Opus for any area **Escalate** names.
+6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on.
+7. **The plan's other sections updated to match:**
    - the **Goals** list, if it adds a goal;
    - the **Who does what** table;
    - the release step's **Needs** line;

@@ -27,11 +27,13 @@ Use Bash only to read: `git log`, `git show`, `git diff`, `gh issue view`, `gh i
 - **Who does what:** step, who, which skill.
 - **Steps:** `### N — title`, each one **one reviewable commit**, with:
   - **what and why**, and facts: files, modules, existing helpers, related commits;
+  - **a `**Files:**` line:** the paths the step edits, each checked against the code, with "possibly …" for any you can't confirm. Two steps that share a file go in sequence, not in parallel lanes;
   - **the `docs/BEHAVIOUR.md` entries and surfaces it touches.** Name them; this is how "A breaks B" gets caught at planning time;
   - **a testable Done when:** what a test proves, every surface, the map entry to add or update, and the release-gate case if the step affects builds or upgrades;
   - **Needs:** the steps it depends on;
   - a **`**Gate:**` line** when the maintainer must do or decide something before the step can go on (name a version, sign, install a build, approve a list);
   - an **escalation note** when the step is in an area **Escalate** in `.claude/devflow.md` names (implementer on Opus at medium effort).
+- **Parallel lanes and merging:** only when the brief asks for two tabs at once. Use the section in the plugin's `templates/plan.md`, and fill in which steps form each lane from the Files lines.
 - **Order:** risky and foundational work first; bug fixes before features; the release test phase, then the release last, through the release-candidate flow.
 - **Status:** a table, every step `—`. Rows read `| N title | state |`, because the session-start hook parses them.
 

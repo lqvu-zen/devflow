@@ -58,7 +58,7 @@ and adds that check in the same commit. The designer names the missing check in 
 
 ## Before you start, and where you stop
 
-**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, and the **stop rules in the loop** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row and push that alone before any work; a red CI on HEAD comes first; at most two fix rounds after the first run, and one re-review after BLOCKERS, then stop and report; a session that stops without finishing rewrites its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
+**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, **keep to the step's Files line**, and the **stop rules in the loop** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row and push that alone before any work; a red CI on HEAD comes first; a step with a Files line edits and commits only those files and asks before touching another; at most two fix rounds after the first run, and one re-review after BLOCKERS, then stop and report; a session that stops without finishing rewrites its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
 
 ## The workflow
 

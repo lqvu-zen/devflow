@@ -29,6 +29,7 @@ _Created <YYYY-MM-DD> by the secretary from <the brief / the maintainer's decisi
 
 Behaviour map: <IDs and their surfaces>.
 
+**Files:** `<path/to/module>`, `<path/to/its/test>`, possibly `<path/to/a/helper>`.
 **Needs** nothing.
 **Done when** a regression test reproduces the bug on the old code and passes on the fix; <every surface>; the map entry <ID> names the test.
 
@@ -38,6 +39,7 @@ Behaviour map: <IDs and their surfaces>.
 
 Behaviour map: <IDs to add or update, and their surfaces>.
 
+**Files:** `<path/to/new/module>` (new), `<path/to/existing/module>`, `docs/BEHAVIOUR.md`, possibly `<path/to/config>`.
 **Needs** <step numbers>.
 **Escalate:** <only for an area Escalate names>.
 **Gate:** <only when the maintainer must do or decide something first>.
@@ -46,6 +48,7 @@ Behaviour map: <IDs to add or update, and their surfaces>.
 
 ### 3 — Release X.Y.Z
 
+**Files:** `.claude-plugin/plugin.json` or the project's version files, `README.md`, possibly the changelog.
 **Needs** every step above, plus green CI.
 Run `/devflow:release`. The maintainer names the version. The release gate passes; `vX.Y.Z-rc1` is published as a pre-release; the tester reports no FAIL; the maintainer ticks the checklist; the same commit is promoted after the release review prints `READY TO PUBLISH`.
 **Done when** vX.Y.Z is published with every artifact in the lineup, and the issues it fixes are closed with a link to the release.
@@ -53,6 +56,20 @@ Run `/devflow:release`. The maintainer names the version. The release gate passe
 ## Order
 
 Bug fixes first: 1. Then 2. Then 3, the release, through the candidate phase.
+
+## Parallel lanes and merging
+
+_Keep this section only when two tabs will work at once. The secretary keeps it up to date._ When two lanes run at once:
+
+1. One worktree and branch per lane (`lane/a`, `lane/b`), each made from the main branch.
+2. A lane edits only its own rows of the Status table, and only its own new `docs/BEHAVIOUR.md` entries.
+3. To merge, the lane rebases on the main branch, runs every **Verify** command from `.claude/devflow.md`, pushes the branch and waits for green CI.
+4. The maintainer approves each merge. Merges are fast-forward only, one lane at a time.
+5. After a merge, the other lane rebases before its next step.
+
+Run at most two lanes, and only where the steps' **Files** lines don't overlap: one maintainer reviews every merge.
+
+Lanes: <lane a: steps N, M> and <lane b: steps P, Q>. Shared files that keep them in sequence: <paths, or none>.
 
 ## Status
 
