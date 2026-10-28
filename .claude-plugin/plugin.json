@@ -1,6 +1,6 @@
 {
   "name": "devflow",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "A maintainer-led workflow for Claude Code: locate, design, implement, review and commit through fresh agents with pinned models; a behaviour map of every surface; plans with claimable steps; a secretary; releases through a tested candidate; and hooks that turn the process rules into checks.",
   "author": {
     "name": "Quang-Vu Le"
