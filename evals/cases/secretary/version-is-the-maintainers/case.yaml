@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: secretary-version-is-the-maintainers
+context:
+  scaffold_script: scaffold.sh

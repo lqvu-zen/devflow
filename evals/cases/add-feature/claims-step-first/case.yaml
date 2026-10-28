@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: add-feature-claims-step-first
+context:
+  scaffold_script: scaffold.sh

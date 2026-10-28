@@ -1,0 +1,33 @@
+{
+  "name": "tally",
+  "maintainer": "Ada",
+  "main_branch": "main",
+  "status_file": "docs/STATUS.md",
+  "plans_dir": "docs/plans",
+  "guard": {
+    "real_data": ["~/.tally"],
+    "secret_dirs": ["~/tally-keys"],
+    "secret_extensions": ["pem", "key"],
+    "self_guarding_scripts": [],
+    "maintainer_only": ["tools/sign.py"],
+    "app": {
+      "commands": ["tally"],
+      "modules": ["tally"],
+      "harmless": [["--version"], ["--help"]],
+      "isolate_env": ["HOME"],
+      "data_folder": ".tally"
+    },
+    "ask_release": true,
+    "release_stamp": {
+      "path": "dist/release_check.passed",
+      "binds": "dist/SHA256SUMS.txt",
+      "gate": "python3 tests/release_check.py"
+    }
+  },
+  "checks": {
+    "version_files": [
+      {"path": "tally/__init__.py", "pattern": "^__version__ = \"([^\"]+)\""}
+    ],
+    "no_new_python_comments": ["tally/"]
+  }
+}

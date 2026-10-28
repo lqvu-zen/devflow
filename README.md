@@ -73,6 +73,48 @@ python -m unittest discover -s tests
 
 `tests/test_guard.py` runs the RYOS guard's test cases against an RYOS-shaped config to show the generic guard behaves the same, and adds a Linux-style project and a minimal config. `tests/test_session_start.py` and `tests/test_checks.py` cover the other hook and the CI check; the CI-check tests use real throwaway git repositories.
 
+## Skill evals
+
+The skills are rules in prose, so `evals/` checks that an edit hasn't broken them. It uses Claude Code's own runner, `claude plugin eval` (2.1.269 or later; written against 2.1.306), which loads devflow as a plugin, hooks included. Docs: https://code.claude.com/docs/en/plugin-evals.md.
+
+What is in it:
+
+- `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
+- `evals/cases/<skill>/<case>/`: 26 behaviour cases. `add-feature` 7, `fix-bug` 6, `release` 6, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
+- `evals/cases/trigger/`: 24 trigger cases, six per skill: three prompts that should fire it and three near misses that belong to another skill. They allow only `Skill` and need no scaffold or shell.
+
+How the runner reads a case (so you can write more):
+
+- A case is a folder with `prompt.md` (frontmatter, then the prompt), `case.yaml`, or both, and at least one grader. Frontmatter keys: `name`, `tags`, `runs` (default 3), `max_turns` (default 10; reaching it is a run error), `timeout_seconds`, `allowed_tools`, `append_system_prompt`, `model`, `env`. Unknown keys are an error. Only `case.yaml` can set `context.scaffold_script`.
+- Grader types: `llm` (a rubric in the body; passes on 2 of 3 votes; judge it on `last_message`, because the judge sees a trace with its middle elided), `tool_used` (`tool`, `input_match` regex on the call's JSON, `min`, `max`; "never" is `min: 0`, `max: 0`), `tool_order` (`before`, `after`), `regex` (`target`, `match: not_contains`), `file_exists` (`exists: false` for absence) and `baseline`. A run's score is the weighted share of its graders that passed; a case passes at `--threshold` (default 1.0).
+- A trigger check is a `tool_used: Skill` grader with `input_match: '"skill"\s*:\s*"(?:[\w-]+:)?add-feature"'`. With `arm: both` it is scored even when the plugin is compared against a run without it.
+- The scaffold runs only with `--scaffold`, as you, in the empty workspace, with a temporary `HOME`; it times out at 120 seconds. Project config it writes is not loaded: the fixture's `.claude/devflow.md` is read by the skills as a file, and the guard hook starts because `.claude/devflow.json` exists.
+- Only read-only tools are granted unless you pass `--allow-tools`. Granting `Bash` runs every command under the OS sandbox, which native Windows doesn't have: run the behaviour cases in WSL2 or Linux (with `claude`, `git`, `uv`, `python3`, `bubblewrap` and `socat` installed there). Cases that grant `Bash` are refused on native Windows, not run unconfined.
+- **Set `TMPDIR` to a folder outside `/tmp`** when you run the behaviour cases (for example `mkdir -p ~/ev && TMPDIR=$HOME/ev …`). The runner builds each workspace under the temp folder, and under `/tmp` the sandbox mounts the workspace read-only, so every `git commit` fails with "Read-only file system".
+- Tool graders (`tool_used`, `tool_order`) see every call in the run, including the subagents' own, and match the call's whole JSON input, file contents included. To check which file an edit touched, match the path (`"file_path"\s*:\s*"[^"]*/tally/`), not the file name alone.
+- `--tag` is "any tag matches": every behaviour case carries `behaviour`, so `--tag secretary --tag behaviour` runs all of them. Use `--case` to pick a skill.
+
+Run them from the plugin root:
+
+```
+claude plugin eval . --tag trigger --ablation none --runs 1 --trust-plugin --no-publish -j 4
+TMPDIR=$HOME/ev claude plugin eval . --tag behaviour --runs 1 --ablation none --scaffold --allow-tools Bash Write Edit --trust-plugin --no-publish -j 3 --judge-model sonnet --max-cost-usd 25
+```
+
+`--case "<glob>"` picks one case (`"release-*"` for a skill), and `--tag costly` the six that run real agent pipelines. `--ablation none` skips the no-plugin arm, which can't follow a `/devflow:*` prompt. `--judge-model sonnet` is worth the cost: the default Haiku judge disagrees with itself on rubrics of more than one clause. Results land in `evals/results/` (not committed): `aggregate-result.json` and `report.html`. The run exits 1 below the threshold. A full behaviour run costs about $11 to $14 and a subscription can hit its session limit partway: runs that hit it are reported as errors scoring 0, so rerun just those cases.
+
+The cases are written so that a session which stops and asks, as the skills tell it to, passes. The fixture's CI and plan facts are made to agree with each other, because the sessions check them.
+
+Known gap: no case reaches the "at most two fix rounds, then report Still red" rule. The sessions find a conflict while designing and stop earlier, which `add-feature-stops-on-conflicting-check` covers. A fixture that only fails during implementation would be needed, and a reviewer BLOCKERS rule needs a scripted reviewer.
+
+Recorded runs:
+
+| Date | Suite | Result | Cost |
+|---|---|---|---|
+| 2026-10-22 | trigger (24 cases, 1 run each) | 23 pass; `add-feature-3-fires` ("Make the tally output show a thousands separator") did not fire the skill, 2 of 5 on a rerun | $2.94 |
+| 2026-10-27 | behaviour (26 cases, 1 run each, Sonnet judge) | 20 pass; 2 judge failures on rubrics that were then rewritten; 4 not run (session limit) | $11.48 |
+| 2026-10-28 | behaviour, those 6 cases rerun | 6 pass. With the first run, all 26 pass, in two invocations | $2.02 |
+
 ## Where it came from
 
 This is RYOS's `.claude/` setup with the RYOS-specific parts moved out into the profile. RYOS keeps its own copies (`add-ryos-feature`, `fix-ryos-bug`, `release-ryos`, `ryos-secretary`, the `ryos-*` agents and its hooks). Until RYOS moves over, keep devflow disabled in RYOS, or simply don't give RYOS a `.claude/devflow.json`.

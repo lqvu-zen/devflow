@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+root="$(cd "$(dirname "$0")/.." && pwd)"
+state="$root/.gh"
+echo "gh $*" >> "$state/calls"
+all=" $* "
+case "$1 $2" in
+  "run list")
+    if [ -f "$state/rerun" ]; then set_name=runs-after-rerun; else set_name=runs; fi
+    case "$all" in
+      *" --jq "*) cat "$state/$set_name.txt" ;;
+      *) cat "$state/$set_name.json" ;;
+    esac
+    ;;
+  "run view")
+    case "$all" in
+      *" --log-failed "*) cat "$state/log-failed.txt" ;;
+      *) [ -f "$state/jobs/$3.txt" ] && cat "$state/jobs/$3.txt" ;;
+    esac
+    ;;
+  "run rerun")
+    if [ ! -f "$state/real-failure" ]; then touch "$state/rerun"; fi
+    echo "Requested rerun of all failed jobs"
+    ;;
+  "run watch")
+    if [ -f "$state/red" ] && [ ! -f "$state/rerun" ]; then
+      echo "Run failed"
+      exit 1
+    fi
+    echo "Run completed: success"
+    ;;
+  "issue list")
+    cat "$state/issues.txt"
+    ;;
+  "pr list")
+    ;;
+  "release list")
+    cat "$state/releases.txt"
+    ;;
+  "release create")
+    touch "$root/published.flag"
+    echo "https://github.com/example/tally/releases/tag/$3"
+    ;;
+  *)
+    echo "gh: not available in the eval fixture: $*" >&2
+    exit 1
+    ;;
+esac
