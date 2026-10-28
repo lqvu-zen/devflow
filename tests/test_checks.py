@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 import json
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -94,11 +95,11 @@ class _RepoCase(unittest.TestCase):
 
 
 class TestVersionCheck(_RepoCase):
-    def problems(self, base: str | None = None, head: str = "HEAD") -> list[str]:
+    def problems(self, base: str | None = None, head: str = "HEAD", files=None) -> list[str]:
         repo = str(self.tmp)
         start = checks.commit_range(repo, base or self.root, head)
         return checks.version_problems_in(repo, checks.commits_in(repo, start, head),
-                                          self.config.version_files)
+                                          files if files is not None else self.config.version_files)
 
     def test_the_release_titles_match(self):
         match = checks.RELEASE_TITLE.match
@@ -119,7 +120,8 @@ class TestVersionCheck(_RepoCase):
         self.assertIn("sets the version in app/__init__.py to 2.4.1, not 2.4.0", self.problems()[0])
 
     def test_reverting_a_release_fails(self):
-        self.repo.commit("Release 2.4.0", {"app/__init__.py": init_file("2.4.0")})
+        self.repo.commit("Release 2.4.0", {
+            "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0")})
         self.repo.commit('Revert "Release 2.4.0"', {"app/__init__.py": init_file("2.3.1")})
         problems = self.problems()
         self.assertEqual(len(problems), 1)
@@ -155,6 +157,56 @@ class TestVersionCheck(_RepoCase):
                                  "--head", "HEAD", "--repo", str(self.tmp)],
                                 capture_output=True, text=True, encoding="utf-8")
         self.assertEqual((result.returncode, result.stdout.strip()), (0, "comments: ok (1 commits)"))
+
+    def test_a_release_that_leaves_a_version_file_behind_fails(self):
+        sha = self.repo.commit("Release 2.4.0", {"app/__init__.py": init_file("2.4.0")})
+        problems = self.problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f'{sha[:7]} "Release 2.4.0" leaves the version in setup_freeze.py at 2.3.1, '
+                      f'not 2.4.0', problems[0])
+
+    def test_a_candidate_that_leaves_a_numbers_only_file_behind_fails(self):
+        self.repo.commit("Release candidate 2.4.0-rc1", {"app/__init__.py": init_file("2.4.0-rc1")})
+        problems = self.problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn("leaves the version in setup_freeze.py at 2.3.1, not 2.4.0", problems[0])
+
+    def test_a_release_that_changes_no_version_file_is_still_checked(self):
+        self.repo.commit("Release 2.4.0", {"app/a.py": "def a():\n    return 2  # keeps one\n"})
+        problems = self.problems()
+        self.assertEqual(len(problems), 2)
+        self.assertIn("leaves the version in app/__init__.py at 2.3.1, not 2.4.0", problems[0])
+        self.assertIn("leaves the version in setup_freeze.py at 2.3.1, not 2.4.0", problems[1])
+
+    def test_a_listed_file_missing_at_the_release_fails(self):
+        self.repo.commit("Release 2.4.0", {
+            "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0")})
+        files = self.config.version_files + (
+            checks.VersionFile("missing.py", re.compile(r'^v = "([^"]+)"', re.MULTILINE), True),)
+        problems = self.problems(files=files)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("has no missing.py", problems[0])
+        self.assertIn("2.4.0", problems[0])
+
+    def test_a_listed_file_whose_pattern_never_matches_fails(self):
+        self.repo.commit("Release 2.4.0", {
+            "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0")})
+        files = self.config.version_files + (
+            checks.VersionFile("app/a.py", re.compile(r'^v = "([^"]+)"', re.MULTILINE), True),)
+        problems = self.problems(files=files)
+        self.assertEqual(len(problems), 1)
+        self.assertIn("app/a.py", problems[0])
+        self.assertIn("pattern", problems[0])
+
+    def test_a_final_with_only_numbers_only_files_already_set_passes(self):
+        numbers_only = tuple(f for f in self.config.version_files if f.numbers_only)
+        self.repo.commit("Release candidate 2.4.0-rc1", {"setup_freeze.py": setup_file("2.4.0")})
+        self.repo.commit("Release 2.4.0", {})
+        self.assertEqual(self.problems(files=numbers_only), [])
+
+    def test_a_non_release_commit_is_judged_only_by_what_it_changes(self):
+        self.repo.commit("feat: clean", {"app/a.py": "def a():\n    return 2  # keeps one\n"})
+        self.assertEqual(self.problems(), [])
 
 
 class TestCommentCheck(_RepoCase):

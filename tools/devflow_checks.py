@@ -138,20 +138,35 @@ def _short_title(title: str) -> str:
     return title if len(title) <= 50 else title[:49] + "…"
 
 
+def _release_problem(repo: str, commit: str, label: str, file: VersionFile, expected: str,
+                     changed: bool) -> str | None:
+    text = _show(repo, f"{commit}:{file.path}")
+    if text is None:
+        return f"{label} has no {file.path}; it should say {expected} {VERSIONS_RULE}"
+    value = version_of(text, file)
+    if value is None:
+        return (f"{label} has no version in {file.path} that its pattern matches; it should say "
+                f"{expected} {VERSIONS_RULE}")
+    if value == expected:
+        return None
+    if changed:
+        return f"{label} sets the version in {file.path} to {value}, not {expected} {VERSIONS_RULE}"
+    return f"{label} leaves the version in {file.path} at {value}, not {expected} {VERSIONS_RULE}"
+
+
 def version_problems_in(repo: str, commits: list[str],
                         files: tuple[VersionFile, ...]) -> list[str]:
     if not files:
         return []
-    numbers_only = {f.path for f in files if f.numbers_only}
     problems: list[str] = []
     for commit in commits:
         changes = version_changes(repo, commit, files)
-        if not changes:
-            continue
         title = _title(repo, commit)
         match = RELEASE_TITLE.match(title)
         label = f'{commit[:7]} "{_short_title(title)}"'
         if not match:
+            if not changes:
+                continue
             for path, (old, new) in changes.items():
                 problems.append(f'{label} changes the version in {path} {old} -> {new}: only '
                                 f'"Release candidate X.Y.Z-rcN" or "Release X.Y.Z" may '
@@ -159,11 +174,11 @@ def version_problems_in(repo: str, commits: list[str],
             continue
         wanted = match.group(1) or match.group(2)
         numbers = re.sub(r"-rc\d+$", "", wanted)
-        for path, (_old, new) in changes.items():
-            expected = numbers if path in numbers_only else wanted
-            if new != expected:
-                problems.append(f"{label} sets the version in {path} to {new}, not {expected} "
-                                f"{VERSIONS_RULE}")
+        for file in files:
+            expected = numbers if file.numbers_only else wanted
+            problem = _release_problem(repo, commit, label, file, expected, file.path in changes)
+            if problem:
+                problems.append(problem)
     return problems
 
 

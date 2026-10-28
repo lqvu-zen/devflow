@@ -52,7 +52,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **CK-01** A commit that changes a version file fails unless it is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z` and the files say that version. | CI | `tests/test_checks.py::TestVersionCheck` |
+| **CK-01** A commit that changes a version file fails unless it is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`; a commit with either title fails unless every listed version file says that version (`X.Y.Z` in numbers-only files), whether or not the commit changed it. | CI | `tests/test_checks.py::TestVersionCheck` |
 | **CK-02** New Python comment lines in the listed folders fail; moved comments pass. | CI | `tests/test_checks.py::TestCommentCheck` |
 
 ## 4. Process-escape review
@@ -95,6 +95,8 @@ Each entry is one line the user would recognise, **every surface** it appears on
 ## Escapes
 
 Every bug found after a release gets one line here, in the fix's commit, and that commit adds the check named: "#NN (vX.Y.Z): should have been caught by <check>; added <test / map entry / release-gate case>".
+
+- dc45cfd (v0.2.0): `.claude-plugin/marketplace.json` was left at 0.1.0. Should have been caught by CK-01 (`tools/devflow_checks.py version`); added the release cases in `tests/test_checks.py::TestVersionCheck` (a version file left behind, no version change, a missing file, a pattern that doesn't match).
 
 ## Harness escapes
 

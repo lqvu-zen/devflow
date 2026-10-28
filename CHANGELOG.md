@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- CI check: a release commit fails if it leaves any listed version file at another version (0.2.0 shipped with `marketplace.json` at 0.1.0).
+
 ## 0.2.0
 
 - Guard: the Read, Grep and Glob tools can no longer open files in the configured secret folders or with a secret extension.

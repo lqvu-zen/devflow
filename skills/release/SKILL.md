@@ -37,7 +37,7 @@ The version changes **only here**, never per feature or fix, and never with a `-
 - **Final** `X.Y.Z`: the version files say `X.Y.Z`. Tag `vX.Y.Z`, published as the latest release.
 - Tags carry the `v` prefix; the version files do not.
 - N is one more than the highest number among the existing `vX.Y.Z-rc*` tags (`git tag -l "vX.Y.Z-rc*"`) and any `-rcN` already in the version files at HEAD; 1 when there is none. A failed candidate's number is never reused or re-tagged.
-- The commit titles are exactly `Release candidate X.Y.Z-rcN` and `Release X.Y.Z`. The `devflow_checks.py version` CI check fails any other commit that changes a version file.
+- The commit titles are exactly `Release candidate X.Y.Z-rcN` and `Release X.Y.Z`. The `devflow_checks.py version` CI check fails any other commit that changes a version file, and fails a release commit that leaves any listed version file at another version.
 
 ## A. Release candidate
 

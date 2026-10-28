@@ -20,7 +20,7 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | Agent | `devflow:tester` | Sonnet, read-only. Uses a candidate the way a user would. |
 | Hook | guard (PreToolUse) | Refuses writes to the project's real data, anything touching or reading secrets (shell, file tools, Read, Grep, Glob), maintainer-only scripts, and reverting the secretary's uncommitted edits. Asks before `gh release` writes and forced pushes. |
 | Hook | session start | Shows the branch, uncommitted files, CI on HEAD, and the plan's next open step (skipping steps another tab has claimed). |
-| Tool | `tools/devflow_checks.py` | A CI check. It fails a commit that changes the version unless the commit is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`, and fails new Python comment lines in the listed folders. |
+| Tool | `tools/devflow_checks.py` | A CI check. It fails a commit that changes the version unless the commit is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`, fails a release commit that leaves any listed version file at another version, and fails new Python comment lines in the listed folders. |
 
 ## How a project plugs in
 
