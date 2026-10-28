@@ -6,7 +6,7 @@ The devflow skills and agents read this file for everything specific to this pro
 
 - **What it is:** a Claude Code plugin, and its own single-plugin marketplace. It ships a working method: skills that send each phase of a feature, bug fix or release to a fresh agent with a pinned model; a secretary that keeps the status file and plans; and hooks and a CI check that turn the process rules into checks. Maintainers of other projects install it from this repository and adopt it with `/devflow:setup`. RYOS keeps its own copies of these skills; devflow is the general version.
 - **Repo:** lqvu-zen/devflow (main branch: `main`)
-- **Maintainer:** Quang-Vu Le (lqvu-zen), time zone UTC+7. They decide, name versions, and run the manual checks.
+- **Maintainer:** Vu Le-Quang (lqvu-zen), time zone UTC+7. They decide, name versions, and run the manual checks.
 - **Languages and stack:** Markdown (skills, agents, templates); Python 3.13, standard library only (hooks and tools); Node 22+ for `review-web-ui` only; bash for the hook commands and the eval scaffolds; GitHub Actions on Linux and Windows.
 
 ## Where things live

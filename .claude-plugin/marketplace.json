@@ -3,7 +3,7 @@
   "name": "devflow",
   "description": "The devflow plugin: the RYOS working method, for any project.",
   "owner": {
-    "name": "Quang-Vu Le"
+    "name": "Vu Le-Quang"
   },
   "plugins": [
     {
