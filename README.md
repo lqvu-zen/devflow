@@ -114,6 +114,7 @@ Recorded runs:
 | 2026-10-22 | trigger (24 cases, 1 run each) | 23 pass; `add-feature-3-fires` ("Make the tally output show a thousands separator") did not fire the skill, 2 of 5 on a rerun | $2.94 |
 | 2026-10-27 | behaviour (26 cases, 1 run each, Sonnet judge) | 20 pass; 2 judge failures on rubrics that were then rewritten; 4 not run (session limit) | $11.48 |
 | 2026-10-28 | behaviour, those 6 cases rerun | 6 pass. With the first run, all 26 pass, in two invocations | $2.02 |
+| 2026-10-28 | trigger, `add-feature` (6 cases, 5 runs each), after widening its description | 30 of 30 pass; `add-feature-3-fires` went from 2 of 5 to 5 of 5 | $3.78 |
 
 ## Where it came from
 
