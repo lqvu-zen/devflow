@@ -1,0 +1,22 @@
+{
+  "name": "devflow",
+  "maintainer": "Quang-Vu Le",
+  "main_branch": "main",
+  "status_file": "docs/STATUS.md",
+  "plans_dir": "docs/plans",
+  "guard": {
+    "real_data": ["~/.claude/plugins", "~/.claude/settings.json", "~/.claude/CLAUDE.md"],
+    "secret_dirs": [],
+    "secret_extensions": ["pem", "key", "p8"],
+    "self_guarding_scripts": [],
+    "maintainer_only": [],
+    "ask_release": true
+  },
+  "checks": {
+    "version_files": [
+      {"path": ".claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true},
+      {"path": ".claude-plugin/marketplace.json", "pattern": "^      \"version\": \"([^\"]+)\"", "numbers_only": true}
+    ],
+    "no_new_python_comments": ["hooks/", "tools/", "tests/"]
+  }
+}

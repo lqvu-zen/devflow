@@ -2,3 +2,6 @@ __pycache__/
 *.pyc
 docs/plans/
 evals/results/
+docs/STATUS.md
+docs/archive/
+docs/PROMPTS.md

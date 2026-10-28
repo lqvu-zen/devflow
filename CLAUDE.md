@@ -38,3 +38,13 @@ The plugin is mostly prompts and config; the only real code is three Python file
 - Hook and tool Python files carry no comments; keep it that way (the CI comment check enforces this in consumer projects, and RYOS-derived code follows the same rule).
 - The plugin version lives in `.claude-plugin/plugin.json` and is bumped only in a release commit.
 - RYOS keeps its own copies of these skills, agents and hooks (`add-ryos-feature`, `ryos-*`); devflow is the generalized version with project specifics moved into the profile.
+
+## How work is done here (devflow)
+
+This project uses the devflow plugin. Its profile is `.claude/devflow.md` (architecture rules, verify commands, edit bounds, release); its guard config is `.claude/devflow.json`.
+
+- New capability or improvement: `/devflow:add-feature`. Bug or red CI: `/devflow:fix-bug`. Shipping: by hand, as the plan's release step, with no candidate (Standing rules in the profile); not `/devflow:release`. Status, issues, plans and decisions: `/devflow:secretary`.
+- What must keep working, on every surface, with the test guarding each: `docs/BEHAVIOUR.md`. Read an area's rows before changing it; a fix updates its entry and test, a new behaviour adds one.
+- Project status: `docs/STATUS.md`, kept by the secretary. Plans: `docs/plans/`, one fresh coding session per step; claim the step first. Both are local and gitignored, as are `docs/archive/` and `docs/PROMPTS.md`.
+- The version changes only in a `Release X.Y.Z` commit.
+- **The escape rule.** Every bug found after a release gets one line in `docs/BEHAVIOUR.md` § Escapes, and its fix adds the check that would have caught it.
