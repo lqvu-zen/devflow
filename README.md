@@ -48,6 +48,19 @@ From a local clone, give its path instead: `/plugin marketplace add D:/Projects/
 
 Then, in a project: `/devflow:setup`.
 
+## Updating
+
+The install is a snapshot in the plugin cache, so changes to the repository (or a local clone) reach it only when you update:
+
+```
+/plugin marketplace update devflow
+/plugin update devflow@devflow
+```
+
+From a terminal: `claude plugin marketplace update devflow`, then `claude plugin update devflow@devflow`. Restart the session to apply. An update only picks up a new version number, which is bumped in release commits.
+
+To run a checkout without installing or updating, start a session with `claude --plugin-dir D:/Projects/devflow`. It loads the folder as it is on disk, so edits apply on the next start. Disable the installed copy for that session to avoid loading both.
+
 ## Reviewing a web UI
 
 `/devflow:review-web-ui` works without `/devflow:setup`, the profile or the config files. It needs Node 22+ and Chrome, Edge or Chromium.
