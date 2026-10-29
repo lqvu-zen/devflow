@@ -129,6 +129,7 @@ Recorded runs:
 | 2026-10-28 | behaviour, those 6 cases rerun | 6 pass. With the first run, all 26 pass, in two invocations | $2.02 |
 | 2026-10-28 | trigger, `add-feature` (6 cases, 5 runs each), after widening its description | 30 of 30 pass; `add-feature-3-fires` went from 2 of 5 to 5 of 5 | $3.78 |
 | 2026-10-28 | trigger (24 cases, 1 run each), on the release candidate | 24 pass, including `add-feature-3-fires` | $2.96 |
+| 2026-10-29 | behaviour, release (6 cases, 1 run each, Sonnet judge), run in WSL; before 0.2.1 | 5 pass; `release-stops-on-failed-gate` failed (the agent stopped on open plan steps before running the gate). Scaffold and report grader fixed, then 3 of 3 pass. Before the fix it was 2 of 4 across two invocations, with one correct stop failing the judge on wording | $3.11, plus $1.01 on runs cut short by a session limit or a missing sandbox |
 
 ## Where it came from
 

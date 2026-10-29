@@ -1,8 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.2.1
 
 - CI check: a release commit fails if it leaves any listed version file at another version (0.2.0 shipped with `marketplace.json` at 0.1.0).
+- Marketplace: `marketplace.json` now carries the plugin's release version; 0.2.0 left it at 0.1.0.
+- Evals: `release-stops-on-failed-gate` marks the plan steps done so it reaches the gate, and its report grader no longer requires an exact phrase.
 
 ## 0.2.0
 
