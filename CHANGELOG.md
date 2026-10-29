@@ -1,5 +1,7 @@
 # Changelog
 
+## Unreleased
+
 ## 0.2.1
 
 - CI check: a release commit fails if it leaves any listed version file at another version (0.2.0 shipped with `marketplace.json` at 0.1.0).
