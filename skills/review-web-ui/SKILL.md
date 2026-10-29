@@ -25,12 +25,12 @@ If none exist, say so in the report header and review against the checklist alon
 | The project's rules | Audience, devices, brand, deliberate style choices, known contrast pairs | the project (see above) |
 | taste-skill (Leonxlnx, MIT, commit `c924fad`) | The real-browser inspector, the 14 critique passes, the juror score, the dated tells registry | `vendor/taste-skill/` (inspector + `references/critique.md`, `tells.md` only) |
 | ui-ux-pro-max (optional) | ~119 UX rules searchable by outcome; pre-delivery checklist | a `ui-ux-pro-max` skill in the project or `~/.claude/skills/`, if installed |
-| design-critique | First-impression scan, Nielsen H1–H10, UX laws, Krug's checks, feedback formula | distilled into `references/checklist.md` |
-| accessibility-review / -audit | WCAG 2.2 AA, layered audit, severity triage | distilled into `references/checklist.md` |
+| design-critique | First-impression scan, Nielsen H1–H10, UX laws, Krug's checks, feedback formula | distilled into `references/core.md` |
+| accessibility-review / -audit | WCAG 2.2 AA, layered audit, severity triage | distilled into `references/core.md` and `references/web.md` |
 | design-review | Visual and motion passes, P0–P3 with effort, "what's working" first, systemic roll-up | distilled into the report format below |
-| frontend-design | Generated-look traits, "spend boldness in one place", copy rules | distilled into `references/checklist.md` |
+| frontend-design | Generated-look traits, "spend boldness in one place", copy rules | distilled into `references/core.md` and `references/tells.md` |
 
-**Precedence when they disagree:** the user's words → the project's rules (and its wrapper skill) → `references/checklist.md` → a ui-ux-pro-max result → taste-skill's house rules. A finding that only a lower source supports and a higher one contradicts is not a finding; don't report it.
+**Precedence when they disagree:** the user's words → the project's rules (and its wrapper skill) → `references/core.md` and `references/web.md` → a ui-ux-pro-max result → taste-skill's house rules. A finding that only a lower source supports and a higher one contradicts is not a finding; don't report it.
 
 ### taste-skill's house rules are opinions, not standards
 
@@ -75,7 +75,7 @@ Each target gets its own folder under `out` with `mobile-fold.jpg`, `mobile-page
 
 ### 2. Look
 
-Open **every** screenshot the inspector listed with the Read tool, mobile first. Judge the pictures, not the code: you will read intentions into code. Run the visual passes in `references/checklist.md` §A on them.
+Open **every** screenshot the inspector listed with the Read tool, mobile first. Judge the pictures, not the code: you will read intentions into code. Run the visual passes in `references/core.md` §1 on them.
 
 ### 3. Drive the states the inspector can't reach
 
@@ -94,7 +94,7 @@ Screenshot each state you judge. Never trigger `alert`/`confirm`/`prompt` dialog
 
 ### 4. Judge
 
-Go through `references/checklist.md` §A–§H in order. When a finding needs backing or you're unsure of a threshold and ui-ux-pro-max is installed, run **one** focused search for that outcome and cite the rule id:
+Go through `references/core.md` §1–§7 in order, then `references/web.md`, then `references/tells.md`. When a finding needs backing or you're unsure of a threshold and ui-ux-pro-max is installed, run **one** focused search for that outcome and cite the rule id:
 
 ```bash
 python <ui-ux-pro-max dir>/scripts/search.py "focus not obscured" --domain ux
@@ -152,7 +152,10 @@ Stop after the report; this skill never edits. Offer next steps through the proj
 
 | File | Use |
 |---|---|
-| `references/checklist.md` | The merged passes §A–§H. Read it every run. |
+| `references/core.md` | The platform-free passes §1–§7. Read it every run. |
+| `references/web.md` | WCAG 2.2 AA specifics, devices and browsers, motion mechanics, inspector rule ids. Read it for a web page. |
+| `references/app.md`, `references/game.md` | Desktop and mobile app layer; game layer. Not used by the web path. |
+| `references/tells.md` | The dated generated-look registry. Read it every run; skip rows for waived rules. |
 | `inspect-site.mjs` | Wrapper: reads `.claude/ui-review.json`, checks the server, passes waivers, one output folder per target. |
 | `vendor/taste-skill/references/critique.md` | Original 14 passes, juror rubric and caps. Read it when scoring. Caps tied to waived rules don't apply. |
 | `vendor/taste-skill/references/tells.md` | Dated registry of generated-page tells; ignore rows for waived rules. |
