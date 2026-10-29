@@ -59,6 +59,14 @@ How to see a change working, safely:
 - <environment variables that turn off notifications, telemetry, registry writes>
 - Never against the real data in <path>.
 
+## Design system
+
+Leave this section out if the project has no user interface.
+
+- **File:** `docs/DESIGN.md`, in Google's DESIGN.md format (tokens in the front matter, then the sections, then Platforms, States, Inputs and Motion).
+- **Platforms the project ships to:** <web | desktop | mobile | game, one or more; for each, the framework: e.g. desktop (Qt/QML), game (Unity)>.
+- **UI surfaces:** <the behaviour-map surfaces and folders that are user interface>.
+
 ## Release
 
 Leave this section out if the project doesn't ship releases.

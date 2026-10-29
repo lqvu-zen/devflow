@@ -47,6 +47,12 @@ The implementer runs on Opus at medium effort for: packaging and builds.
 - Run `python3 -m tally.cli 2 4` from the repo root; it needs no data folder.
 - Never against the real data in `~/.tally`.
 
+## Design system
+
+- **File:** `docs/DESIGN.md`, in Google's DESIGN.md format.
+- **Platforms the project ships to:** none. The only output is one line of terminal text.
+- **UI surfaces:** the result line printed by `tally/cli.py`.
+
 ## Release
 
 - **Repo:** `example/tally`.

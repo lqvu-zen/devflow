@@ -7,7 +7,7 @@ description: 'Adopt devflow in a project: read the codebase, draft the project p
 
 devflow's skills and agents know the method; this project's facts go in two files that you write here:
 
-- **`.claude/devflow.md`**, the profile, read by every skill and agent. Its headings are fixed: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working**, **Release**, **Try it**, **Standing rules**.
+- **`.claude/devflow.md`**, the profile, read by every skill and agent. Its headings are fixed: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working**, **Design system**, **Release**, **Try it**, **Standing rules**.
 - **`.claude/devflow.json`**, the guard and CI config. The hooks act only in a project that has it.
 
 Templates for everything are in the plugin's `templates/` folder, two folders up from this skill's base directory. Copy their structure; fill them with this project's facts.
@@ -19,7 +19,7 @@ Templates for everything are in the plugin's `templates/` folder, two folders up
 Check, and report in a few lines:
 
 - `.claude/devflow.md`, `.claude/devflow.json`: if they exist, this is a refresh. Read them, and change only what the maintainer asks for or what is now wrong.
-- `docs/BEHAVIOUR.md`, `docs/STATUS.md`, `docs/plans/`, `docs/archive/`: keep and reuse what exists.
+- `docs/BEHAVIOUR.md`, `docs/DESIGN.md`, `docs/STATUS.md`, `docs/plans/`, `docs/archive/`: keep and reuse what exists.
 - `.claude/skills/`, `.claude/agents/`, `.claude/hooks/`, `.claude/settings.json`: a project with its own workflow skills, agents or guard hooks (as RYOS has) would run both. Say which overlap, and ask whether devflow replaces them here or the project keeps its own and devflow stays off (the plugin can be disabled per project in `.claude/settings.json`: `"enabledPlugins": {"devflow@devflow": false}`).
 - `CLAUDE.md`, `README.md`, `CONTRIBUTING.md`, architecture docs: read them; most of the profile comes from here.
 
@@ -32,6 +32,7 @@ Enough to fill the profile with evidence, not a full audit:
 - The top-level source layout: one line per module or folder for **Where things live**.
 - `git remote -v`, the default branch, `git tag -l` and `gh release list` for **Release**.
 - Where the product keeps user data at run time (config folders, databases, `%APPDATA%`, `~/.local/share`, ...) and what turns off side effects in tests (env vars for notifications, telemetry, registry, network). These are the guard's **real_data** and the **See it working** rules.
+- Design tokens, if there is a user interface: CSS custom properties, a Tailwind config, a QML theme singleton, a Unity USS or theme asset; and which platforms it ships to (web, desktop, mobile, game).
 - Secrets: key files, `.env`, signing tools. These are **secret_dirs**, **secret_extensions** and **maintainer_only**.
 
 ## 3. Ask what the code can't say
@@ -61,11 +62,15 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
    - `guard.release_stamp` (`path`, `binds`, optional `gate`): only if the gate writes a stamp, or the maintainer wants it added to the gate now; the guard then refuses to publish a release without a stamp for the current HEAD and the current hash of `binds`. If the gate can't write one, leave the key out: publishing stays an ask. Record the choice in **Release** under **Stamp**;
    - `checks.version_files` (path and a regex whose group 1 is the version; `numbers_only` for files that take `X.Y.Z` only) and `checks.no_new_python_comments` (folders, Python only).
 3. **`docs/BEHAVIOUR.md`** from `templates/BEHAVIOUR.md`. Start small and true: the surfaces the product really has, and the main areas with a few rows each, every row with the test that guards it today or **untested**. Tell the maintainer the map grows with every change from here on and that they should review it.
-4. **`docs/STATUS.md`** from `templates/STATUS.md`, and an empty `docs/plans/` and `docs/archive/` (a `.gitkeep` each). Skip any that already exist.
+4. **`docs/DESIGN.md`** and the **Design system** heading of the profile, if the project has a user interface. Copy `templates/DESIGN.md`.
+   - Where the code already has tokens (CSS custom properties, a Tailwind config, a QML theme singleton, a Unity USS or theme asset), fill the front matter and the sections from them, and mark every value you guessed with "(inferred, please check)".
+   - Where it has none, leave the template as it is and say so; do not invent a palette.
+   - Fill **Platforms the project ships to** and **UI surfaces** in the profile from what the code and the behaviour map show. A project with no user interface gets neither the heading nor the file. An existing `docs/DESIGN.md` is kept as it is.
+5. **`docs/STATUS.md`** from `templates/STATUS.md`, and an empty `docs/plans/` and `docs/archive/` (a `.gitkeep` each). Skip any that already exist.
    - **`docs/PROMPTS.md`** from `templates/PROMPTS.md`, the prompt book, with the project's name, repo and tab names filled in. Keep the `{braces}` as they are: they are filled in when a prompt is pasted. An existing `docs/PROMPTS.md` is kept as it is.
-5. **`.claude/settings.json`**: merge `templates/settings.json`'s `ask` and `deny` lists into the existing file, keeping everything already there. Change `docs/STATUS.md` and `docs/plans` in the deny rules if `status_file` or `plans_dir` differ. New `ask` and `deny` rules need the maintainer's approval: list them and wait for a yes.
-6. **CI**, if the project has GitHub Actions and `checks` has anything in it: copy the plugin's `tools/devflow_checks.py` to `tools/devflow_checks.py` in the project, and add the job in `templates/ci-devflow.yml` to the main workflow.
-7. **`CLAUDE.md`**: add the section in `templates/CLAUDE-section.md` (create the file if there is none). Don't rewrite the rest of it.
+6. **`.claude/settings.json`**: merge `templates/settings.json`'s `ask` and `deny` lists into the existing file, keeping everything already there. Change `docs/STATUS.md` and `docs/plans` in the deny rules if `status_file` or `plans_dir` differ. New `ask` and `deny` rules need the maintainer's approval: list them and wait for a yes.
+7. **CI**, if the project has GitHub Actions and `checks` has anything in it: copy the plugin's `tools/devflow_checks.py` to `tools/devflow_checks.py` in the project, and add the job in `templates/ci-devflow.yml` to the main workflow.
+8. **`CLAUDE.md`**: add the section in `templates/CLAUDE-section.md` (create the file if there is none). Don't rewrite the rest of it.
 
 ## 5. Check it works
 
