@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-`devflow` is a Claude Code plugin (and its own single-plugin marketplace, `.claude-plugin/marketplace.json`). It ships a working method: skills that orchestrate fresh subagents with pinned models, plus hooks and a CI tool that turn process rules into checks. The Python is standard library only; there is no build step and no dependencies. The one exception is the `review-web-ui` skill, which ships Node scripts and needs Node 22+ and a Chrome-family browser.
+`devflow` is a Claude Code plugin (and its own single-plugin marketplace, `.claude-plugin/marketplace.json`). It ships a working method: skills that orchestrate fresh subagents with pinned models, plus hooks and a CI tool that turn process rules into checks. The Python is standard library only; there is no build step and no dependencies. The one exception is the `review-ui` skill's web path, which ships Node scripts and needs Node 22+ and a Chrome-family browser.
 
 ## Commands
 
@@ -20,7 +20,7 @@ The hooks run in consumer projects as `uv run --no-project python …`. The CI c
 
 The plugin is mostly prompts and config; the only real code is three Python files.
 
-- **Skills** (`skills/*/SKILL.md`): `setup`, `add-feature`, `fix-bug`, `release`, `secretary`, `review-web-ui`. The orchestrating session runs these and delegates every phase to an agent. `fix-bug` and `release` reuse the `add-feature` pipeline, so changes to shared rules (stop rules, claiming a plan step, gates, the briefs' verbatim-paste requirement) usually need to be mirrored across the skills. `review-web-ui` is standalone: it does not read the project profile or delegate to agents, and `skills/review-web-ui/vendor/` is third-party code to be updated only by re-copying from upstream.
+- **Skills** (`skills/*/SKILL.md`): `setup`, `add-feature`, `fix-bug`, `release`, `secretary`, `review-ui`. The orchestrating session runs these and delegates every phase to an agent. `fix-bug` and `release` reuse the `add-feature` pipeline, so changes to shared rules (stop rules, claiming a plan step, gates, the briefs' verbatim-paste requirement) usually need to be mirrored across the skills. `review-ui` is standalone: it does not delegate to agents, reads **Design system** and **See it working** when the profile exists and works without it, and `skills/review-ui/vendor/` is third-party code to be updated only by re-copying from upstream.
 - **Agents** (`agents/*.md`): `locator` (Haiku), `designer`, `reviewer`, `planner` (Opus, high effort), `implementer`, `tester` (Sonnet). Model and effort are pinned in each agent's frontmatter, so skills should not pass `model` or `effort` except to escalate.
 - **Project profile contract**: skills never hardcode project facts. They read `.claude/devflow.md` in the consumer project by exact heading (Project, Where things live, Architecture rules, Verify, Edit bounds, Escalate, See it working, Design system, Release, Try it, Standing rules) and paste sections verbatim into agent briefs. Renaming a heading in `templates/devflow.md` breaks every skill that cites it.
 - **Config contract**: `.claude/devflow.json` in the consumer project configures the guard and CI checks (schema example in `templates/devflow.json`). Without that file the hooks are no-ops: `hooks/hooks.json` gates each command on the file's existence.

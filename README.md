@@ -11,7 +11,7 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | Skill | `/devflow:fix-bug` | The same pipeline for a bug: reproduce it, write a failing test, find the root cause and fix it. Adds an escape line when the bug got past a release. |
 | Skill | `/devflow:release` | Ships through a release candidate: version → build → gate → pre-release → tester → the maintainer's checklist → release review → promotion. |
 | Skill | `/devflow:secretary` | Keeps the status file and the decision log, triages issues, and turns decisions into plan steps with paste-ready prompts. Keeps the prompt book (`docs/PROMPTS.md`, from `templates/PROMPTS.md`). Reviews recent sessions for process rules the agents broke (`tools/session_extract.py` shrinks them) and proposes Harness escapes lines for the maintainer to approve. |
-| Skill | `/devflow:review-web-ui` | One evidence-based UI/UX review of a web page: measures it in headless Chrome, reads phone and desktop screenshots, drives the interactive states, audits WCAG 2.2 AA, and returns a prioritized report with file:line fixes. Read-only. Needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `skills/review-web-ui/vendor/`. |
+| Skill | `/devflow:review-ui` | One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or game UI, in one report format. On the web it measures the page in headless Chrome, reads phone and desktop screenshots, drives the states and audits WCAG 2.2 AA. For apps and games it reads screenshots of each state at each size or resolution, and the UI source. Prioritized report with file:line fixes. Read-only. The web path needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `skills/review-ui/vendor/`. |
 | Agent | `devflow:locator` | Haiku, read-only. Quotes the code and the behaviour-map rows. |
 | Agent | `devflow:designer` | Opus, high effort. A plan or a root cause, never code. |
 | Agent | `devflow:implementer` | Sonnet. Implements and verifies, with at most two fix rounds. Never commits. |
@@ -61,20 +61,20 @@ From a terminal: `claude plugin marketplace update devflow`, then `claude plugin
 
 To run a checkout without installing or updating, start a session with `claude --plugin-dir D:/Projects/devflow`. It loads the folder as it is on disk, so edits apply on the next start. Disable the installed copy for that session to avoid loading both.
 
-## Reviewing a web UI
+## Reviewing a UI
 
-`/devflow:review-web-ui` works without `/devflow:setup`, the profile or the config files. It needs Node 22+ and Chrome, Edge or Chromium.
+`/devflow:review-ui` works without `/devflow:setup`, the profile or the config files. With a profile it reads **Design system** and **See it working**. The web path needs Node 22+ and Chrome, Edge or Chromium.
 
-1. Start the app's dev server, or have a built `.html` file ready.
-2. Run `/devflow:review-web-ui` and say what to review, for example `review the pricing page on mobile`. By default it reviews the whole page at 375 px and 1440 px.
-3. It measures the page in headless Chrome, reads the screenshots, tries the interactive states, and answers in chat with a prioritized report (P0 to P3, file:line, fix, effort). It never edits code.
+1. For a web page, start the app's dev server, or have a built `.html` file ready. For an app or a game, have screenshots of the states ready, or a **See it working** entry that says how to take them safely.
+2. Run `/devflow:review-ui` and say what to review, for example `review the pricing page on mobile` or `review the HUD`. By default a web page is reviewed whole at 375 px and 1440 px.
+3. On the web it measures the page in headless Chrome, reads the screenshots and tries the interactive states. For an app or a game it reads the screenshots of each state at each size or resolution, and the UI source. It answers in chat with a prioritized report (P0 to P3, file:line, fix, effort). It never edits code.
 
-Optional: put `.claude/ui-review.json` in the project to set the server URL, pages, widths, output folder, and the style choices it should not flag (`allow`). The format is in `skills/review-web-ui/SKILL.md` under Config.
+Optional: put `.claude/ui-review.json` in the project to set the server URL, pages, widths, output folder, and the style choices it should not flag (`allow`). The format is in `skills/review-ui/SKILL.md` under Config.
 
 ## Requirements
 
 - `uv` on `PATH`. The hooks run as `uv run --no-project python …`, using only the standard library.
-- Node 22+ and Chrome, Edge or Chromium, only for `/devflow:review-web-ui`.
+- Node 22+ and Chrome, Edge or Chromium, only for `/devflow:review-ui` on a web page.
 - `git`. `gh`, logged in, for the CI line, issues and releases.
 - The hooks are run by `bash`. On Windows, that's the Git Bash that Claude Code uses.
 

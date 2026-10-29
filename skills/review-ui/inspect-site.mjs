@@ -6,7 +6,7 @@ import { basename, dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const usage = 'usage: node inspect-site.mjs [path-or-url-or-file ...] [--config FILE] [--base URL] [--widths 375,1440] [--out DIR] [--allow rule,rule] [--json]';
+const usage = 'usage: node inspect-site.mjs [path-or-url-or-file ...] [--config FILE] [--base URL] [--widths 375,1440] [--out DIR] [--allow rule,rule] [--app] [--json]';
 
 const args = process.argv.slice(2);
 if (args.includes('-h') || args.includes('--help')) { console.log(usage); process.exit(0); }
@@ -21,10 +21,11 @@ if (existsSync(configPath)) {
 
 const base = (take('base') ?? config.base ?? 'http://localhost:3000').replace(/\/$/, '');
 const widths = take('widths') ?? (config.widths ?? [375, 1440]).join(',');
-const outRoot = resolve(take('out') ?? config.out ?? join(tmpdir(), 'review-web-ui', basename(resolve('.'))));
+const outRoot = resolve(take('out') ?? config.out ?? join(tmpdir(), 'review-ui', basename(resolve('.'))));
 const allowed = config.allow ?? {};
 const allow = [...new Set([...(Array.isArray(allowed) ? allowed : Object.keys(allowed)), ...(take('allow') ?? '').split(',').filter(Boolean)])];
 const json = args.includes('--json');
+const app = args.includes('--app');
 const targets = args.filter((a) => !a.startsWith('--'));
 if (!targets.length) targets.push(...(config.paths ?? ['/']));
 
@@ -50,7 +51,7 @@ for (const t of targets) {
   const res = spawnSync(process.execPath, [
     join(here, 'vendor/taste-skill/scripts/inspect.mjs'), resolveTarget(t),
     '--out', join(outRoot, label), '--widths', widths,
-    ...(allow.length ? ['--allow', allow.join(',')] : []), ...(json ? ['--json'] : []),
+    ...(allow.length ? ['--allow', allow.join(',')] : []), ...(json ? ['--json'] : []), ...(app ? ['--app'] : []),
   ], { stdio: 'inherit' });
   if (res.status !== 0) failed = true;
 }

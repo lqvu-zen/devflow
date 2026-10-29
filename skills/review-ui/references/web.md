@@ -8,10 +8,17 @@ The inspector (`vendor/taste-skill/scripts/`) measures the real page. Its ids ma
 
 | Pass in `core.md` | Inspector ids |
 |---|---|
-| §1.5 Space | `empty-screens` (desktop) |
+| §1.1 One second | `no-title`, `small-title`, `name-only-title`, `late-title` |
+| §1.4 Edges | `off-centre`, `ragged-edges`, `edge-text`, `one-sided-bleed` |
+| §1.5 Space | `empty-screens` (desktop), `lopsided`, `empty-middle`, `blank-gap`, `hero-void` |
 | §1.6 Type | `size-count`, `headline-lines`, `measure` |
 | §1.12 Collisions | `covered-text`, `clipped-text`, `overflow`, `side-scroll` |
-| Generated-look tells | `emoji` and the house rules listed in SKILL.md |
+| web.md §2 Structure | `many-h1`, `untitled-section` |
+| web.md §2 Motion | `reduced-hidden` |
+| Generated-look tells | `emoji` and the house rules listed in SKILL.md, including `no-poster` (a video of 160 px or wider with no poster) |
+| Dev server | `dev-server` (WARN on a Vite, webpack or Next dev server; goes in the Ran line, see SKILL.md) |
+| App-screen mode (`--app`) | `sidebar-phone`, `unused-canvas`, `heavy-shadow`, `heavy-borders`, `radius-mix`, `icon-chips`, `icon-tiles`, `numeric-align`, `tabular`, `rainbow-chart`, `no-data-hue`, `placeholder-data`, `tiny-text`, `colour-sprawl`, `ragged-row`, `below-fold`, `panel-void`, `app-title-size`, `kpi-size`. The mode skips the marketing-page rules the inspector lists as `APP_SKIP`, including six measurement ids (`small-text`, `body-size`, `measure`, `size-count`, `side-scroll`, `empty-screens`): check those yourself. |
+| Only with taste-skill's own sheets or scenes | `font-not-dealt`, `scene-not-started`, `scene-not-live`, `many-scenes`, `scene-heavy` |
 
 The measurement ids are never waived for taste (SKILL.md). (M)
 

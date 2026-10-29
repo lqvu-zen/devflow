@@ -1,6 +1,6 @@
 # Generated-look tells (registry, dated 2026-10-29)
 
-A tell is a device that makes a screen read as generated. Most began as good ideas; they became tells by being produced by default, without a reason. This registry merges taste-skill (vendored `c924fad`), Impeccable `5e745ac` (Apache-2.0, `craft-floor.md` § Refuse), Hallmark `8f6969f` (MIT, `gates.md`), Open Design `5e9a5e6` (Apache-2.0, `craft/anti-ai-slop.md`) and the frontend-design skill. Rules are restated in devflow's words (D1). It names no replacement font, colour or component: the fix is a procedure.
+A tell is a device that makes a screen read as generated. Most began as good ideas; they became tells by being produced by default, without a reason. This registry merges taste-skill (read at `c924fad`; vendored copy `12af471`), Impeccable `5e745ac` (Apache-2.0, `craft-floor.md` § Refuse), Hallmark `8f6969f` (MIT, `gates.md`), Open Design `5e9a5e6` (Apache-2.0, `craft/anti-ai-slop.md`) and the frontend-design skill. Rules are restated in devflow's words (D1). It names no replacement font, colour or component: the fix is a procedure.
 
 The format follows Hallmark's.
 

@@ -11,7 +11,7 @@ Each rule names its source so a finding can cite it, and ends with **(M)** when 
 | Key | Source |
 |---|---|
 | PR | the project's own rules and design system |
-| TS | taste-skill critique passes, vendored at `c924fad` |
+| TS | taste-skill critique passes, read at `c924fad`; vendored copy `12af471`, same pass numbers |
 | N1–N10 | Nielsen's ten heuristics (N1 visibility of system status, N2 match with the real world, N3 user control and freedom, N4 consistency and standards, N5 error prevention, N6 recognition over recall, N7 flexibility and efficiency, N8 minimalist design, N9 help with errors, N10 help and documentation) |
 | K1, K3, K5 | Krug, *Don't Make Me Think*: K1 don't make me think, K3 users scan, K5 omit needless words |
 | L | UX laws (Fitts, Hick, proximity, similarity, and so on) |

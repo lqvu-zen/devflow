@@ -89,8 +89,12 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **UI-01** `review-web-ui` measures the page in headless Chrome at phone and desktop width and returns one prioritized report; it never edits code. | SK | **untested** |
+| **UI-01** `review-ui` on a web page measures it in headless Chrome at phone and desktop width and returns one prioritized report (P0-P3, file:line, fix, effort); it never edits code. | SK | **untested** |
 | **UI-02** Style choices listed in `.claude/ui-review.json` `allow` are not raised. | SK | **untested** |
+| **UI-03** `review-ui` takes one path per platform: the user's words, else the Design system's platforms, else the project's files, else it asks; web goes to the web path, desktop and mobile to the app path, game to the game path. | SK | **untested** |
+| **UI-04** The app and game paths judge screenshots of each state at each size plus the UI source, never run the inspector, take screenshots only as See it working says or use the user's, and return the same report format. | SK | **untested** |
+| **UI-05** With a profile, `review-ui` reads Design system and See it working and does not raise a tell the design system names; without one it works as before. | SK | **untested** |
+| **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | **untested** |
 
 ## Escapes
 
@@ -109,4 +113,4 @@ A process rule broken by a session (not a bug in the product) gets one line here
 - **WF-06** two fix rounds, then "Still red": needs a fixture that fails only during implementation (see `README.md`, Skill evals, Known gap).
 - **TP-02** profile headings: a unit test that greps every `**<Heading>**` the skills cite against `templates/devflow.md`.
 - **TP-03** setup writes nothing before approval: an eval case.
-- **UI-01**, **UI-02** `review-web-ui`: no evals yet (planned in `docs/plans/ui.md` step 7).
+- **UI-01**-**UI-06** `review-ui`: no evals yet (planned in `docs/plans/ui.md` step 7).

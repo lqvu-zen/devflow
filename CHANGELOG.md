@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- UI review: `/devflow:review-web-ui` is now `/devflow:review-ui`, with no alias; a project skill that wraps it must use the new name. It also reviews desktop and mobile app screens and game UI from screenshots and source, picks its path from the profile's **Design system**, and reads **See it working**. Its bundled taste-skill inspector is updated from `c924fad` to `12af471`: page-frame checks, and an app-screen mode with `--app`.
+
 ## 0.2.1
 
 - CI check: a release commit fails if it leaves any listed version file at another version (0.2.0 shipped with `marketplace.json` at 0.1.0).

@@ -195,10 +195,26 @@ choose.
 
 ## 6. Upkeep (coding tab unless noted)
 
-**A UI review:**
+**A UI review (web):**
 ```
-/devflow:review-web-ui Review {page or screen} at phone and desktop width.
+/devflow:review-ui Review {page or URL} at phone and desktop width.
 Findings first; change nothing until I agree.
+```
+
+**A UI review (desktop or mobile app):**
+```
+/devflow:review-ui Review the {screen or dialog} of the {desktop | mobile} app,
+every state at every size the design system names. Take the screenshots the
+way See it working says, or use the ones in {folder}. Findings first; change
+nothing until I agree.
+```
+
+**A UI review (game):**
+```
+/devflow:review-ui Review the {HUD | menu | settings screen} at {resolutions},
+with a controller and at TV distance. Take the screenshots the way See it
+working says, or use the ones in {folder}. Findings first; change nothing until
+I agree.
 ```
 
 **Tech debt check-in:**
