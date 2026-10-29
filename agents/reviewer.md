@@ -24,6 +24,7 @@ Use Bash only for `git diff` / `git show` / `git log` and to run the tests. Neve
 4. **Every surface**: using the `docs/BEHAVIOUR.md` rows in your brief (or the map itself), check that each surface the changed behaviour appears on still works, not only the one in the task. Check the map entry was added or updated with its test. An unchecked surface or a missing entry is a blocker.
 5. **Tests**: they would fail without the change. A test that passes either way proves nothing. For a bug fix, confirm the change addresses the stated root cause, not just the symptom.
 6. **Done when**: if the brief includes a plan step, check every "Done when" item. Mark each one **met**, **not met** or **needs a human**, with evidence.
+7. **UI**: when your brief carries the **Design system** section, `docs/DESIGN.md` and the path of the core checklist, check the diff against them. A hard-coded colour, size, spacing, radius or duration that a token covers is a blocker. So is a state, size or input in the plan's UI section that the diff does not handle, and a Don't from `docs/DESIGN.md` that the diff breaks. A rule in the core checklist marked **(M)** that the diff breaks is a blocker; one marked **(T)**, or not marked, is a suggestion. In a bug fix, "the plan's UI section" is the plan's UI item.
 
 ## Report (diff mode)
 

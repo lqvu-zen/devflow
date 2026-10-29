@@ -11,7 +11,7 @@ Work through the phases in order. A "fix" you didn't reproduce and can't show pa
 
 ## The project profile
 
-Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate** and **See it working**. Read it first. Paste **Architecture rules** whole and verbatim wherever a brief below asks for it. If the file is missing, stop and tell the user to run `/devflow:setup` first.
+Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working** and **Design system**. Read it first. Paste **Architecture rules** whole and verbatim wherever a brief below asks for it. If the file is missing, stop and tell the user to run `/devflow:setup` first.
 
 **You are the orchestrator.** You own the conversation, the delegation, the verification of everything you delegate, and the commit decision. You do **not** diagnose the root cause, write the fix, run the tests or review the final diff yourself; each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Your own job is steps 1 and 2 (reproduce, gather context), then spawning, verifying and committing. Keep the separation even for a one-line fix.
 
@@ -47,6 +47,16 @@ The map lists each behaviour, **every surface** it appears on, and the test that
 - **Fix:** the implementer updates the entry and names its regression test; a behaviour that had no entry gets one. Put the issue number in the behaviour text, e.g. "(#27)".
 - **Review:** each listed surface is checked; a missing entry is a blocker.
 - **Commit:** `docs/BEHAVIOUR.md` goes in the same commit as the fix.
+
+## UI bugs
+
+A bug is a UI bug when it shows on a UI surface that **Design system** lists under UI surfaces. Without a **Design system** section, or when the bug is not on a UI surface, none of this applies and the phases run exactly as written. When it applies, each brief below also carries:
+
+- **Designer (step 3):** the whole **Design system** section and the whole design-system file, verbatim, and the path of the core checklist (`skills/review-web-ui/references/core.md` in the plugin, beside this skill's folder; pass it as an absolute path), and: *"UI bug. Add the UI item from your instructions: the states, sizes and inputs the bug shows in and the ones the fix must not break."*
+- **Implementer (step 4):** the plan's UI item, the **Design system** section and the design-system file, verbatim, and: *"Use the design system's tokens; no hard-coded colour, size, spacing, radius or duration that a token covers. Follow See it working to take a screenshot of the broken state before the fix and of each state the plan names after it, and report any you could not reach, with the reason. Keep screenshots in your scratchpad, never in the repo."*
+- **Reviewer (step 5):** the plan's UI item, the **Design system** section, the design-system file, and the path of the core checklist (`skills/review-web-ui/references/core.md` in the plugin, beside this skill's folder; pass it as an absolute path), and: *"UI bug. Check the diff against the design system and the core checklist as your instructions say."*
+
+The states the implementer could not reach go in the report to the user as "needs a human".
 
 ## The escape rule
 
@@ -150,6 +160,7 @@ When the agent returns, **verify before moving on**. Run `git diff` and the main
 - [ ] Every rule in **Architecture rules** holds in the changed code.
 - [ ] Edits stay inside **Edit bounds**.
 - [ ] The map entry is updated; an escape has its § Escapes line and its check.
+- [ ] For a UI bug, the broken state and each state the plan names have a screenshot, or the report says why not.
 
 ### 5. Review before commit
 

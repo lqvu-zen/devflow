@@ -20,6 +20,7 @@ Everything specific to this project is in **`.claude/devflow.md`**. Read it firs
 - **Edit bounds**: what the implementer may and may not edit, and what is never staged.
 - **Escalate**: areas where the implementer runs on Opus.
 - **See it working**: how to see a change working without touching real data or the maintainer's screen.
+- **Design system**: the design-system file (`docs/DESIGN.md`), the platforms the project ships to and its UI surfaces. Absent when the project has no user interface.
 
 If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setup` first.
 
@@ -61,6 +62,16 @@ Most behaviours show up in several places: different layouts, list and detail vi
 - **Commit (step 6):** `docs/BEHAVIOUR.md` goes in the same commit as the change.
 
 If the project has no map yet, say so in the report and suggest `/devflow:setup` to start one; don't block the feature on it.
+
+## UI changes
+
+A change touches a UI surface when it edits one that **Design system** lists under UI surfaces. Without a **Design system** section, or when the change touches no UI surface, none of this applies and the phases run exactly as written. When it applies, each brief below also carries:
+
+- **Designer (step 3):** the whole **Design system** section and the whole design-system file, verbatim, and the path of the core checklist (`skills/review-web-ui/references/core.md` in the plugin, beside this skill's folder; pass it as an absolute path), and: *"UI change. Add the UI section from your instructions: tokens, every state, every size and layout, every input, worst-case data, intake, motion, accessibility, and the states to capture."*
+- **Implementer (step 4):** the plan's UI section, the **Design system** section and the design-system file, verbatim, and: *"Use the design system's tokens; no hard-coded colour, size, spacing, radius or duration that a token covers. Handle every state the UI section lists. Follow See it working to take a screenshot of each state under 'states to capture', and report any you could not reach, with the reason. Keep screenshots in your scratchpad, never in the repo."*
+- **Reviewer (step 5):** the plan's UI section, the **Design system** section, the design-system file, and the path of the core checklist (`skills/review-web-ui/references/core.md` in the plugin, beside this skill's folder; pass it as an absolute path), and: *"UI change. Check the diff against the design system and the core checklist as your instructions say."*
+
+The states the implementer could not reach go in the report to the user as "needs a human".
 
 ## Before you start, and where you stop
 
@@ -120,6 +131,7 @@ When the agent returns, **verify before moving on**; this is the gate, not a for
 - [ ] Every rule in **Architecture rules** holds in the changed code.
 - [ ] Edits stay inside **Edit bounds**.
 - [ ] `docs/BEHAVIOUR.md` has the new or updated entries, with their tests.
+- [ ] For a UI change, a screenshot exists for each state to capture, or the report says why not.
 - [ ] The version is untouched.
 
 If anything's off, fix it inline or send the implementer a follow-up via SendMessage. Mark each task complete only once verified.

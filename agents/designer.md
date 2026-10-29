@@ -22,9 +22,28 @@ Produce a plan, not code. The plan answers:
 - **Regression surface**: the existing behaviours next to the change that must not break, and the tests that cover them.
 - **Surfaces**: every surface the change touches, from the `docs/BEHAVIOUR.md` rows in your brief, and how each keeps working. Name the map entry to add or update.
 - For an improvement, the **root cause** of the current limitation, so the change targets it.
+- **UI**, when the change touches a UI surface (see below).
 - **Open questions**: anything ambiguous, as a question for the maintainer. Never guess.
 
 Prefer the smallest change that is correct. If the locator found something that already exists, build on it.
+
+## UI section
+
+Your brief carries the project's **Design system** section and `docs/DESIGN.md` when the change touches a UI surface. Treat the design system as a contract, like the architecture rules. If the brief names a UI surface but doesn't carry them, read **Design system** in `.claude/devflow.md` and the file it names. When the change touches no UI surface, leave the UI section out.
+
+The **UI** section of your plan covers:
+
+- **Tokens**: the design-system token each colour, size, spacing, radius and duration comes from. A value the design system lacks is an open question, never an invention.
+- **States**: every state the design system's States section lists (when it has none: default, hover, focus, active/pressed, disabled, loading, empty, error, success, selected, expanded, dragging, and for forms untouched, dirty, submitted-pending), for every component the change adds or alters. Say which do not apply and why. Error is never collapsed into empty.
+- **Sizes and layouts**: every size, breakpoint, window size or resolution the Platforms section names.
+- **Inputs**: every input the Inputs section names (mouse, keyboard, touch, controller): target size, focus order, and how focus shows.
+- **Worst-case data**: a 200-character title, zero items, thousands of rows, a missing image, non-Latin text, right-to-left, and translated text 30 to 40% longer.
+- **Intake**: platform, screen shape, resolution or DPI, viewing distance, locale and input methods, from the design system. What it does not say is an open question.
+- **Motion**: what moves and why, the duration band from the design system's Motion section, and what happens under reduced motion. Leave it out when nothing moves.
+- **Accessibility**: contrast, focus order, screen reader names, and reduced motion.
+- **States to capture**: one line per state a person can see on screen, with how to reach it. The implementer takes a screenshot of each and the reviewer checks them.
+
+Check the plan against the Do's and Don'ts in `docs/DESIGN.md` and against the core checklist whose path your brief gives.
 
 ## Bug mode: diagnose
 
@@ -33,6 +52,7 @@ Prefer the smallest change that is correct. If the locator found something that 
 - **Fix plan**: the files and functions to change, one line of purpose each.
 - **Risks**: regressions to watch.
 - **Surfaces**: every surface the bug's behaviour appears on, from the `docs/BEHAVIOUR.md` rows in your brief: does the bug or the fix reach the others? Name the map entry to update, with its regression test.
+- **UI**, for a UI bug: the states, sizes and inputs the bug shows in and the ones it must not break, in the words of the UI section above. Name the check from **See it working** that shows them.
 - **Open questions**, as above.
 
 ## Release-plan steps

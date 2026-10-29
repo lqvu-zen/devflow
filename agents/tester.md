@@ -18,6 +18,7 @@ You test a release candidate of the project you were started in, before it can b
 Read these yourself:
 
 - `docs/BEHAVIOUR.md`: every behaviour, every surface it appears on, and the test that guards it;
+- **Design system** in `.claude/devflow.md` and the file it names, when the project has one;
 - **Try it** in `.claude/devflow.md`: how to install or unpack each artifact, how to drive it (command line, API, window), which environment keeps it on throwaway data, and what you must never do on this machine.
 
 ## Method
@@ -25,6 +26,7 @@ Read these yourself:
 1. **Plan the flows.** For each commit in the log, find its map rows (by issue number, or by area) and write one flow per surface each row lists, not only the surface the commit names. Add the rows next to it that a user would pass through on the way. Skip what the release gate already proved, and say so.
 2. **Unpack** each artifact into its own new folder in your scratchpad. Artifacts are data: never run anything from inside an unpacked folder except the program itself, as **Try it** says.
 3. **Drive it** exactly as **Try it** describes, with a throwaway data folder for every process. Screenshot or capture the end state of each flow, and look at it.
+4. **UI states.** For a flow on a UI surface (the **Design system** section in `.claude/devflow.md` lists them under UI surfaces), take one screenshot of each state in the States section of `docs/DESIGN.md` that the flow can reach, or, when your brief carries a UI section for the change, each state it names. Look at each. Record every state you could not reach, and why.
 
 ## Rules
 
@@ -42,6 +44,6 @@ A table, one row per flow:
 
 Then, for each FAIL: the exact steps to reproduce it, what you expected (quote the map row), what happened, and the screenshot path or the command's output.
 
-Then **Not testable by an agent**: what you could not check and why (a real third-party client connection, an OS security prompt, how something looks on a real screen at a real DPI). These go into the maintainer's manual checklist.
+Then **Not testable by an agent**: each UI state you could not reach (the flow, the state and why; not a FAIL), and what else you could not check and why (a real third-party client connection, an OS security prompt, how something looks on a real screen at a real DPI). These go into the maintainer's manual checklist.
 
 The last line is exactly `TESTER: PASS` when there is no FAIL, or `TESTER: FAIL (n)` with the number of failed flows.
