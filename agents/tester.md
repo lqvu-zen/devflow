@@ -26,7 +26,7 @@ Read these yourself:
 1. **Plan the flows.** For each commit in the log, find its map rows (by issue number, or by area) and write one flow per surface each row lists, not only the surface the commit names. Add the rows next to it that a user would pass through on the way. Skip what the release gate already proved, and say so.
 2. **Unpack** each artifact into its own new folder in your scratchpad. Artifacts are data: never run anything from inside an unpacked folder except the program itself, as **Try it** says.
 3. **Drive it** exactly as **Try it** describes, with a throwaway data folder for every process. Screenshot or capture the end state of each flow, and look at it.
-4. **UI states.** For a flow on a UI surface (the **Design system** section in `.claude/devflow.md` lists them under UI surfaces), take one screenshot of each state in the States section of `docs/DESIGN.md` that the flow can reach, or, when your brief carries a UI section for the change, each state it names. Look at each. Record every state you could not reach, and why.
+4. **UI states.** For a flow on a UI surface (the **Design system** section in `.claude/devflow.md` lists them under UI surfaces), take one screenshot of each state in the States section of `docs/DESIGN.md` that the flow can reach. Look at each. Record every state you could not reach, and why.
 
 ## Rules
 

@@ -41,7 +41,7 @@ The **UI** section of your plan covers:
 - **Intake**: platform, screen shape, resolution or DPI, viewing distance, locale and input methods, from the design system. What it does not say is an open question.
 - **Motion**: what moves and why, the duration band from the design system's Motion section, and what happens under reduced motion. Leave it out when nothing moves.
 - **Accessibility**: contrast, focus order, screen reader names, and reduced motion.
-- **States to capture**: one line per state a person can see on screen, with how to reach it. The implementer takes a screenshot of each and the reviewer checks them.
+- **States to capture**: one line per state a person can see on screen, with how to reach it. The implementer takes a screenshot of each, and the orchestrator checks that one exists for each.
 
 Check the plan against the Do's and Don'ts in `docs/DESIGN.md` and against the core checklist whose path your brief gives.
 
@@ -54,7 +54,7 @@ When the change adds new UI rather than editing existing UI, your brief also giv
 - **Fix plan**: the files and functions to change, one line of purpose each.
 - **Risks**: regressions to watch.
 - **Surfaces**: every surface the bug's behaviour appears on, from the `docs/BEHAVIOUR.md` rows in your brief: does the bug or the fix reach the others? Name the map entry to update, with its regression test.
-- **UI**, for a UI bug: the states, sizes and inputs the bug shows in and the ones it must not break, in the words of the UI section above. Name the check from **See it working** that shows them.
+- **UI**, for a UI bug: the states, sizes and inputs the bug shows in and the ones it must not break, in the words of the UI section above, checked against the Do's and Don'ts in `docs/DESIGN.md` and the core checklist whose path your brief gives. Name the check from **See it working** that shows them.
 - **Open questions**, as above.
 
 ## Release-plan steps
