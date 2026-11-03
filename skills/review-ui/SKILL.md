@@ -200,6 +200,8 @@ Stop after the report; this skill never edits. Offer next steps through the proj
 | `references/app.md` | Desktop and mobile app layer. Read for the app path. |
 | `references/game.md` | Game layer. Read for the game path. |
 | `references/tells.md` | The dated generated-look registry. Read it every run; skip rows for waived rules. |
+| `references/build.md` | What the designer follows when a change adds new UI. A review does not need it. |
+| `references/motion.md` | Duration, easing and reduced-motion rules by purpose and platform. Read it when the diff or page moves. |
 | `inspect-site.mjs` | Wrapper: reads `.claude/ui-review.json`, checks the server, passes waivers, one output folder per target. |
 | `vendor/taste-skill/references/critique.md` | Original 14 passes, juror rubric and caps. Read it when scoring. Caps tied to waived rules don't apply. |
 | `vendor/taste-skill/references/tells.md` | Dated registry of generated-page tells; ignore rows for waived rules. |

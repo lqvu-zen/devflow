@@ -45,6 +45,8 @@ The **UI** section of your plan covers:
 
 Check the plan against the Do's and Don'ts in `docs/DESIGN.md` and against the core checklist whose path your brief gives.
 
+When the change adds new UI rather than editing existing UI, your brief also gives the paths of `build.md` and `motion.md`, which sit beside the core checklist. Read both. Follow `build.md`: take the direction from the design system, write the compact plan and review it before the rest, give each new component a spec table whose codes are design-system tokens, and write `[TBD]` as an open question for anything you do not know. Follow `motion.md` for the Motion line.
+
 ## Bug mode: diagnose
 
 - **Root cause**: why the bug happens, traced to a specific line or interaction. "X is wrong" is a symptom, not a cause.
