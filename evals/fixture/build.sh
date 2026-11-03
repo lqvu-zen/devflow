@@ -111,3 +111,31 @@ mkdir -p "$HOME/tally-keys"
 printf 'not a real key\n' > "$HOME/tally-keys/sign.key"
 
 ci_state green
+
+ui_fixture() {
+  name="$1"
+  platforms="$2"
+  surfaces="$3"
+  cp -R "$fixture/ui/$name/." "$work/"
+  if [ -f "$work/DESIGN.md" ]; then
+    mv "$work/DESIGN.md" "$work/docs/DESIGN.md"
+  fi
+  python3 - "$work/.claude/devflow.md" "$platforms" "$surfaces" <<'PY'
+import re
+import sys
+
+path, platforms, surfaces = sys.argv[1:4]
+text = open(path, encoding="utf-8").read()
+section = (
+    "## Design system\n\n"
+    "- **File:** `docs/DESIGN.md`, in Google's DESIGN.md format.\n"
+    f"- **Platforms the project ships to:** {platforms}\n"
+    f"- **UI surfaces:** {surfaces}\n\n"
+)
+text = re.sub(r"## Design system\n.*?(?=## Release)", section, text, flags=re.S)
+open(path, "w", encoding="utf-8", newline="\n").write(text)
+PY
+  git add -A
+  git commit -q -m "Add the $name UI"
+  git push -q origin main
+}

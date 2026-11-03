@@ -1,0 +1,7 @@
+<ui:UXML xmlns:ui="UnityEngine.UIElements">
+    <ui:VisualElement name="hud" class="hud">
+        <ui:Label name="score" class="score" text="SCORE 004210" />
+        <ui:Label name="objective" class="objective" text="Reach the lighthouse before dark" />
+        <ui:Button name="pause" class="pause" text="Pause" />
+    </ui:VisualElement>
+</ui:UXML>

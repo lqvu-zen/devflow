@@ -1,0 +1,37 @@
+.hud {
+    position: absolute;
+    left: 0;
+    top: 0;
+    right: 0;
+    bottom: 0;
+}
+
+.score {
+    position: absolute;
+    left: 0;
+    top: 0;
+    font-size: 20px;
+    color: #ffffff;
+}
+
+.objective {
+    position: absolute;
+    left: 120px;
+    bottom: 80px;
+    font-size: 20px;
+    color: #ffffff;
+}
+
+.pause {
+    position: absolute;
+    right: 120px;
+    top: 80px;
+    width: 160px;
+    height: 56px;
+    background-color: #2a2a2a;
+    color: #ffffff;
+}
+
+.pause:hover {
+    background-color: #3a3a3a;
+}
