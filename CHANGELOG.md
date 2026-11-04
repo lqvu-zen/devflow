@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Plans: a coding session changes a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never by rewriting the file with Write, a script, `sed` or a regex. Where the plan is gitignored it saves the edit and commits nothing, and `release` B7 archives a finished plan with `mv` instead of committing it.
+
 ## 0.2.2
 
 - Design system: the profile has a **Design system** heading and `/devflow:setup` copies `templates/DESIGN.md` (Google's DESIGN.md format plus Platforms, States, Inputs and Motion) to `docs/DESIGN.md`, filled from existing tokens where there are any.

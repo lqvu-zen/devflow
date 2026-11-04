@@ -43,6 +43,8 @@ The version changes **only here**, never per feature or fix, and never with a `-
 
 **Claim your step before anything else**, when the release is a plan step: as in `add-feature` (this plugin's `skills/add-feature/SKILL.md`, "Before you start, and where you stop").
 
+**Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
+
 ### A1. Check CI, then ask for the version and draft notes
 
 ```bash
@@ -101,7 +103,7 @@ The brief gives: the candidate version and tag; `git log <last final tag>..HEAD 
 
 ### A7. The maintainer's manual checklist
 
-Write the checklist into the release plan's Status table (or the release's plan): every item of **Checklist**, plus the tester's "not testable by an agent" items, and the publish time from A5.
+Write the checklist into the release step's own Status row, as "Edit the plan one row at a time" says (or into the release's plan when the release is not a plan step): every item of **Checklist**, plus the tester's "not testable by an agent" items, and the publish time from A5.
 
 ### A8. The maintainer uses the candidate
 
@@ -162,7 +164,7 @@ Do everything **After** lists (clear build folders, so a stale build is never ch
 
 ### B7. Archive the plan, only if it is complete
 
-Set the plan's own release row to `done, vX.Y.Z published <date>` (a `docs/`-only edit), then check the plan is complete; this prints nothing when it is:
+Set the plan's own release row to `done, vX.Y.Z published <date>` (a `docs/`-only edit, made as "Edit the plan one row at a time" says), then check the plan is complete; this prints nothing when it is:
 
 ```bash
 plan=<plans folder>/release-X.Y.Z.md
@@ -170,7 +172,7 @@ awk -F'|' '/^## Status/{t=1} t && /^\| [0-9]+ /{s=tolower($3); sub(/^ +/,"",s); 
 grep -n -i '\[ \]\|needs a human' $plan
 ```
 
-Any output means the plan is **not** complete: leave it where it is and list the open rows in the report. When it prints nothing, `git mv` the plan (and its brief, if any) into `docs/archive/`, point every reference at the archived path, commit only those paths as `docs: archive release-X.Y.Z plan`, and push. The status file is left to the secretary.
+Any output means the plan is **not** complete: leave it where it is and list the open rows in the report. When it prints nothing, archive it. Where the plan is committed, `git mv` the plan (and its brief, if any) into `docs/archive/`, point every reference at the archived path, commit only those paths as `docs: archive release-X.Y.Z plan`, and push. Where the plan is gitignored, `mv` it (and its brief) into `docs/archive/` instead (`mkdir -p docs/archive` first), point every reference at the archived path, and commit only the references git tracks, by path, under the same title, and push; when none is tracked, commit and push nothing. Moving a finished plan is the one change to a plan file beyond its row and Tried line. The status file is left to the secretary.
 
 ### B8. Report
 

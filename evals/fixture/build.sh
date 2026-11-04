@@ -91,6 +91,16 @@ PY
   short="$(git rev-parse --short=7 HEAD)"
 }
 
+local_plans() {
+  printf 'docs/plans/\n' >> "$work/.gitignore"
+  git rm -q --cached -r docs/plans
+  git add .gitignore
+  git commit -q -m "Keep the plans local"
+  git push -q origin main
+  head_sha="$(git rev-parse HEAD)"
+  short="$(git rev-parse --short=7 HEAD)"
+}
+
 built_candidate() {
   python3 - <<'PY'
 import re

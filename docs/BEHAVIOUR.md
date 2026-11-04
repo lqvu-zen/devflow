@@ -67,7 +67,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
 | **WF-01** `add-feature` delegates every phase to an agent and doesn't code itself. | SK | `eval::add-feature/delegates-not-coding` |
-| **WF-02** A coding session claims its plan step first, and refuses a step another tab has claimed. | SK | `eval::add-feature/claims-step-first`, `eval::add-feature/refuses-claimed-step`, `eval::fix-bug/claims-step-first`, `eval::fix-bug/refuses-claimed-step` |
+| **WF-02** A coding session claims its plan step first (committing the row alone, by path, where the plan is committed), and refuses a step another tab has claimed. | SK | `eval::add-feature/claims-step-first`, `eval::add-feature/refuses-claimed-step`, `eval::fix-bug/claims-step-first`, `eval::fix-bug/refuses-claimed-step` |
 | **WF-03** A red CI run on HEAD comes first; a flaky run's fix becomes the next step. | SK | `eval::add-feature/red-ci-comes-first`, `eval::fix-bug/red-ci-triage`, `eval::fix-bug/flaky-rerun-then-next-step`, `eval::release/red-ci-stops-the-candidate`, `eval::secretary/flaky-fix-goes-first` |
 | **WF-04** A step with a Files line edits only those files. | SK | `eval::add-feature/keeps-to-files-line` |
 | **WF-05** A session stops at a `**Gate:**`, and at a design that conflicts with a check. | SK | `eval::add-feature/stops-at-gate`, `eval::add-feature/stops-on-conflicting-check` |
@@ -76,6 +76,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **WF-08** `release` waits for the maintainer's version, stops on a failed gate, never signs, and won't publish without a matching stamp. | SK | `eval::release/waits-for-the-version`, `eval::release/stops-on-failed-gate`, `eval::release/never-signs`, `eval::release/no-stamp-blocks-publish`, `eval::release/stale-stamp-blocks-publish` |
 | **WF-09** The secretary never edits code, never pushes, never picks the version, never claims "done" without evidence, and gives every new step a Files line. | SK | `eval::secretary/never-edits-code`, `eval::secretary/never-pushes`, `eval::secretary/version-is-the-maintainers`, `eval::secretary/no-unbacked-done`, `eval::secretary/new-step-has-a-files-line` |
 | **WF-10** Each workflow skill fires on its own prompts and not on the other three's. | SK | `eval::trigger/*` |
+| **WF-11** A coding session edits a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never with Write, a script, `sed` or a regex; where the plan is gitignored it saves the edit and commits nothing (the 2026-11-03 plan wipe). | SK | `eval::add-feature/claims-step-first-local-plans` |
 
 ## 6. Setup and templates
 
@@ -105,7 +106,9 @@ Every bug found after a release gets one line here, in the fix's commit, and tha
 
 ## Harness escapes
 
-A process rule broken by a session (not a bug in the product) gets one line here: what happened, and the hook case or permission rule that now stops it. A session that breaks a process rule adds, in the same change, the guard rule (`.claude/devflow.json`) or `deny` / `ask` rule that would have stopped it; a new `deny` or `ask` rule needs the maintainer's approval.
+A process rule broken by a session (not a bug in the product) gets one line here: what happened, and the hook case, permission rule or skill wording that now stops it. A session that breaks a process rule adds, in the same change, the guard rule (`.claude/devflow.json`), `deny` / `ask` rule or skill wording that would have stopped it; a new `deny` or `ask` rule needs the maintainer's approval.
+
+- 2026-11-03 (`ui.md` step 7): a coding session set one Status row with a whole-file Python `re.sub(..., flags=re.S)` on `docs/plans/ui.md` and deleted everything from "Who does what" row 7 to the end; plans are gitignored, so git could not restore it. Now stopped by wording, not a hook (D2): "**Edit the plan one row at a time.**" in `skills/add-feature/SKILL.md` under "Before you start, and where you stop", in the same words in `fix-bug` (same heading), `release` (under "A. Release candidate") and the secretary's shared-rules list ("Process escapes: review recent sessions"); map entry WF-11.
 
 ---
 
