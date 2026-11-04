@@ -133,6 +133,8 @@ Recorded runs:
 | 2026-11-03 | behaviour, `review-ui` (4 cases) and the 2 new `add-feature` UI cases (1 run each, Sonnet judge), WSL | 5 pass first time; `add-feature-ui-change-covers-states-and-inputs` failed once (a grader regex that did not compile, and the judge failing the final report), then 3 of 3 graders passed on a rerun | $5.01 plus $2.01 |
 | 2026-11-03 | trigger, `review-ui`: with the first description the 4 that should fire scored 0 of 3 each (the model reviewed the files itself); after the description was made imperative and the cases given fixture files, 12 of 12 | $4.17 plus about $4 on earlier runs |
 | 2026-11-03 | trigger (31 cases, 1 run each), after that change | 31 pass, including the near misses of the other four skills | $5.15 |
+| 2026-11-04 | behaviour, `fix-bug` (6 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 | 6 pass | $4.66 |
+| 2026-11-04 | behaviour, `add-feature` (9 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 (the 7 older cases and the 2 UI cases) | 9 pass | $6.35 |
 
 ## Where it came from
 
