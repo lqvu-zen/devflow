@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.2.2
+
+- Design system: the profile has a **Design system** heading and `/devflow:setup` copies `templates/DESIGN.md` (Google's DESIGN.md format plus Platforms, States, Inputs and Motion) to `docs/DESIGN.md`, filled from existing tokens where there are any.
+- UI changes: for a change that touches UI, the designer adds a UI section (states, sizes, worst-case data, inputs, accessibility), the reviewer checks the diff against the design system, and the tester screenshots each state. New UI also follows `build.md` and `motion.md`.
+- Review references are split into `core.md`, `web.md`, `app.md`, `game.md` and a dated `tells.md` of generated-look tells.
+- Evals: a UI fixture, 4 `review-ui` and 2 `add-feature` behaviour cases and 7 `review-ui` trigger cases. `review-ui`'s description is now imperative, because it never fired before.
 - UI review: `/devflow:review-web-ui` is now `/devflow:review-ui`, with no alias; a project skill that wraps it must use the new name. It also reviews desktop and mobile app screens and game UI from screenshots and source, picks its path from the profile's **Design system**, and reads **See it working**. Its bundled taste-skill inspector is updated from `c924fad` to `12af471`: page-frame checks, and an app-screen mode with `--app`.
 
 ## 0.2.1
