@@ -3,6 +3,7 @@
 ## Unreleased
 
 - Plans: a coding session changes a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never by rewriting the file with Write, a script, `sed` or a regex. Where the plan is gitignored it saves the edit and commits nothing, and `release` B7 archives a finished plan with `mv` instead of committing it.
+- CI check: a git error while reading a file (a missing or corrupt object, for example) now stops the check with git's message, instead of the version check reporting "has no <path>" or the comment check skipping the file.
 
 ## 0.2.2
 

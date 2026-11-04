@@ -52,8 +52,8 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **CK-01** A commit that changes a version file fails unless it is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`; a commit with either title fails unless every listed version file says that version (`X.Y.Z` in numbers-only files), whether or not the commit changed it. | CI | `tests/test_checks.py::TestVersionCheck` |
-| **CK-02** New Python comment lines in the listed folders fail; moved comments pass. | CI | `tests/test_checks.py::TestCommentCheck` |
+| **CK-01** A commit that changes a version file fails unless it is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`; a commit with either title fails unless every listed version file says that version (`X.Y.Z` in numbers-only files), whether or not the commit changed it; a git error reading a version file stops the check with git's message, not "has no". | CI | `tests/test_checks.py::TestVersionCheck` (git errors: `tests/test_checks.py::TestVersionCheck::test_a_git_failure_is_reported_with_its_cause`, root commit: `tests/test_checks.py::TestVersionCheck::test_the_root_commit_is_judged_without_a_parent`) |
+| **CK-02** New Python comment lines in the listed folders fail; moved comments pass; a git error reading a changed file stops the check with git's message instead of skipping the file. | CI | `tests/test_checks.py::TestCommentCheck` (git errors: `tests/test_checks.py::TestCommentCheck::test_a_git_failure_is_reported_not_skipped`) |
 
 ## 4. Process-escape review
 
@@ -102,7 +102,8 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 Every bug found after a release gets one line here, in the fix's commit, and that commit adds the check named: "#NN (vX.Y.Z): should have been caught by <check>; added <test / map entry / release-gate case>".
 
-- dc45cfd (v0.2.0): `.claude-plugin/marketplace.json` was left at 0.1.0. Should have been caught by CK-01 (`tools/devflow_checks.py version`); added the release cases in `tests/test_checks.py::TestVersionCheck` (a version file left behind, no version change, a missing file, a pattern that doesn't match).
+- dc45cfd (v0.2.0): `.claude-plugin/marketplace.json` was left at 0.1.0; should have been caught by CK-01 (`tools/devflow_checks.py version`); added the release cases in `tests/test_checks.py::TestVersionCheck` (a version file left behind, no version change, a missing file, a pattern that doesn't match).
+- 7de4103 (v0.2.1): a git failure reading a version file was reported as "has no <path>", and one reading a changed Python file was skipped, because `_show` treated every git error as a missing path; should have been caught by CK-01 and CK-02 (`tools/devflow_checks.py`); added `tests/test_checks.py::TestVersionCheck::test_a_git_failure_is_reported_with_its_cause` and `tests/test_checks.py::TestCommentCheck::test_a_git_failure_is_reported_not_skipped`.
 
 ## Harness escapes
 

@@ -105,11 +105,10 @@ def version_of(text: str, file: VersionFile) -> str | None:
     return match.group(1) if match else None
 
 
-def _show(repo: str, ref: str) -> str | None:
-    try:
-        return git(repo, "show", ref)
-    except GitError:
+def _show(repo: str, commit: str, path: str) -> str | None:
+    if not git(repo, "ls-tree", "--full-tree", "--name-only", commit, "--", path).strip():
         return None
+    return git(repo, "show", f"{commit}:{path}")
 
 
 def version_changes(repo: str, commit: str,
@@ -117,12 +116,13 @@ def version_changes(repo: str, commit: str,
     paths = [f.path for f in files]
     touched = set(git(repo, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r",
                       commit, "--", *paths).split())
+    parents = git(repo, "rev-list", "--parents", "-n", "1", commit).split()[1:]
     changes: dict[str, tuple[str | None, str | None]] = {}
     for file in files:
         if file.path not in touched:
             continue
-        old_text = _show(repo, f"{commit}^:{file.path}")
-        new_text = _show(repo, f"{commit}:{file.path}")
+        old_text = _show(repo, parents[0], file.path) if parents else None
+        new_text = _show(repo, commit, file.path)
         old = version_of(old_text, file) if old_text is not None else None
         new = version_of(new_text, file) if new_text is not None else None
         if old != new:
@@ -140,7 +140,7 @@ def _short_title(title: str) -> str:
 
 def _release_problem(repo: str, commit: str, label: str, file: VersionFile, expected: str,
                      changed: bool) -> str | None:
-    text = _show(repo, f"{commit}:{file.path}")
+    text = _show(repo, commit, file.path)
     if text is None:
         return f"{label} has no {file.path}; it should say {expected} {VERSIONS_RULE}"
     value = version_of(text, file)
@@ -237,7 +237,7 @@ def comment_problems_in(repo: str, start: str | None, head: str,
         for status, path in changed:
             if status not in ("M", "D"):
                 continue
-            old = _show(repo, f"{start}:{path}")
+            old = _show(repo, start, path)
             if old is None:
                 continue
             lines = _diff_lines(repo, start, head, path)[0]
@@ -250,7 +250,7 @@ def comment_problems_in(repo: str, start: str | None, head: str,
     for status, path in changed:
         if status not in ("A", "M") or not path.startswith(dirs):
             continue
-        new = _show(repo, f"{head}:{path}")
+        new = _show(repo, head, path)
         if new is None:
             continue
         lines = _diff_lines(repo, start, head, path)[1]

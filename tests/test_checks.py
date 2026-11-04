@@ -69,6 +69,13 @@ class GitRepo:
         self.git("commit", "-q", "--allow-empty", "-m", title)
         return self.git("rev-parse", "HEAD")
 
+    def drop_object(self, rev: str) -> str:
+        sha = self.git("rev-parse", rev)
+        path = self.folder / ".git" / "objects" / sha[:2] / sha[2:]
+        os.chmod(path, 0o644)
+        path.unlink()
+        return sha
+
 
 def init_file(version: str) -> str:
     return f'"""App."""\n\n__version__ = "{version}"\n'
@@ -95,7 +102,8 @@ class _RepoCase(unittest.TestCase):
 
 
 class TestVersionCheck(_RepoCase):
-    def problems(self, base: str | None = None, head: str = "HEAD", files=None) -> list[str]:
+    def problems(self, base: str | None = None, head: str = "HEAD",
+                 files: tuple[checks.VersionFile, ...] | None = None) -> list[str]:
         repo = str(self.tmp)
         start = checks.commit_range(repo, base or self.root, head)
         return checks.version_problems_in(repo, checks.commits_in(repo, start, head),
@@ -208,6 +216,25 @@ class TestVersionCheck(_RepoCase):
         self.repo.commit("feat: clean", {"app/a.py": "def a():\n    return 2  # keeps one\n"})
         self.assertEqual(self.problems(), [])
 
+    def test_a_git_failure_is_reported_with_its_cause(self):
+        sha = self.repo.commit("Release 2.4.0", {
+            "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0")})
+        self.repo.drop_object("HEAD:setup_freeze.py")
+        cause = subprocess.run(["git", "-C", str(self.tmp), "show", f"{sha}:setup_freeze.py"],
+                               capture_output=True, text=True, encoding="utf-8").stderr.strip()
+        with self.assertRaises(checks.GitError) as caught:
+            self.problems()
+        self.assertEqual(str(caught.exception), cause)
+        result = subprocess.run([sys.executable, str(CHECKS_PATH), "version", "--base", self.root,
+                                 "--head", "HEAD", "--repo", str(self.tmp)],
+                                capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual((result.returncode, result.stdout.strip()),
+                         (1, f"devflow_checks version: {cause}"))
+
+    def test_the_root_commit_is_judged_without_a_parent(self):
+        self.assertEqual(checks.version_changes(str(self.tmp), self.root, self.config.version_files),
+                         {"app/__init__.py": (None, "2.3.1"), "setup_freeze.py": (None, "2.3.1")})
+
 
 class TestCommentCheck(_RepoCase):
     def problems(self) -> list[str]:
@@ -242,6 +269,12 @@ class TestCommentCheck(_RepoCase):
     def test_without_dirs_nothing_is_checked(self):
         self.repo.commit("feat", {"app/c.py": "x = 1\n# note\n"})
         self.assertEqual(checks.comment_problems_in(str(self.tmp), self.root, "HEAD", ()), [])
+
+    def test_a_git_failure_is_reported_not_skipped(self):
+        self.repo.commit("feat", {"app/c.py": "x = 1\n# note\n"})
+        self.repo.drop_object("HEAD:app/c.py")
+        with self.assertRaises(checks.GitError):
+            self.problems()
 
 
 if __name__ == "__main__":
