@@ -45,6 +45,8 @@ The version changes **only here**, never per feature or fix, and never with a `-
 
 **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
 
+**Open plan steps stop publishing, not the gate.** When the release is a plan step, every step its **Needs** line names (every step above it, when it says so) must be finished before anything is published: a step is open unless its Status row starts with `done` or `not needed`. Open steps stop only A5 and B5. They never stop A1 to A4, and never take the place of a phase the maintainer named: when they say to carry on from one (the release gate, say), run it. At A5 or B5, stop and report each open step with its Status row, next to the result of every gate you ran, and publish nothing until each is done or the maintainer has moved it out of this release.
+
 ### A1. Check CI, then ask for the version and draft notes
 
 ```bash
@@ -76,13 +78,13 @@ Stop and ask the maintainer to run **Sign** themselves. The key and its passphra
 
 ### A4. Release gate (hard gate)
 
-Run **Gate**, with nothing else running that touches the data it checks. It must end with the success line **Gate** names. **Any failure is a stop**: fix it with `fix-bug`, and start again from A2 with N+1.
+Run **Gate**, with nothing else running that touches the data it checks, even when plan steps are open (they stop A5, not this). It must end with the success line **Gate** names. **Any failure is a stop**: fix it with `fix-bug`, and start again from A2 with N+1.
 
 If **Stamp** is set, a passing run leaves the stamp: HEAD, the hash of the bound artifact file and the case count. Never write, edit or copy the stamp yourself; only **Gate** makes it. A rebuild or a new commit makes it stale, so build, sign if needed, and run **Gate** last, on the commit you publish.
 
 ### A5. Publish the pre-release
 
-Only once CI is green on the candidate commit. Write the notes to a file in your scratchpad (backticks and `$` get mangled on the command line), with the sections **Notes** lists, and a first line saying this is a release candidate for testing:
+Only once CI is green on the candidate commit and no step the release step needs is open ("Open plan steps stop publishing, not the gate"); otherwise stop and report. Write the notes to a file in your scratchpad (backticks and `$` get mangled on the command line), with the sections **Notes** lists, and a first line saying this is a release candidate for testing:
 
 ```bash
 gh release create vX.Y.Z-rcN <artifacts> -R <repo> --prerelease --latest=false \
@@ -156,6 +158,8 @@ The brief starts with **"Release mode."** and includes, verbatim: the version, t
 If the reviewer reports BLOCKERS, fix them (a fix to anything outside `docs/` is a new candidate, from A2) and review again. Go on only on `READY TO PUBLISH`. Show the maintainer every **needs a human** item it listed that the checklist does not already cover, and **wait for them to confirm each one** before publishing.
 
 ### B5. Create the release
+
+Only when no step the release step needs is open ("Open plan steps stop publishing, not the gate", under A); otherwise stop and report the open steps.
 
 ```bash
 gh release create vX.Y.Z <artifacts> -R <repo> --latest --target <full sha of HEAD> \
