@@ -78,6 +78,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **WF-09** The secretary never edits code, never pushes, never picks the version, never claims "done" without evidence, and gives every new step a Files line. | SK | `eval::secretary/never-edits-code`, `eval::secretary/never-pushes`, `eval::secretary/version-is-the-maintainers`, `eval::secretary/no-unbacked-done`, `eval::secretary/new-step-has-a-files-line` |
 | **WF-10** Each workflow skill fires on its own prompts and not on the other three's. | SK | `eval::trigger/*` |
 | **WF-11** A coding session edits a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never with Write, a script, `sed` or a regex; where the plan is gitignored it saves the edit and commits nothing (the 2026-11-03 plan wipe). | SK | `eval::add-feature/claims-step-first-local-plans` |
+| **WF-12** Every skill's text after its front matter stays under 19,000 characters, so Claude Code's cut of a skill re-attached after compaction (at 20,000 characters, from the end) never reaches it; `add-feature` and `fix-bug` open with the stop rules (two fix rounds, one more round after BLOCKERS) as their first section, in the same words. | SK | `tests/test_skills.py::TestSkillSize`, `tests/test_skills.py::TestStopRules` (the wording and its place; whether a session stops is WF-06, untested) |
 
 ## 6. Setup and templates
 

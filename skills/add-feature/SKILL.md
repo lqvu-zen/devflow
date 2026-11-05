@@ -9,6 +9,10 @@ Adding a feature is not just "write the code". A change that ignores the project
 
 Work through the phases in order. Don't skip the test or review phase to save time; a feature that isn't verified isn't done.
 
+## Stop rules
+
+**Stop rules in the loop.** The implementer makes at most two fix rounds after its first run, then reports what is still red. If its report says "Still red", don't send it round again: report to the maintainer with the output. A reviewer's BLOCKERS get one more round (fix, re-review). If the second review still has blockers, stop and report them; don't start a third round.
+
 ## The project profile
 
 Everything specific to this project is in **`.claude/devflow.md`**. Read it first. Its sections, by exact heading, are what the phases below paste into briefs:
@@ -86,8 +90,6 @@ The states the implementer could not reach go in the report to the user as "need
 **Secretary edits.** Uncommitted changes to the status file or the plans folder belong to the secretary. Commit them with your next change; never revert them.
 
 **Stop at a `**Gate:**` line.** When the plan step carries one, do the work up to the gate, then stop and tell the maintainer in plain words what they have to do (name the version, sign, install a build, tick a checklist, approve a list) before anything is committed, pushed or published past it. Never decide a gate's question yourself.
-
-**Stop rules in the loop.** The implementer makes at most two fix rounds after its first run, then reports what is still red. If its report says "Still red", don't send it round again: report to the maintainer with the output. A reviewer's BLOCKERS get one more round (fix, re-review). If the second review still has blockers, stop and report them; don't start a third round.
 
 ## The workflow
 

@@ -9,6 +9,10 @@ The trap with bug-fixing is fixing the *symptom* instead of the *cause*, or "fix
 
 Work through the phases in order. A "fix" you didn't reproduce and can't show passing is not a fix.
 
+## Stop rules
+
+**Stop rules in the loop.** The implementer makes at most two fix rounds after its first run, then reports what is still red. If its report says "Still red", don't send it round again: report to the maintainer with the output. A reviewer's BLOCKERS get one more round (fix, re-review). If the second review still has blockers, stop and report them; don't start a third round.
+
 ## The project profile
 
 Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working** and **Design system**. Read it first. Paste **Architecture rules** whole and verbatim wherever a brief below asks for it. If the file is missing, stop and tell the user to run `/devflow:setup` first.
@@ -68,7 +72,7 @@ and adds that check in the same commit. The designer names the missing check in 
 
 ## Before you start, and where you stop
 
-**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, **keep to the step's Files line**, **edit the plan one row at a time**, and the **stop rules in the loop** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row before any work and, where the plan is committed, push that alone; a red CI on HEAD comes first; a step with a Files line edits and commits only those files and asks before touching another; at most two fix rounds after the first run, and one re-review after BLOCKERS, then stop and report; a session that stops without finishing edits its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
+**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, **keep to the step's Files line** and **edit the plan one row at a time** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row before any work and, where the plan is committed, push that alone; a red CI on HEAD comes first; a step with a Files line edits and commits only those files and asks before touching another; a session that stops without finishing edits its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
 
 **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
 
