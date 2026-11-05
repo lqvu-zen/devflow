@@ -12,13 +12,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 python -m unittest discover -s tests
 python -m unittest tests.test_guard
 python -m unittest tests.test_guard.<TestClass>.<test_name>
+python tools/eval_select.py select [--release] [--repo PATH]
+python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json [--repo PATH]
 ```
 
 The hooks run in consumer projects as `uv run --no-project python …`. The CI check runs as `python tools/devflow_checks.py version|comments [--base SHA] [--head REF] [--repo PATH]`.
 
 ## Architecture
 
-The plugin is mostly prompts and config; the only real code is three Python files.
+The plugin is mostly prompts and config; the only real code is four Python files.
 
 - **Skills** (`skills/*/SKILL.md`): `setup`, `add-feature`, `fix-bug`, `release`, `secretary`, `review-ui`. The orchestrating session runs these and delegates every phase to an agent. `fix-bug` and `release` reuse the `add-feature` pipeline, so changes to shared rules (stop rules, claiming a plan step, gates, the briefs' verbatim-paste requirement) usually need to be mirrored across the skills. `review-ui` is standalone: it does not delegate to agents, reads **Design system** and **See it working** when the profile exists and works without it, and `skills/review-ui/vendor/` is third-party code to be updated only by re-copying from upstream.
 - **Agents** (`agents/*.md`): `locator` (Haiku), `designer`, `reviewer`, `planner` (Opus, high effort), `implementer`, `tester` (Sonnet). Model and effort are pinned in each agent's frontmatter, so skills should not pass `model` or `effort` except to escalate.
@@ -27,11 +29,12 @@ The plugin is mostly prompts and config; the only real code is three Python file
 - **`hooks/guard.py`** (PreToolUse on Bash, PowerShell, Write, Edit, MultiEdit, NotebookEdit, Read, Grep, Glob): parses shell commands across bash, PowerShell and cmd (splitting, quoting, heredocs, wrapper commands, `cd` tracking, env-var assignments) and returns allow, ask or deny. Exit 2 with a stderr reason is a deny; a JSON `permissionDecision: "ask"` on stdout is an ask. It denies writes to the project's real data (including globs and command substitutions that may reach it) and anything naming secrets, including the Read, Grep and Glob tools, refuses to start the app against real data unless the isolating env vars point at scratch, denies maintainer-only scripts, and denies git operations that would discard uncommitted secretary edits (status file and plans folder). It asks before `gh release` writes and forced pushes, and where `guard.release_stamp` is set it denies publishing (`gh release create`, `upload`, a publishing `edit`, `gh api` writes) unless the gate's pass stamp names the current HEAD and the bound file's current hash. An unexpected exception, a missing `uv` or a guard that cannot start produces an ask ("not checked") rather than letting the call through silently; the `hooks.json` command wraps the guard to do this.
 - **`hooks/session_start.py`**: prints branch, uncommitted files, CI state on HEAD and the plan's next open step, skipping steps another tab has claimed. All subprocess calls share one deadline.
 - **`tools/devflow_checks.py`**: CI check. `version` fails commits that change a configured version file unless the commit is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`, and fails a release-titled commit that leaves any listed version file at another version. `comments` fails new Python comment lines in configured folders, tokenizing old and new files so moved comments pass.
+- **`tools/eval_select.py`**: lists the eval cases a change can reach since each case's last recorded pass (`evals/depends.json`, `evals/passes.json`) and records new passes.
 - **`templates/`**: files `/devflow:setup` copies into a consumer project (profile, config, behaviour map, status file, plan, CI workflow, `CLAUDE.md` section, settings).
 
 ## Testing notes
 
-`tests/test_guard.py` loads `hooks/guard.py` by file path and runs it against an RYOS-shaped config, a Linux-style project and a minimal config. `tests/test_checks.py` builds real throwaway git repositories. Behaviour changes in the guard or checks need a matching test.
+`tests/test_guard.py` loads `hooks/guard.py` by file path and runs it against an RYOS-shaped config, a Linux-style project and a minimal config. `tests/test_checks.py` builds real throwaway git repositories. `tests/test_evals.py` compiles every grader pattern in `evals/cases/` and tests the selection and record on throwaway repositories. Behaviour changes in the guard or checks need a matching test.
 
 ## Conventions
 

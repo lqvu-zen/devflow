@@ -22,6 +22,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **CI** | `tools/devflow_checks.py` in a project's CI |
 | **SK** | a skill run in a session (`/devflow:*`) |
 | **TP** | the templates `/devflow:setup` copies into a project |
+| **EV** | the eval tools (`tools/eval_select.py`, `evals/depends.json`, `evals/passes.json`) |
 
 ## 1. Guard
 
@@ -97,6 +98,15 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **UI-05** With a profile, `review-ui` reads Design system and See it working and does not raise a tell the design system names; without one it works as before. | SK | **untested** |
 | **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | **untested** |
 | **UI-07** When a change adds new UI, the add-feature designer brief also names `build.md` and `motion.md` beside `core.md`, and both files exist; neither contradicts `core.md` or the precedence rule. | SK | **untested** |
+
+## 8. Evals
+
+| Behaviour | Surfaces | Guarded by |
+| --- | --- | --- |
+| **EV-01** Every grader's `input_match` and `pattern` compiles, with the flags the runner allows and none of the Python-only syntax JavaScript lacks, before a paid run. | EV | `tests/test_evals.py::TestGraders` |
+| **EV-02** `select` lists exactly the cases a change can reach since each case's last pass, by `evals/depends.json`: a case with no record or an unknown commit is listed; uncommitted, untracked and renamed files count; trigger cases are listed only when their skill's (or their near-miss target's) front matter changed, and all of them with `--release`; one command is printed per `--case` glob. | EV | `tests/test_evals.py::TestSelect` |
+| **EV-03** `record` keeps a pass only when every run scored 1 with no error and no skipped paid grader, and refuses a case with uncommitted inputs. | EV | `tests/test_evals.py::TestRecord` |
+| **EV-04** `evals/depends.json` names every agent and plugin file each skill cites and every near miss; `evals/passes.json` names only cases on disk. | EV | `tests/test_evals.py::TestEvalFiles` |
 
 ## Escapes
 

@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Evals: `tools/eval_select.py select` lists the eval cases a change can reach since each case's last recorded pass (`evals/depends.json`, `evals/passes.json`) and prints one `claude plugin eval` command per `--case` glob; `record` keeps a pass from a result file once its inputs are committed; `tests/test_evals.py` compiles every grader pattern before a paid run.
 - Plans: a coding session changes a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never by rewriting the file with Write, a script, `sed` or a regex. Where the plan is gitignored it saves the edit and commits nothing, and `release` B7 archives a finished plan with `mv` instead of committing it.
 - CI check: a git error while reading a file (a missing or corrupt object, for example) now stops the check with git's message, instead of the version check reporting "has no <path>" or the comment check skipping the file.
 - Release: when every version file is numbers-only, promotion commits `Release X.Y.Z` with `git commit --allow-empty` (the candidate already set the versions), B1 runs after the version commit (before, it could not see an uncommitted edit), and B1 and the release review accept the empty promotion diff; before, B2 failed with "nothing to commit".

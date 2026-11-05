@@ -1,0 +1,27 @@
+{
+  "every_behaviour_case": ["hooks/"],
+  "skills": {
+    "add-feature": ["skills/add-feature/", "skills/review-ui/references/core.md", "skills/review-ui/references/build.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md"],
+    "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md", "skills/review-ui/references/core.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md"],
+    "release": ["skills/release/", "skills/add-feature/SKILL.md", "agents/tester.md", "agents/reviewer.md"],
+    "review-ui": ["skills/review-ui/"],
+    "secretary": ["skills/secretary/", "agents/planner.md"]
+  },
+  "near_misses": {
+    "add-feature-4-near-miss": "fix-bug",
+    "add-feature-5-near-miss": "release",
+    "add-feature-6-near-miss": "secretary",
+    "fix-bug-4-near-miss": "add-feature",
+    "fix-bug-5-near-miss": "release",
+    "fix-bug-6-near-miss": "secretary",
+    "release-4-near-miss": "add-feature",
+    "release-5-near-miss": "fix-bug",
+    "release-6-near-miss": "secretary",
+    "review-ui-4-near-miss": "add-feature",
+    "review-ui-5-near-miss": "fix-bug",
+    "review-ui-6-near-miss": null,
+    "secretary-4-near-miss": "add-feature",
+    "secretary-5-near-miss": "fix-bug",
+    "secretary-6-near-miss": "release"
+  }
+}
