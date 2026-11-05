@@ -34,7 +34,7 @@ The plugin is mostly prompts and config; the only real code is four Python files
 
 ## Testing notes
 
-`tests/test_guard.py` loads `hooks/guard.py` by file path and runs it against an RYOS-shaped config, a Linux-style project and a minimal config. `tests/test_checks.py` builds real throwaway git repositories. `tests/test_evals.py` compiles every grader pattern in `evals/cases/` and tests the selection and record on throwaway repositories. Behaviour changes in the guard or checks need a matching test.
+`tests/test_guard.py` loads `hooks/guard.py` by file path and runs it against an RYOS-shaped config, a Linux-style project and a minimal config. `tests/test_checks.py` builds real throwaway git repositories. `tests/test_evals.py` compiles every grader pattern in `evals/cases/` and tests the selection and record on throwaway repositories. `tests/test_skill_references.py` checks that the UI briefs in `add-feature` and `fix-bug` name the `review-ui` reference files and that they exist. Behaviour changes in the guard or checks need a matching test.
 
 ## Conventions
 

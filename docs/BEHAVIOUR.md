@@ -74,7 +74,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **WF-05** A session stops at a `**Gate:**`, and at a design that conflicts with a check. | SK | `eval::add-feature/stops-at-gate`, `eval::add-feature/stops-on-conflicting-check` |
 | **WF-06** After two fix rounds still red, the session stops and reports "Still red". | SK | **untested** |
 | **WF-07** `fix-bug` writes a failing test first and records an escape when the bug got past a release. | SK | `eval::fix-bug/failing-test-first`, `eval::fix-bug/records-the-escape` |
-| **WF-08** `release` waits for the maintainer's version, stops on a failed gate, never signs, won't publish without a matching stamp, and promotes a candidate whose version files are all numbers-only with an empty `Release X.Y.Z` commit (`--allow-empty`) instead of stopping. | SK | `eval::release/waits-for-the-version`, `eval::release/stops-on-failed-gate`, `eval::release/never-signs`, `eval::release/no-stamp-blocks-publish`, `eval::release/stale-stamp-blocks-publish`, `eval::release/promotes-numbers-only` |
+| **WF-08** `release` waits for the maintainer's version, stops on a failed gate, runs a gate the maintainer named even while plan steps are open and then publishes nothing and names the open steps, never signs, won't publish without a matching stamp, and promotes a candidate whose version files are all numbers-only with an empty `Release X.Y.Z` commit (`--allow-empty`) instead of stopping. | SK | `eval::release/waits-for-the-version`, `eval::release/stops-on-failed-gate`, `eval::release/gate-runs-with-open-steps`, `eval::release/never-signs`, `eval::release/no-stamp-blocks-publish`, `eval::release/stale-stamp-blocks-publish`, `eval::release/promotes-numbers-only` |
 | **WF-09** The secretary never edits code, never pushes, never picks the version, never claims "done" without evidence, and gives every new step a Files line. | SK | `eval::secretary/never-edits-code`, `eval::secretary/never-pushes`, `eval::secretary/version-is-the-maintainers`, `eval::secretary/no-unbacked-done`, `eval::secretary/new-step-has-a-files-line` |
 | **WF-10** Each workflow skill fires on its own prompts and not on the other three's. | SK | `eval::trigger/*` |
 | **WF-11** A coding session edits a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never with Write, a script, `sed` or a regex; where the plan is gitignored it saves the edit and commits nothing (the 2026-11-03 plan wipe). | SK | `eval::add-feature/claims-step-first-local-plans` |
@@ -91,13 +91,13 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **UI-01** `review-ui` on a web page measures it in headless Chrome at phone and desktop width and returns one prioritized report (P0-P3, file:line, fix, effort); it never edits code. | SK | **untested** |
+| **UI-01** `review-ui` on a web page measures it in headless Chrome at phone and desktop width and returns one prioritized report (P0-P3, file:line, fix, effort); it never edits code. | SK | `eval::review-ui/web-finds-planted-issues` (the report format and locations; phone and desktop width and "never edits" are untested) |
 | **UI-02** Style choices listed in `.claude/ui-review.json` `allow` are not raised. | SK | **untested** |
-| **UI-03** `review-ui` takes one path per platform: the user's words, else the Design system's platforms, else the project's files, else it asks; web goes to the web path, desktop and mobile to the app path, game to the game path. | SK | **untested** |
-| **UI-04** The app and game paths judge screenshots of each state at each size plus the UI source, never run the inspector, take screenshots only as See it working says or use the user's, and return the same report format. | SK | **untested** |
-| **UI-05** With a profile, `review-ui` reads Design system and See it working and does not raise a tell the design system names; without one it works as before. | SK | **untested** |
-| **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | **untested** |
-| **UI-07** When a change adds new UI, the add-feature designer brief also names `build.md` and `motion.md` beside `core.md`, and both files exist; neither contradicts `core.md` or the precedence rule. | SK | **untested** |
+| **UI-03** `review-ui` takes one path per platform: the user's words, else the Design system's platforms, else the project's files, else it asks; web goes to the web path, desktop and mobile to the app path, game to the game path. | SK | `eval::review-ui/app-finds-small-target`, `eval::review-ui/game-finds-hud-and-focus` (routing from the user's words only; the fallback order is untested) |
+| **UI-04** The app and game paths judge screenshots of each state at each size plus the UI source, never run the inspector, take screenshots only as See it working says or use the user's, and return the same report format. | SK | `eval::review-ui/app-finds-small-target`, `eval::review-ui/game-finds-hud-and-focus` (no-inspector is graded on the app path only; screenshots taken as See it working says and the report format are untested) |
+| **UI-05** With a profile, `review-ui` reads Design system and See it working and does not raise a tell the design system names; without one it works as before. | SK | `eval::review-ui/design-system-choice-not-reported` (the design-system waiver only; reading See it working and the no-profile case are untested) |
+| **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | `tests/test_skill_references.py::TestUiBriefReferences`, `eval::add-feature/ui-change-covers-states-and-inputs` |
+| **UI-07** When a change adds new UI, the add-feature designer brief also names `build.md` and `motion.md` beside `core.md`, and both files exist; neither contradicts `core.md` or the precedence rule (that half is a review judgment, untested). | SK | `tests/test_skill_references.py::TestUiBriefReferences` |
 
 ## 8. Evals
 
@@ -129,4 +129,5 @@ A process rule broken by a session (not a bug in the product) gets one line here
 - **WF-06** two fix rounds, then "Still red": needs a fixture that fails only during implementation (see `README.md`, Skill evals, Known gap).
 - **TP-02** profile headings: a unit test that greps every `**<Heading>**` the skills cite against `templates/devflow.md`.
 - **TP-03** setup writes nothing before approval: an eval case.
-- **UI-01**-**UI-07** `review-ui`: no evals yet (planned in `docs/plans/ui.md` step 7).
+- **UI-02** `allow` list in `.claude/ui-review.json`: no eval or test yet.
+- **UI-01, UI-03, UI-04, UI-05** `review-ui`: phone and desktop width, never editing code, the platform fallback order, the game path's no-inspector, screenshots taken per See it working, the shared report format on the app and game paths, and running without a profile have no eval.
