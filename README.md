@@ -93,7 +93,7 @@ The skills are rules in prose, so `evals/` checks that an edit hasn't broken the
 What is in it:
 
 - `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
-- `evals/cases/<skill>/<case>/`: 32 behaviour cases. `add-feature` 9, `fix-bug` 6, `release` 6, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
+- `evals/cases/<skill>/<case>/`: 34 behaviour cases. `add-feature` 10, `fix-bug` 6, `release` 7, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
 - `evals/cases/trigger/`: 31 trigger cases: six per skill, three prompts that should fire it and three near misses that belong to another skill, and seven for `review-ui` (four that should fire it, three near misses). They allow only `Skill` and need no scaffold or shell.
 
 How the runner reads a case (so you can write more):
@@ -135,6 +135,7 @@ Recorded runs:
 | 2026-11-03 | trigger (31 cases, 1 run each), after that change | 31 pass, including the near misses of the other four skills | $5.15 |
 | 2026-11-04 | behaviour, `fix-bug` (6 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 | 6 pass | $4.66 |
 | 2026-11-04 | behaviour, `add-feature` (9 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 (the 7 older cases and the 2 UI cases) | 9 pass | $6.35 |
+| 2026-11-05 | behaviour, `release` (7 cases, Sonnet judge), WSL; step 4, numbers-only promotion | `release-promotes-numbers-only`: 2 of 2 pass on the fix, 0 of 2 on the old B2 (it never reached `--allow-empty`). The other 6 release cases pass 1 run each, except `waits-for-the-version`, whose judge failed 1 of 3 runs on the fix and 1 of 3 on the old skill (the case stops before B, so the change cannot reach it) | $2.81 |
 
 ## Where it came from
 

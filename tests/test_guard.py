@@ -380,6 +380,7 @@ SKILL_COMMANDS = [
     "gh run watch 123456 --exit-status",
     "cd D:/Projects/RYOS && git diff --stat v2.4.0-rc1..HEAD -- . ':(exclude)docs'",
     'cd D:/Projects/RYOS && git add ryos/__init__.py && git commit -m "Release 2.4.0" && git push',
+    'cd D:/Projects/RYOS && git commit --allow-empty -m "Release 2.4.0" && git push',
     "cd D:/Projects/RYOS && rm -rf dist/* build",
     "cd D:/Projects/RYOS && plan=docs/plans/release-2.4.0.md\n"
     "awk -F'|' '/^## Status/{t=1} t && /^\\| [0-9]+ /{s=tolower($3); sub(/^ +/,\"\",s); "

@@ -60,7 +60,7 @@ Your brief gives you:
 7. **The working tree is clean** apart from the version commit. Nothing in the build output is older than this build.
 8. **It went through a release candidate**:
    - the candidate tag exists and is published as a pre-release;
-   - the promotion diff lists only the version files, with only `-rc<N>` dropped. Anything else means it is a new candidate, not a promotion. Run the diff yourself;
+   - the promotion diff lists only the version files that take `-rc<N>`, each with only `-rc<N>` dropped; when **Release** marks every version file numbers-only, the candidate already set them to `<X.Y.Z>`, so the version commit is empty and the diff prints nothing. Anything else means it is a new candidate, not a promotion. Run the diff yourself;
    - the tester's last report on that candidate ends `TESTER: PASS` and has no FAIL row;
    - every box of the maintainer's manual checklist is ticked;
    - the release gate passed on this build.

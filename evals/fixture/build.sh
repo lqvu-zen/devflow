@@ -91,6 +91,30 @@ PY
   short="$(git rev-parse --short=7 HEAD)"
 }
 
+numbers_only_versions() {
+  python3 - "$work/.claude/devflow.json" "$work/.claude/devflow.md" <<'PY'
+import json
+import re
+import sys
+
+config, profile = sys.argv[1:3]
+text = open(config, encoding="utf-8").read()
+text = re.sub(r'(\{"path": "[^"]*", "pattern": "(?:[^"\\]|\\.)*")\}', r'\1, "numbers_only": true}', text)
+assert all(item.get("numbers_only") for item in json.loads(text)["checks"]["version_files"])
+open(config, "w", encoding="utf-8", newline="\n").write(text)
+text = open(profile, encoding="utf-8").read()
+old = '(`__version__ = "X.Y.Z-rcN"`)'
+assert old in text
+text = text.replace(old, '(numbers only: `__version__ = "X.Y.Z"`)')
+open(profile, "w", encoding="utf-8", newline="\n").write(text)
+PY
+  git add .claude/devflow.json .claude/devflow.md
+  git commit -q -m "Version files take numbers only"
+  git push -q origin main
+  head_sha="$(git rev-parse HEAD)"
+  short="$(git rev-parse --short=7 HEAD)"
+}
+
 local_plans() {
   printf 'docs/plans/\n' >> "$work/.gitignore"
   git rm -q --cached -r docs/plans
@@ -102,12 +126,14 @@ local_plans() {
 }
 
 built_candidate() {
-  python3 - <<'PY'
+  version="${1:-0.3.0-rc1}"
+  python3 - "$version" <<'PY'
 import re
+import sys
 
 path = "tally/__init__.py"
 text = open(path).read()
-open(path, "w", newline="\n").write(re.sub(r'"[^"]+"', '"0.3.0-rc1"', text))
+open(path, "w", newline="\n").write(re.sub(r'"[^"]+"', f'"{sys.argv[1]}"', text))
 PY
   git add tally/__init__.py
   git commit -q -m "Release candidate 0.3.0-rc1"

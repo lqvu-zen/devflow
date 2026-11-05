@@ -119,17 +119,23 @@ Only when the maintainer says so, with the gate passed, the tester's PASS in han
 git diff --stat vX.Y.Z-rcN..HEAD -- . ':(exclude)docs'
 ```
 
-Before the version commit (B2) this must print nothing; after it, only the version files, with only `-rcN` dropped. Anything else is a stop: it is a new candidate, not a promotion.
+Before the version commit (B2) this must print nothing. After it, it lists only the version files that take `-rcN`, each with only `-rcN` dropped; when **Release** marks every version file numbers-only, the candidate already set them to `X.Y.Z`, so the version commit is empty and this still prints nothing. Anything else is a stop: it is a new candidate, not a promotion.
 
 ### B2. Set the final version, commit and push
 
-Set the version files to `X.Y.Z`. Run B1 again, then:
+Set the version files to `X.Y.Z`, then commit and push:
 
 ```bash
 git add <version files> && git commit -m "Release X.Y.Z" && git push
 ```
 
-Wait for CI to go green on it.
+When **Release** marks every version file numbers-only, the candidate already set them to `X.Y.Z`, so there is nothing to add and the version commit is empty:
+
+```bash
+git commit --allow-empty -m "Release X.Y.Z" && git push
+```
+
+Use `--allow-empty` only then: anywhere else, "nothing to commit" means a version file was not set, and is a stop. Run B1 again on the new commit, and wait for CI to go green on it.
 
 ### B3. Rebuild and check again (hard gate)
 
@@ -145,7 +151,7 @@ Agent({ description: "Release review vX.Y.Z", subagent_type: "devflow:reviewer",
 
 (If `devflow:reviewer` isn't listed, use `subagent_type: "general-purpose"`, `model: "opus"`, `effort: "high"`, and paste the plugin's `agents/reviewer.md` at the top of the brief.)
 
-The brief starts with **"Release mode."** and includes, verbatim: the version, the candidate tag it promotes, and the last released tag; the approved release notes; the **Lineup**; the build output and the whole gate output from B3; the tester's last report and the state of the checklist; the B1 diff; and the release plan's final step with its "Done when" items, if there is one.
+The brief starts with **"Release mode."** and includes, verbatim: the version, the candidate tag it promotes, and the last released tag; the approved release notes; the **Lineup**; the build output and the whole gate output from B3; the tester's last report and the state of the checklist; the B1 diff (empty when every version file is numbers-only); and the release plan's final step with its "Done when" items, if there is one.
 
 If the reviewer reports BLOCKERS, fix them (a fix to anything outside `docs/` is a new candidate, from A2) and review again. Go on only on `READY TO PUBLISH`. Show the maintainer every **needs a human** item it listed that the checklist does not already cover, and **wait for them to confirm each one** before publishing.
 
