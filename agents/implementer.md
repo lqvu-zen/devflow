@@ -33,6 +33,7 @@ The first full run of the verify commands is round 0. After it, make at most **t
 - **Still red**: anything failing after the second fix round, or "none".
 - **Smoke**: one line per smoke or see-it-working check.
 - **Deviations** from the plan, or "none".
+- **UI floor**, when your brief gives `build.md`: each item of its §5, checked on the finished UI, marked **met**, **not met** or **not checked**, with the reason for each one not met or not checked.
 - **Not verified**: anything you could not check, and why. Don't present something unverified as done.
 
 ## Never

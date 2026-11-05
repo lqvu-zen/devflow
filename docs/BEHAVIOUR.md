@@ -98,6 +98,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **UI-05** With a profile, `review-ui` reads Design system and See it working and does not raise a tell the design system names; without one it works as before. | SK | `eval::review-ui/design-system-choice-not-reported` (the design-system waiver only; reading See it working and the no-profile case are untested) |
 | **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | `tests/test_skill_references.py::TestUiBriefReferences`, `eval::add-feature/ui-change-covers-states-and-inputs` |
 | **UI-07** When a change adds new UI, the add-feature designer brief also names `build.md` and `motion.md` beside `core.md`, and both files exist; neither contradicts `core.md` or the precedence rule (that half is a review judgment, untested). | SK | `tests/test_skill_references.py::TestUiBriefReferences` |
+| **UI-08** For new UI, the add-feature implementer brief names `build.md` and the implementer reports each §5 item met, not met or not checked; whenever the UI rules apply, the add-feature and fix-bug reviewer briefs name `motion.md` in the same words and reviewer item 7 applies its §5 when the diff moves something, an (M) rule broken a blocker and a (T) one a suggestion. | SK | `tests/test_skill_references.py::TestUiBriefReferences` (the wording; whether the agents apply §5 is untested) |
 
 ## 8. Evals
 

@@ -29,6 +29,8 @@ def _bullet(path: Path, heading: str, role: str) -> str:
 
 ADD_FEATURE = ROOT / "skills" / "add-feature" / "SKILL.md"
 FIX_BUG = ROOT / "skills" / "fix-bug" / "SKILL.md"
+IMPLEMENTER = ROOT / "agents" / "implementer.md"
+REVIEWER = ROOT / "agents" / "reviewer.md"
 
 BULLETS = {
     "add-feature designer": (ADD_FEATURE, "## UI changes", "Designer"),
@@ -61,6 +63,35 @@ class TestUiBriefReferences(unittest.TestCase):
                 self.assertTrue(cited)
                 for rel in cited:
                     self.assertTrue((ROOT / rel).is_file(), rel)
+
+    def test_build_md_goes_to_the_add_feature_implementer_only(self):
+        add_feature = _bullet(ADD_FEATURE, "## UI changes", "Implementer")
+        self.assertIn("`build.md` (same folder as `core.md`)", add_feature)
+        self.assertIn("build.md §5", add_feature)
+        self.assertNotIn("build.md", _bullet(FIX_BUG, "## UI bugs", "Implementer"))
+
+    def test_reviewer_bullets_pass_motion_in_the_same_words(self):
+        tails = []
+        for path, heading in ((ADD_FEATURE, "## UI changes"), (FIX_BUG, "## UI bugs")):
+            bullet = _bullet(path, heading, "Reviewer")
+            with self.subTest(path.parent.name):
+                self.assertIn("`motion.md`", bullet)
+                tail = bullet[bullet.index("`motion.md`"):]
+                self.assertIn("motion.md §5", tail)
+                tails.append(tail)
+        self.assertEqual(tails[0], tails[1])
+
+    def test_implementer_report_has_the_build_floor(self):
+        lines = [line for line in _section(IMPLEMENTER, "## Report") if "build.md" in line]
+        self.assertEqual(len(lines), 1)
+        for needle in ("§5", "**met**", "**not met**", "**not checked**"):
+            self.assertIn(needle, lines[0])
+
+    def test_reviewer_item_7_grades_motion(self):
+        lines = [line for line in _section(REVIEWER, "## What to check (diff mode)") if line.startswith("7. **UI**")]
+        self.assertEqual(len(lines), 1)
+        for needle in ("`motion.md`", "§5", "**(M)**", "**(T)**"):
+            self.assertIn(needle, lines[0])
 
 
 if __name__ == "__main__":
