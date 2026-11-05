@@ -67,7 +67,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **WF-01** `add-feature` delegates every phase to an agent and doesn't code itself. | SK | `eval::add-feature/delegates-not-coding` |
+| **WF-01** `add-feature` delegates every phase to an agent and doesn't code itself, and no agent brief carries the UI-section markers (`core.md`, `UI change.`) for a change that is not UI. | SK | `eval::add-feature/delegates-not-coding` |
 | **WF-02** A coding session claims its plan step first (committing the row alone, by path, where the plan is committed), and refuses a step another tab has claimed. | SK | `eval::add-feature/claims-step-first`, `eval::add-feature/refuses-claimed-step`, `eval::fix-bug/claims-step-first`, `eval::fix-bug/refuses-claimed-step` |
 | **WF-03** A red CI run on HEAD comes first; a flaky run's fix becomes the next step. | SK | `eval::add-feature/red-ci-comes-first`, `eval::fix-bug/red-ci-triage`, `eval::fix-bug/flaky-rerun-then-next-step`, `eval::release/red-ci-stops-the-candidate`, `eval::secretary/flaky-fix-goes-first` |
 | **WF-04** A step with a Files line edits only those files. | SK | `eval::add-feature/keeps-to-files-line` |
@@ -96,7 +96,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **UI-03** `review-ui` takes one path per platform: the user's words, else the Design system's platforms, else the project's files, else it asks; web goes to the web path, desktop and mobile to the app path, game to the game path. | SK | `eval::review-ui/app-finds-small-target`, `eval::review-ui/game-finds-hud-and-focus` (routing from the user's words only; the fallback order is untested) |
 | **UI-04** The app and game paths judge screenshots of each state at each size plus the UI source, never run the inspector, take screenshots only as See it working says or use the user's, and return the same report format. | SK | `eval::review-ui/app-finds-small-target`, `eval::review-ui/game-finds-hud-and-focus` (no-inspector is graded on the app path only; screenshots taken as See it working says and the report format are untested) |
 | **UI-05** With a profile, `review-ui` reads Design system and See it working and does not raise a tell the design system names; without one it works as before. | SK | `eval::review-ui/design-system-choice-not-reported` (the design-system waiver only; reading See it working and the no-profile case are untested) |
-| **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | `tests/test_skill_references.py::TestUiBriefReferences`, `eval::add-feature/ui-change-covers-states-and-inputs` |
+| **UI-06** The add-feature and fix-bug designer and reviewer briefs name `skills/review-ui/references/core.md`, and that file exists. | SK | `tests/test_skill_references.py::TestUiBriefReferences`, `eval::add-feature/ui-change-covers-states-and-inputs` (stops after the design: the designer gets `core.md` and the design system, the report names the error state, two other states and two inputs, and no implementer runs) |
 | **UI-07** When a change adds new UI, the add-feature designer brief also names `build.md` and `motion.md` beside `core.md`, and both files exist; neither contradicts `core.md` or the precedence rule (that half is a review judgment, untested). | SK | `tests/test_skill_references.py::TestUiBriefReferences` |
 | **UI-08** For new UI, the add-feature implementer brief names `build.md` and the implementer reports each §5 item met, not met or not checked; whenever the UI rules apply, the add-feature and fix-bug reviewer briefs name `motion.md` in the same words and reviewer item 7 applies its §5 when the diff moves something, an (M) rule broken a blocker and a (T) one a suggestion. | SK | `tests/test_skill_references.py::TestUiBriefReferences` (the wording; whether the agents apply §5 is untested) |
 
@@ -104,10 +104,10 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **EV-01** Every grader's `input_match` and `pattern` compiles, with the flags the runner allows and none of the Python-only syntax JavaScript lacks, before a paid run. | EV | `tests/test_evals.py::TestGraders` |
+| **EV-01** Every grader's `input_match` and `pattern` compiles, with the flags the runner allows and none of the Python-only syntax JavaScript lacks (named groups with `?P`, atomic groups, possessive quantifiers, conditionals, `\A`, `\Z`, inline flags), before a paid run. | EV | `tests/test_evals.py::TestGraders` |
 | **EV-02** `select` lists exactly the cases a change can reach since each case's last pass, by `evals/depends.json`: a case with no record or an unknown commit is listed; uncommitted, untracked and renamed files count; trigger cases are listed only when their skill's (or their near-miss target's) front matter changed, and all of them with `--release`; one command is printed per `--case` glob. | EV | `tests/test_evals.py::TestSelect` |
-| **EV-03** `record` keeps a pass only when every run scored 1 with no error and no skipped paid grader, and refuses a case with uncommitted inputs. | EV | `tests/test_evals.py::TestRecord` |
-| **EV-04** `evals/depends.json` names every agent and plugin file each skill cites and every near miss; `evals/passes.json` names only cases on disk. | EV | `tests/test_evals.py::TestEvalFiles` |
+| **EV-03** `record` keeps a pass only when every run scored 1 with no error and no skipped paid grader, and refuses a case with uncommitted inputs. It prints `skipped <case>: <reason>` (no runs, a run's error, a skipped paid grader or a score below 1) for each case it did not keep, which leaves the exit code at 0, and refuses a result file whose `startedAt` is missing or not `YYYY-MM-DD`. | EV | `tests/test_evals.py::TestRecord` |
+| **EV-04** `evals/depends.json` names every agent and plugin file each skill cites and every near miss, whether a `SKILL.md` names a review reference by path or only by bare name (`build.md`, `motion.md`, `core.md`); `evals/passes.json` names only cases on disk. | EV | `tests/test_evals.py::TestEvalFiles` |
 
 ## Escapes
 

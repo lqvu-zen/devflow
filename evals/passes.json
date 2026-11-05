@@ -2,7 +2,6 @@
   "add-feature-claims-step-first": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},
   "add-feature-delegates-not-coding": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},
   "add-feature-keeps-to-files-line": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},
-  "add-feature-non-ui-change-gets-no-ui-section": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},
   "add-feature-red-ci-comes-first": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},
   "add-feature-refuses-claimed-step": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},
   "add-feature-stops-at-gate": {"commit": "07dbffd44f4f889e7380fea6f1ebbcb1d0583104", "date": "2026-11-04", "runs": 1},

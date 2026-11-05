@@ -93,7 +93,7 @@ The skills are rules in prose, so `evals/` checks that an edit hasn't broken the
 What is in it:
 
 - `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
-- `evals/cases/<skill>/<case>/`: 35 behaviour cases. `add-feature` 10, `fix-bug` 6, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
+- `evals/cases/<skill>/<case>/`: 34 behaviour cases. `add-feature` 9, `fix-bug` 6, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
 - `evals/cases/trigger/`: 31 trigger cases: six per skill, three prompts that should fire it and three near misses that belong to another skill, and seven for `review-ui` (four that should fire it, three near misses). They allow only `Skill` and need no shell. The four `review-ui` cases that name a file (1, 2, 3 and 7) have a scaffold (`ui_fixture`), so run them with `--scaffold`.
 - `evals/depends.json`: which files each skill's cases depend on (the skill's folder, the agents it calls, the review references it cites), which skill each near miss points at, and `hooks/` for every behaviour case. `tests/test_evals.py` checks it against what each `SKILL.md` cites.
 - `evals/passes.json`: the latest pass of every case, as `{commit, date, runs}`, one line per case. `tools/eval_select.py` compares it with the working tree to say which cases a change can reach.
@@ -111,12 +111,12 @@ How the runner reads a case (so you can write more):
 - A `tool_order` grader cannot pass unless both calls are in the trace. Write every `input_match` and `pattern` in single quotes (backslashes stay literal); `tests/test_evals.py` compiles them all, the way the runner does (`new RegExp`), so a pattern that does not compile fails there, not in a paid run.
 - `--tag` is "any tag matches": every behaviour case carries `behaviour`, so `--tag secretary --tag behaviour` runs all of them. Use `--case` to pick a skill.
 
-Which cases to run: `python tools/eval_select.py select [--release]` lists the cases a change can reach since each one's last recorded pass, with the reason, and prints the `claude plugin eval` commands to run (one per `--case` glob). A change to a skill's body reruns its behaviour cases; a change to its `name` or `description` also reruns its trigger cases and the near misses that point at it; `--release` also lists every trigger case. After the run, once the inputs are committed, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores the cases whose every run scored 1; commit `evals/passes.json` together with the Recorded runs row below.
+Which cases to run: `python tools/eval_select.py select [--release]` lists the cases a change can reach since each one's last recorded pass, with the reason, and prints the `claude plugin eval` commands to run (one per `--case` glob). A change to a skill's body reruns its behaviour cases; a change to its `name` or `description` also reruns its trigger cases and the near misses that point at it; `--release` also lists every trigger case. After the run, once the inputs are committed, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores the cases whose every run scored 1 and prints `skipped <case>: <reason>` for the others; commit `evals/passes.json` together with the Recorded runs row below.
 
 Run them from the plugin root:
 
 ```
-claude plugin eval . --tag trigger --ablation none --runs 1 --trust-plugin --no-publish -j 4
+claude plugin eval . --tag trigger --ablation none --runs 1 --scaffold --trust-plugin --no-publish -j 4
 TMPDIR=$HOME/ev claude plugin eval . --tag behaviour --runs 1 --ablation none --scaffold --allow-tools Bash Write Edit --trust-plugin --no-publish -j 3 --judge-model sonnet --max-cost-usd 25
 ```
 

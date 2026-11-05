@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import fnmatch
 import json
 import os
@@ -108,7 +109,35 @@ PYTHON_ONLY = (
     (re.compile(r"\(\?#"), "comment group (?# that JavaScript lacks"),
     (re.compile(r"(?:^|[^\\])(?:\\\\)*\\[AZ]"), "\\A or \\Z, which JavaScript lacks"),
     (re.compile(r"^\(\?[a-zA-Z]+\)"), "a leading flag group that JavaScript lacks"),
+    (re.compile(r"(?:^|[^\\])(?:\\\\)*\(\?\("), "a conditional (?( that JavaScript lacks"),
 )
+BRACE_QUANTIFIER = re.compile(r"\{\d+(?:,\d*)?\}")
+
+
+def has_possessive_quantifier(pattern: str) -> bool:
+    index = 0
+    in_class = False
+    while index < len(pattern):
+        char = pattern[index]
+        if char == "\\":
+            index += 2
+            continue
+        if in_class:
+            in_class = char != "]"
+        elif char == "[":
+            in_class = True
+        elif char in "*+?":
+            if pattern[index + 1:index + 2] == "+":
+                return True
+        elif char == "{":
+            match = BRACE_QUANTIFIER.match(pattern, index)
+            if match:
+                if pattern[match.end():match.end() + 1] == "+":
+                    return True
+                index = match.end()
+                continue
+        index += 1
+    return False
 
 
 def pattern_problem(pattern: str, flags: str = "") -> str | None:
@@ -117,6 +146,8 @@ def pattern_problem(pattern: str, flags: str = "") -> str | None:
     for rule, message in PYTHON_ONLY:
         if rule.search(pattern):
             return f"'{pattern}' uses {message}"
+    if has_possessive_quantifier(pattern):
+        return f"'{pattern}' uses a possessive quantifier that JavaScript lacks"
     translated = re.sub(r"\(\?<([A-Za-z_]\w*)>", r"(?P<\1>", pattern)
     translated = re.sub(r"\\k<([A-Za-z_]\w*)>", r"(?P=\1)", translated)
     python_flags = 0
@@ -234,7 +265,10 @@ def find_cases(repo: str | Path, depends: dict) -> list[Case]:
     for prompt in sorted(root.glob("*/*/prompt.md")):
         folder = prompt.parent
         group = folder.parent.name
-        fields, _ = frontmatter(prompt.read_text(encoding="utf-8"))
+        try:
+            fields, _ = frontmatter(prompt.read_text(encoding="utf-8"))
+        except ValueError as error:
+            raise ValueError(f"{prompt}: {error}") from error
         name = scalar(fields.get("name", ""))
         trigger = group == "trigger"
         if trigger:
@@ -392,12 +426,34 @@ def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case]) -> 
     return lines
 
 
-def run_clean(run: dict) -> bool:
-    return (run.get("score") == 1 and run.get("error") is None
-            and not run.get("skippedPaidGraders"))
+def unclean_reason(runs: list[dict]) -> str | None:
+    if not runs:
+        return "no runs"
+    for number, item in enumerate(runs, 1):
+        if item.get("error") is not None:
+            return f"run {number} has an error"
+        if item.get("skippedPaidGraders"):
+            return f"run {number} skipped paid graders"
+        if item.get("score") != 1:
+            return f"run {number} scored {item.get('score')}"
+    return None
 
 
-def record(repo: str | Path, result_paths: list[str | Path]) -> tuple[dict[str, dict], list[str]]:
+def started_date(data: dict) -> str | None:
+    text = data.get("startedAt")
+    if not isinstance(text, str):
+        return None
+    if not re.match(r"^\d{4}-\d{2}-\d{2}(?:$|[T ])", text):
+        return None
+    try:
+        datetime.date.fromisoformat(text[:10])
+    except ValueError:
+        return None
+    return text[:10]
+
+
+def record(repo: str | Path, result_paths: list[str | Path]
+           ) -> tuple[dict[str, dict], list[str], list[str]]:
     depends = load_depends(repo)
     cases = {case.name: case for case in find_cases(repo, depends)}
     head = git(repo, "rev-parse", "HEAD").strip()
@@ -405,16 +461,22 @@ def record(repo: str | Path, result_paths: list[str | Path]) -> tuple[dict[str, 
     dirty = changed_paths(repo, head, cache) or set()
     recorded: dict[str, dict] = {}
     refused: list[str] = []
+    skipped: list[str] = []
     for result_path in result_paths:
         data = json.loads(Path(result_path).read_text(encoding="utf-8"))
         if data.get("schemaVersion") != 1:
             refused.append(f"{result_path}: schemaVersion {data.get('schemaVersion')} is not 1")
             continue
-        date = str(data.get("startedAt", ""))[:10]
+        date = started_date(data)
+        if date is None:
+            refused.append(f"{result_path}: startedAt {data.get('startedAt')!r} is not YYYY-MM-DD")
+            continue
         for entry in data.get("cases", []):
             name = entry.get("name", "")
             runs = entry.get("arms", {}).get("with", [])
-            if not runs or not all(run_clean(run) for run in runs):
+            reason = unclean_reason(runs)
+            if reason:
+                skipped.append(f"{name}: {reason}")
                 continue
             case = cases.get(name)
             if case is None:
@@ -429,7 +491,7 @@ def record(repo: str | Path, result_paths: list[str | Path]) -> tuple[dict[str, 
                 refused.append(f"{name}: {moved} differs from HEAD, commit first")
                 continue
             recorded[name] = {"commit": head, "date": date, "runs": len(runs)}
-    return recorded, refused
+    return recorded, refused, skipped
 
 
 def write_passes(repo: str | Path, passes: dict[str, dict]) -> None:
@@ -484,13 +546,15 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "select":
             print_selection(args.repo, args.release)
             return 0
-        recorded, refused = record(args.repo, args.results)
+        recorded, refused, skipped = record(args.repo, args.results)
         if recorded:
             passes = load_passes(args.repo)
             passes.update(recorded)
             write_passes(args.repo, passes)
         for name in sorted(recorded):
             print(f"recorded {name}")
+        for note in skipped:
+            print(f"skipped {note}")
         for problem in refused:
             print(f"refused {problem}")
         return 1 if refused else 0

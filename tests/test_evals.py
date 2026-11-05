@@ -130,6 +130,18 @@ class TestGraders(unittest.TestCase):
             text = grader("type: tool_used", "tool: Bash", f"input_match: '{pattern}'")
             self.assertEqual([], ev.grader_problems(text), pattern)
 
+    def test_possessive_quantifiers_and_conditionals_are_reported(self):
+        for pattern in ("a*+", "a++", "a?+", "a{2}+", "a{1,3}+", "(a)++", "(?(1)a|b)", "x(?(1)a)"):
+            text = grader("type: tool_used", "tool: Bash", f"input_match: '{pattern}'")
+            problems = ev.grader_problems(text)
+            self.assertEqual(1, len(problems), pattern)
+            self.assertTrue("possessive" in problems[0] or "conditional" in problems[0], pattern)
+
+    def test_look_alikes_of_possessive_quantifiers_are_accepted(self):
+        for pattern in (r"a\++", "[+]+", "a+?", "[a+]+", r"\\+", "a{2}", "a{2}?", r"\(\?\(", "a*?b"):
+            text = grader("type: tool_used", "tool: Bash", f"input_match: '{pattern}'")
+            self.assertEqual([], ev.grader_problems(text), pattern)
+
     def test_double_quoted_patterns_are_refused(self):
         text = grader("type: tool_used", "tool: Bash", 'input_match: "git commit"')
         self.assertEqual(["use single quotes"], ev.grader_problems(text))
@@ -228,6 +240,14 @@ class _SelectRepo(unittest.TestCase):
 
 
 class TestSelect(_SelectRepo):
+    def test_a_prompt_without_front_matter_names_its_path(self):
+        self.repo.write({"evals/cases/fix-bug/plain/prompt.md": "Do it.\n"})
+        with self.assertRaises(ValueError) as caught:
+            ev.find_cases(self.repo_path, depends_for_tests())
+        self.assertIn("fix-bug", str(caught.exception))
+        self.assertIn("prompt.md", str(caught.exception))
+        self.assertIn("no front matter", str(caught.exception))
+
     def test_nothing_changed_lists_nothing(self):
         selection = ev.select(self.repo_path)
         self.assertEqual({"behaviour": [], "trigger": []}, selection)
@@ -402,16 +422,23 @@ class TestRecord(_SelectRepo):
             result_case("add-feature-plain", run(skipped=True)),
             result_case("add-feature-ui"),
         ])
-        recorded, refused = ev.record(self.repo_path, [path])
+        recorded, refused, skipped = ev.record(self.repo_path, [path])
         head = self.repo.git("rev-parse", "HEAD")
         self.assertEqual({"release-plain": {"commit": head, "date": "2026-11-05", "runs": 2}},
                          recorded)
         self.assertEqual([], refused)
+        self.assertEqual([
+            "release-other: run 2 scored 0.8",
+            "fix-bug-plain: run 1 has an error",
+            "add-feature-plain: run 1 skipped paid graders",
+            "add-feature-ui: no runs",
+        ], skipped)
 
     def test_refuses_a_case_that_is_not_on_disk(self):
         path = result_file(self.tmp, [result_case("ghost-case", run())])
-        recorded, refused = ev.record(self.repo_path, [path])
+        recorded, refused, skipped = ev.record(self.repo_path, [path])
         self.assertEqual({}, recorded)
+        self.assertEqual([], skipped)
         self.assertEqual(1, len(refused))
         self.assertIn("ghost-case", refused[0])
 
@@ -419,7 +446,7 @@ class TestRecord(_SelectRepo):
         self.repo.write({"skills/release/SKILL.md": skill_file("release", "ships", "edited")})
         path = result_file(self.tmp, [
             result_case("release-plain", run()), result_case("fix-bug-plain", run())])
-        recorded, refused = ev.record(self.repo_path, [path])
+        recorded, refused, _ = ev.record(self.repo_path, [path])
         self.assertEqual(["fix-bug-plain"], sorted(recorded))
         self.assertEqual(1, len(refused))
         self.assertIn("release-plain", refused[0])
@@ -428,7 +455,7 @@ class TestRecord(_SelectRepo):
     def test_refuses_a_trigger_case_whose_front_matter_is_uncommitted(self):
         self.repo.write({"skills/release/SKILL.md": skill_file("release", "ships more", "body one")})
         path = result_file(self.tmp, [result_case("trigger-release-1-fires", run())])
-        recorded, refused = ev.record(self.repo_path, [path])
+        recorded, refused, _ = ev.record(self.repo_path, [path])
         self.assertEqual({}, recorded)
         self.assertIn("front matter", refused[0])
 
@@ -447,9 +474,33 @@ class TestRecord(_SelectRepo):
 
     def test_refuses_another_schema_version(self):
         path = result_file(self.tmp, [result_case("release-plain", run())], version=2)
-        recorded, refused = ev.record(self.repo_path, [path])
+        recorded, refused, _ = ev.record(self.repo_path, [path])
         self.assertEqual({}, recorded)
         self.assertIn("schemaVersion 2", refused[0])
+
+    def test_refuses_a_file_with_a_missing_or_malformed_started_at(self):
+        for started in (None, "", "yesterday", "2026-13-40T00:00:00Z", "2026-11-5", "20261105"):
+            path = self.tmp / "aggregate-result.json"
+            data = {"schemaVersion": 1, "cases": [result_case("release-plain", run())]}
+            if started is not None:
+                data["startedAt"] = started
+            path.write_text(json.dumps(data), encoding="utf-8")
+            recorded, refused, skipped = ev.record(self.repo_path, [path])
+            self.assertEqual({}, recorded, started)
+            self.assertEqual([], skipped, started)
+            self.assertEqual(1, len(refused), started)
+            self.assertIn("startedAt", refused[0])
+
+    def test_main_prints_why_a_case_was_skipped_and_exits_zero(self):
+        path = result_file(self.tmp, [
+            result_case("fix-bug-plain", run()), result_case("release-plain", run(), run(0.5))])
+        completed = subprocess.run(
+            [sys.executable, str(SELECT_PATH), "record", str(path), "--repo", self.repo_path],
+            capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("recorded fix-bug-plain", completed.stdout)
+        self.assertIn("skipped release-plain: run 2 scored 0.5", completed.stdout)
+        self.assertNotIn("refused", completed.stdout)
 
     def test_main_exits_one_when_it_refused_a_case_and_still_keeps_the_rest(self):
         path = result_file(self.tmp, [
@@ -486,7 +537,9 @@ class TestEvalFiles(unittest.TestCase):
             for cited in set(re.findall(r"skills/[A-Za-z0-9_./-]*[A-Za-z0-9_]", text)):
                 if (ROOT / cited).exists() and not covered(cited, entries):
                     problems.append(f"{skill} cites {cited} but depends lacks it")
-            for name in set(re.findall(r"references/([a-z-]+\.md)", text)):
+            named = set(re.findall(r"references/([a-z-]+\.md)", text))
+            named |= set(re.findall(r"\b((?:build|motion|core)\.md)", text))
+            for name in sorted(named):
                 cited = f"skills/review-ui/references/{name}"
                 if (ROOT / cited).exists() and not covered(cited, entries):
                     problems.append(f"{skill} cites references/{name} but depends lacks {cited}")

@@ -60,7 +60,7 @@ When a change edits a skill's `description`, also run that skill's trigger cases
 claude plugin eval . --tag trigger --case "<skill>-*" --ablation none --runs 1 --trust-plugin --no-publish -j 4
 ```
 
-Behaviour evals cost money (a full run is about $11 to $14). Run the changed skill's cases only when the plan step says so; the commands are in `README.md` under Skill evals. There is no lint or type check.
+Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_select.py select` lists the behaviour and trigger cases a change can reach, with the commands to run; after a committed pass, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores it. Run them only when the plan step says so; the details are in `README.md` under Skill evals. There is no lint or type check.
 
 ## Edit bounds
 
@@ -88,7 +88,7 @@ How to see a change working, safely:
 - **Repo:** `lqvu-zen/devflow`.
 - **Version files:** `.claude-plugin/plugin.json` (`"version": "X.Y.Z"`); `.claude-plugin/marketplace.json` (the plugin entry's `"version": "X.Y.Z"`). Both numbers only: devflow has no release candidates (see Standing rules).
 - **Build:** none. Users install from the repository at the tag.
-- **Gate:** green CI on the release commit (Linux and Windows), plus the trigger evals, and the behaviour evals of every skill changed since the last release, each with its pass count recorded in `README.md`.
+- **Gate:** green CI on the release commit (Linux and Windows), plus the trigger evals, and the behaviour cases `python tools/eval_select.py select --release` lists (all trigger cases, plus the behaviour cases changed since their last recorded pass in `evals/passes.json`), each with its pass count recorded in `README.md`.
 - **Stamp:** none. `gh release` writes ask the maintainer.
 - **Sign:** none.
 - **Artifacts:** none. The GitHub release carries notes only.
