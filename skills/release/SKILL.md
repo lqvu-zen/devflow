@@ -155,7 +155,7 @@ Agent({ description: "Release review vX.Y.Z", subagent_type: "devflow:reviewer",
 
 The brief starts with **"Release mode."** and includes, verbatim: the version, the candidate tag it promotes, and the last released tag; the approved release notes; the **Lineup**; the build output and the whole gate output from B3; the tester's last report and the state of the checklist; the B1 diff (empty when every version file is numbers-only); and the release plan's final step with its "Done when" items, if there is one.
 
-If the reviewer reports BLOCKERS, fix them (a fix to anything outside `docs/` is a new candidate, from A2) and review again. Go on only on `READY TO PUBLISH`. Show the maintainer every **needs a human** item it listed that the checklist does not already cover, and **wait for them to confirm each one** before publishing.
+If the reviewer reports BLOCKERS, fix them; a fix to anything outside `docs/` is a new candidate, from A2. A reviewer's BLOCKERS get one more round (fix, re-review). If the second review still has blockers, stop and report them; don't start a third round. Go on only on `READY TO PUBLISH`. Show the maintainer every **needs a human** item it listed that the checklist does not already cover, and **wait for them to confirm each one** before publishing.
 
 ### B5. Create the release
 

@@ -13,6 +13,8 @@
 - Skills: the stop rules (two fix rounds, one more round after BLOCKERS) now open `add-feature` and `fix-bug` as their first section, in the same words, and `tests/test_skills.py` fails when a skill's text after its front matter reaches 19,000 characters, below the 20,000 at which Claude Code cuts a skill re-attached after compaction.
 - Skills: `tests/test_skills.py` now also checks each skill's front matter, that every `.claude/devflow.md` heading a skill cites exists in `templates/devflow.md`, and that no skill carries a `$ARGUMENTS`/`$N` token, a `cd` into the plugin folder or a development file.
 - Release: step B7's open-steps check uses named awk variables instead of `$2`/`$3`, which Claude Code can read as skill arguments, so the check could not read the plan's Status table.
+- Release: B4 now stops after a second release review that still has blockers, the same round limit and words as `add-feature` and `fix-bug`; before, the fix and re-review loop had no cap.
+- Skills: the secretary's shared-rules list now cites `add-feature`'s "Stop rules" (they moved there and the list still named only the old heading); `add-feature` is tightened to leave over 1,500 characters below the size ceiling with every rule kept; and `tests/test_skills.py` now checks that a skill's citation of another skill's heading exists, that each shared rule sits under the heading the secretary cites, and that every skill file has CRLF endings.
 
 ## 0.2.2
 

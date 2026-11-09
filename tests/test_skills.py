@@ -14,6 +14,9 @@ CEILING = CUT - MARGIN
 STOP_RULES = "**Stop rules in the loop.**"
 ADD_FEATURE = SKILLS / "add-feature" / "SKILL.md"
 FIX_BUG = SKILLS / "fix-bug" / "SKILL.md"
+RELEASE = SKILLS / "release" / "SKILL.md"
+SECRETARY = SKILLS / "secretary" / "SKILL.md"
+REVIEW_LIMIT = "A reviewer's BLOCKERS"
 TEMPLATES = ROOT / "templates"
 SETUP = SKILLS / "setup" / "SKILL.md"
 DESCRIPTION_MIN = 200
@@ -40,6 +43,22 @@ CD_PLUGIN = re.compile(
 )
 DEV_FILE = re.compile(r"^test-.*\.md$|creation[-_ ]?log", re.IGNORECASE)
 VENDOR = "vendor"
+ANY_HEADING = re.compile(r"^#{1,6} (.+?)\s*$")
+SKILL_REF = r"`(skills/)?([a-z0-9]+(?:-[a-z0-9]+)*)(?:/SKILL\.md)?`"
+QUOTED = r"\"([^\"]+)\""
+CROSS_CITE = re.compile(rf"{SKILL_REF}(?:'s |, | \()({QUOTED}(?:(?:, and |, | and ){QUOTED})*)")
+SHARED_LIST = "the rules every skill shares"
+BEFORE_YOU_START = "Before you start, and where you stop"
+SHARED_RULES = {
+    STOP_RULES: "Stop rules",
+    "**Claim your step before anything else.**": BEFORE_YOU_START,
+    "**Edit the plan one row at a time.**": BEFORE_YOU_START,
+    "**Check CI on HEAD first**": BEFORE_YOU_START,
+    "**Keep to the step's Files line.**": BEFORE_YOU_START,
+    "**Secretary edits.**": BEFORE_YOU_START,
+    "**Stop at a `**Gate:**` line.**": BEFORE_YOU_START,
+}
+LF_ONLY = re.compile(rb"(?<!\r)\n")
 
 
 def _reattached_text(path: Path) -> str:
@@ -74,6 +93,17 @@ def _first_section(path: Path) -> tuple[str, list[str]]:
             break
         body.append(line)
     return lines[start], body
+
+
+def _subsection(path: Path, prefix: str) -> str:
+    lines = _reattached_text(path).splitlines()
+    start = next(index for index, line in enumerate(lines) if line.startswith(prefix))
+    body = []
+    for line in lines[start + 1:]:
+        if line.startswith("## ") or line.startswith("### "):
+            break
+        body.append(line)
+    return "\n".join(body)
 
 
 class TestSkillSize(unittest.TestCase):
@@ -111,6 +141,11 @@ class TestStopRules(unittest.TestCase):
         for path in (ADD_FEATURE, FIX_BUG):
             with self.subTest(path.parent.name):
                 self.assertEqual(path.read_text(encoding="utf-8").count(STOP_RULES), 1)
+
+    def test_release_review_stops_after_the_same_round_limit(self):
+        rules = next(line for line in _first_section(ADD_FEATURE)[1] if line.startswith(STOP_RULES))
+        limit = rules[rules.index(REVIEW_LIMIT):]
+        self.assertIn(limit, _subsection(RELEASE, "### B4."))
 
 
 def _write(path: Path, text: str) -> None:
@@ -283,6 +318,65 @@ def _skill(skills_dir: Path, name: str, front: str, body: str = "# Skill\r\n") -
     _write(skills_dir / name / "SKILL.md", f"---\r\n{front}---\r\n{body}")
 
 
+def _lf_files(skills_dir: Path) -> list[str]:
+    found = []
+    for path in _skill_files(skills_dir):
+        data = path.read_bytes()
+        if b"\0" not in data and LF_ONLY.search(data):
+            found.append(f"{path.relative_to(skills_dir).as_posix()}: LF line endings")
+    return sorted(found)
+
+
+def _all_headings(path: Path) -> set[str]:
+    found = set()
+    fenced = False
+    for line in _reattached_text(path).splitlines():
+        if line.startswith("```"):
+            fenced = not fenced
+        elif not fenced:
+            match = ANY_HEADING.match(line)
+            if match:
+                found.add(match.group(1))
+    return found
+
+
+def _cross_citations(line: str) -> list[tuple[bool, str, list[str]]]:
+    return [
+        (bool(match.group(1)), match.group(2), re.findall(QUOTED, match.group(3)))
+        for match in CROSS_CITE.finditer(line)
+    ]
+
+
+def _cross_citation_errors(skills_dir: Path) -> list[str]:
+    errors = []
+    for path in sorted(skills_dir.glob("*/SKILL.md")):
+        skill = path.parent.name
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            for by_path, cited, names in _cross_citations(line):
+                target = skills_dir / cited / "SKILL.md"
+                if not target.is_file():
+                    if by_path:
+                        errors.append(f"{skill}:{number}: cites skills/{cited}/SKILL.md, which doesn't exist")
+                    continue
+                headings = _all_headings(target)
+                for name in names:
+                    if name not in headings:
+                        errors.append(
+                            f"{skill}:{number}: cites {cited}'s \"{name}\", which {cited} has no heading for"
+                        )
+    return errors
+
+
+def _section_of(path: Path, lead_in: str) -> str | None:
+    heading = None
+    for line in _reattached_text(path).splitlines():
+        if line.startswith("## "):
+            heading = line[3:].strip()
+        elif line.startswith(lead_in):
+            return heading
+    return None
+
+
 class TestFrontMatter(unittest.TestCase):
     def test_every_skill_has_a_name_and_a_description(self):
         self.assertTrue(list(SKILLS.glob("*/SKILL.md")))
@@ -436,6 +530,71 @@ class TestSkillFiles(unittest.TestCase):
                 ]
             ),
         )
+
+    def test_every_skill_file_has_crlf_endings(self):
+        self.assertEqual(_lf_files(SKILLS), [])
+
+    def test_an_lf_file_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            skills = Path(temp)
+            _write(skills / "crlf" / "SKILL.md", "a\r\nb\r\n")
+            _write(skills / "lf" / "SKILL.md", "a\nb\n")
+            _write(skills / "mixed" / "references" / "notes.md", "a\r\nb\nc\r\n")
+            _write(skills / "lf" / "vendor" / "x.md", "a\n")
+            (skills / "crlf" / "image.png").write_bytes(b"\x89PNG\r\n\x1a\n\0\n")
+            found = _lf_files(skills)
+        self.assertEqual(
+            found,
+            ["lf/SKILL.md: LF line endings", "mixed/references/notes.md: LF line endings"],
+        )
+
+
+class TestCrossSkillCitations(unittest.TestCase):
+    def test_every_cited_heading_of_another_skill_exists(self):
+        self.assertEqual(_cross_citation_errors(SKILLS), [])
+
+    def test_a_missing_heading_of_another_skill_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            skills = Path(temp)
+            _skill(skills, "a", "name: a\r\n", "# A\r\n\r\n## Real\r\n\r\n#### Deep one\r\n\r\n```\r\n## Fenced\r\n```\r\n")
+            _skill(
+                skills,
+                "b",
+                "name: b\r\n",
+                "As in `a`'s \"Real\" and its other paragraph.\r\n"
+                "As in `a`'s \"Real\", \"Gone\" and \"Deep one\".\r\n"
+                "Triage as in `a` (\"Deep one\") first.\r\n"
+                "See `skills/a/SKILL.md`, \"Fenced\".\r\n"
+                "See `skills/missing/SKILL.md`, \"Anything\".\r\n"
+                "Run `uv`'s \"not a skill\" and `a` (\"Real\").\r\n",
+            )
+            found = _cross_citation_errors(skills)
+        self.assertEqual(
+            found,
+            [
+                "b:5: cites a's \"Gone\", which a has no heading for",
+                "b:7: cites a's \"Fenced\", which a has no heading for",
+                "b:8: cites skills/missing/SKILL.md, which doesn't exist",
+            ],
+        )
+
+
+class TestSharedRules(unittest.TestCase):
+    def test_each_shared_rule_sits_under_its_heading(self):
+        for lead_in, heading in SHARED_RULES.items():
+            with self.subTest(lead_in):
+                self.assertEqual(_section_of(ADD_FEATURE, lead_in), heading)
+
+    def test_the_secretary_cites_every_heading_holding_a_shared_rule(self):
+        lines = [line for line in _reattached_text(SECRETARY).splitlines() if SHARED_LIST in line]
+        self.assertEqual(len(lines), 1)
+        cited = {
+            name
+            for _, skill, names in _cross_citations(lines[0])
+            if skill == "add-feature"
+            for name in names
+        }
+        self.assertEqual(set(SHARED_RULES.values()) - cited, set())
 
 
 if __name__ == "__main__":

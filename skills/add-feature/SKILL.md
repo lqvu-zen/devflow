@@ -5,7 +5,7 @@ description: 'Add or improve a feature the devflow way, end to end: understand, 
 
 # Adding or improving a feature
 
-Adding a feature is not just "write the code". A change that ignores the project's architecture rules, its data and migration rules, or its dependency direction can look correct and still break the running product or a user's data. So this workflow front-loads understanding and ends with real verification, the product actually working and the tests actually passing, before anything is committed.
+A change that ignores the project's architecture rules, its data and migration rules, or its dependency direction can look correct and still break the running product or a user's data. So this workflow front-loads understanding and ends with real verification, the product working and the tests passing, before anything is committed.
 
 Work through the phases in order. Don't skip the test or review phase to save time; a feature that isn't verified isn't done.
 
@@ -28,7 +28,7 @@ Everything specific to this project is in **`.claude/devflow.md`**. Read it firs
 
 If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setup` first.
 
-**You are the orchestrator.** You own the conversation with the user, the delegation below, the verification of everything you delegate, and the commit decision. You do **not** design the feature, write the implementation, run the tests, or review the final diff yourself. Each of those goes to a fresh subagent with a pinned model, because an independent agent has no anchoring from this conversation and catches assumptions you've already absorbed. Your own job is steps 1 and 2 (gather context), then spawning, verifying and committing. Keep this separation even for small features.
+**You are the orchestrator.** You own the conversation with the user, the delegation below, the verification of everything you delegate, and the commit decision. You do **not** design the feature, write the implementation, run the tests, or review the final diff yourself. Each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Your own job is steps 1 and 2 (gather context), then spawning, verifying and committing. Keep this separation even for small features.
 
 ## Who does each phase
 
@@ -43,26 +43,24 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Light summarization. |
 
-Each agent file's frontmatter sets that role's model and effort, so don't pass `model` or `effort` in the calls below except to escalate. The orchestrator phases run on whatever model drives this session, so **run this skill from a Sonnet session**. Opus as orchestrator works too, but it is slower and costlier for no gain on the mechanical phases.
-
-**Escalate the implementer** to Opus at medium effort when a mistake is expensive or the fix loop will be deep, which means any area **Escalate** names (data migrations, packaging, concurrency and security are the usual ones):
+Don't pass `model` or `effort` in the calls below except to escalate. **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
 
 ```
 Agent({ description: "...", subagent_type: "devflow:implementer", model: "opus", effort: "medium", prompt: <brief> })
 ```
 
-**If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"`. Pin the same model (`haiku`, `opus`, `sonnet`, `opus`), pass `effort: "high"` for the designer and reviewer, and paste that role's instructions from the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
+**If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the same model, `effort: "high"` for the designer and reviewer, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 
 **When the work is a step from a release plan** (in the plans folder, `docs/plans/` unless `.claude/devflow.json` names another), paste the whole step section verbatim, from its `### N —` heading to the next heading, into the design, implement and review briefs. That includes its **Needs** and **Done when** lines and its `**Tried:**` line, if it has one. Tell the designer to read Tried and not repeat an approach it lists unless it says why this time is different. The reviewer checks every "Done when" item, and the step isn't finished until each one is met or marked "needs a human". Report the "needs a human" items to the user.
 
 ## The behaviour map (`docs/BEHAVIOUR.md`)
 
-Most behaviours show up in several places: different layouts, list and detail views, the UI and the command line or API, one kind of item and another. A change that reaches one place and not the others is how "working on A breaks B" happens. `docs/BEHAVIOUR.md` lists, per area, each behaviour, **every surface** it appears on, and the test that guards it (or **untested**). Use it in every phase:
+The map lists each behaviour, **every surface** it appears on, and the test that guards it (or **untested**). A change that reaches one surface and not the others is how "working on A breaks B" happens.
 
 - **Locate (step 2):** the locator returns the map rows for the area(s) the change touches, verbatim, with their IDs.
-- **Design (step 3):** paste those rows into the brief. The plan lists **every surface** the change touches, from the map, and says how each one is kept working.
-- **Implement (step 4):** the implementer adds or updates the map entries (a new behaviour gets a new entry) and checks every surface listed.
-- **Review (step 5):** the reviewer checks each listed surface, not only the one in the task, and that the map was updated. A surface left unchecked, or a missing entry, is a blocker.
+- **Design (step 3):** paste those rows into the brief; the plan lists **every surface** the change touches and how each is kept working.
+- **Implement (step 4):** the implementer adds or updates the entries (a new behaviour gets a new one) and checks every surface listed.
+- **Review (step 5):** each listed surface is checked, not only the one in the task, and the map is updated; a surface left unchecked, or a missing entry, is a blocker.
 - **Commit (step 6):** `docs/BEHAVIOUR.md` goes in the same commit as the change.
 
 If the project has no map yet, say so in the report and suggest `/devflow:setup` to start one; don't block the feature on it.
@@ -97,7 +95,7 @@ The states the implementer could not reach go in the report to the user as "need
 
 Read what the user asked for and restate it to yourself in one sentence: what should the user be able to do after this ships that they can't do now? If a real ambiguity blocks the design, ask **one** focused question before anything else. Don't ask about things you can reasonably default.
 
-This skill covers both **new capabilities** and **improvements to existing ones**. For an improvement, also pin down what's wrong with the current behaviour and what "good" looks like as a concrete, observable outcome. If the user is instead reporting something genuinely **broken**, a crash or wrong output they can reproduce, that's a bug: use `fix-bug`, which insists on a failing regression test first.
+For an **improvement**, also pin down what's wrong with the current behaviour and what "good" looks like as a concrete, observable outcome. Something genuinely **broken**, a crash or wrong output the user can reproduce, is a bug: use `fix-bug`.
 
 ### 2. Locate the code
 
@@ -129,7 +127,7 @@ Agent({ description: "Implement <feature>", subagent_type: "devflow:implementer"
 
 The brief includes, verbatim: the **full approved plan**; the whole **Architecture rules** section; the **Verify**, **Edit bounds** and **See it working** sections; and: *"Read only the files in the plan plus the direct callers and callees you need. Edit only what Edit bounds allows. Implement the plan, then run every Verify command; if anything fails, fix and re-run, for at most two fix rounds after the first run; then stop and report what is still red. Do not commit or push. Report the files changed, the final test result, and a one-line smoke note."*
 
-When the agent returns, **verify before moving on**; this is the gate, not a formality. Run `git diff` and the project's main test command yourself (cheap insurance against a green run that wasn't), then walk this checklist against the diff:
+When the agent returns, **verify before moving on**; this is the gate, not a formality. Run `git diff` and the project's main test command yourself, then walk this checklist against the diff:
 
 - [ ] Changes match the approved plan; nothing extra crept in.
 - [ ] Every rule in **Architecture rules** holds in the changed code.
