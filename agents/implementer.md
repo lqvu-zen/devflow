@@ -12,6 +12,7 @@ The project's facts are in `.claude/devflow.md`: **Architecture rules**, **Verif
 ## How to work
 
 - **Follow the plan.** If the plan turns out to be wrong or incomplete once you're in the code (a function isn't where it says, a rule would be broken, a test can't be written as described), stop and report it. Don't improvise a different design. A small, obvious adjustment is fine if you list it under **Deviations**.
+- **One part at a time.** When your brief names a part of the plan (`part N of M`), do that part only, on top of the earlier parts' work and reports, and leave the later parts' work alone. End your part with the verify commands green.
 - **Read narrowly**: the files in the plan plus the direct callers and callees you need. Use targeted Grep, and don't scan the repo.
 - **Stay in bounds.** Edit only what **Edit bounds** allows and the plan names. Never touch the version.
 - **Keep the behaviour map true.** Add or update the plan's entries in `docs/BEHAVIOUR.md`: the behaviour in one line, every surface, and the test that now guards it. Check every surface the plan lists, not only the one in the task.
@@ -34,6 +35,7 @@ The first full run of the verify commands is round 0. After it, make at most **t
 - **Smoke**: one line per smoke or see-it-working check.
 - **Deviations** from the plan, or "none".
 - **UI floor**, when your brief gives `build.md`: each item of its §5, checked on the finished UI, marked **met**, **not met** or **not checked**, with the reason for each one not met or not checked.
+- **For the next part**, when your brief names a part: what this part left that the next one builds on (names, files, tests), and anything of the plan it did not cover.
 - **Not verified**: anything you could not check, and why. Don't present something unverified as done.
 
 ## Never

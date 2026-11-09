@@ -600,11 +600,13 @@ class TestSharedRules(unittest.TestCase):
 MODEL_RULES = (
     "Don't pass `model`",
     "**A step's Model line.**",
+    "**A design's parts.**",
     "**If the `devflow:*` agent types aren't listed**",
     "**Check the models.**",
 )
 DESIGNER_CALL = 'subagent_type: "devflow:designer"'
 DESIGNER = ROOT / "agents" / "designer.md"
+IMPLEMENTER = ROOT / "agents" / "implementer.md"
 
 
 def _paragraph(path: Path, lead_in: str) -> str:
@@ -664,6 +666,17 @@ class TestModelRules(unittest.TestCase):
     def test_the_model_line_is_in_the_plan_template_and_the_secretary(self):
         self.assertIn("**Model:**", (TEMPLATES / "plan.md").read_text(encoding="utf-8"))
         self.assertIn("**Model:**", _section(SECRETARY, "## Adding a plan step"))
+
+    def test_parts_keep_the_stop_rules_and_one_review(self):
+        paragraph = _paragraph(ADD_FEATURE, "**A design's parts.**")
+        self.assertIn("a part still red stops the step on its model", paragraph)
+        self.assertIn("One review follows the last part", paragraph)
+
+    def test_the_designer_lists_parts_and_the_implementer_takes_one(self):
+        for heading in ("## Feature mode: design", "## Bug mode: diagnose"):
+            with self.subTest(heading):
+                self.assertIn("- **Parts**", _section(DESIGNER, heading))
+        self.assertIn("part N of M", IMPLEMENTER.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

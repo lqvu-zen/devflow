@@ -131,7 +131,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
    - **one short quoted example,** with its session id;
    - **a proposed § Harness escapes line:** what happened, and the one thing that now stops it. Name it exactly: the guard rule (`.claude/devflow.json`), the `tools/devflow_checks.py` check, or the skill or profile wording it adds, with the file and heading. A rule that only needs a reminder gets wording, not a hook.
 
-   Add the model check's mismatches as findings, leaving out each one that the step's Model line, an **Escalate** area or `fix-bug`'s diagnosis accounts for, and each from a session that ran before the pin last changed.
+   Add the model check's mismatches as findings, leaving out each one that the step's Model line, a design's part, an **Escalate** area or `fix-bug`'s diagnosis accounts for, and each from a session that ran before the pin last changed.
 
    Then list the **rules nobody needed** (no session came near them), as a note and not a proposal to remove them.
 4. **Gate: the maintainer approves each proposal,** one at a time. Log each decision. An approved one becomes a plan step in the way "Adding a plan step" describes, with the guard, check or wording change as its content; a `deny` or `ask` rule is marked an **Escalate** step (Opus) with a `**Gate:**`. You make no code, guard, check or skill changes yourself, and the coding session that carries out the step adds the § Harness escapes line in the same commit as the change; you don't edit `docs/BEHAVIOUR.md`. Rejected proposals are logged and not raised again unless the same break shows up in later sessions.

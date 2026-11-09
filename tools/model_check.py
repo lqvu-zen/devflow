@@ -213,13 +213,29 @@ def _expected(expect: Expect | None) -> str:
     return f"{shown} ({expect.source})"
 
 
-def format_session(path: Path, calls: list[Call], expectations: dict[str, Expect]) -> tuple[list[str], int]:
+def _expect_for(call: Call, expectations: dict[str, Expect], parts: tuple[Expect, ...], index: int) -> Expect | None:
+    expect = expectations.get(call.role)
+    if not parts or call.role != "implementer":
+        return expect
+    if index < len(parts):
+        return parts[index]
+    if expect is None:
+        return None
+    return Expect(expect.model, expect.effort, f"{expect.source}, beyond the {len(parts)} parts")
+
+
+def format_session(path: Path, calls: list[Call], expectations: dict[str, Expect],
+                   parts: tuple[Expect, ...] = ()) -> tuple[list[str], int]:
+    parts = tuple(parts)
     lines = [f"session {Path(path).stem} ({path})"]
     lines.append("role | passed | ran on | effort | expected | verdict")
     mismatches = 0
     not_read: list[str] = []
+    implementer_calls = 0
     for number, call in enumerate(calls, 1):
-        expect = expectations.get(call.role)
+        expect = _expect_for(call, expectations, parts, implementer_calls)
+        if call.role == "implementer":
+            implementer_calls += 1
         verdict, notes = judge(call, expect)
         if verdict == "MISMATCH":
             mismatches += 1
@@ -230,6 +246,8 @@ def format_session(path: Path, calls: list[Call], expectations: dict[str, Expect
             not_read.append(f"{call.role} (call {number}): {', '.join(notes)}")
         if call.role == "general-purpose":
             not_read.append(f"{call.role} (call {number}): role not known")
+    for part in parts[implementer_calls:]:
+        not_read.append(f"{part.source} ({part.model}, {part.effort}): no implementer call")
     if not calls:
         not_read.append("no agent calls in this session")
     lines.append(f"mismatches: {mismatches}")
@@ -264,6 +282,7 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Report the model each agent call in a session ran on.")
     parser.add_argument("source", nargs="?", default=".", help="a session .jsonl, an eval workspace, or the project path")
     parser.add_argument("--model", action="append", default=[], help="'<role>: <Model>, <effort>; <why>'")
+    parser.add_argument("--part", action="append", default=[], help="'implementer: <Model>, <effort>; <what>', one per part, in order")
     parser.add_argument("--count", type=int, default=1)
     parser.add_argument("--exclude", default="", help="session id to leave out")
     parser.add_argument("--projects-root", default=None)
@@ -288,6 +307,25 @@ def main(argv: list[str] | None = None) -> int:
             return 2
         moved.add(role)
         expectations[role] = expect
+    parts: list[Expect] = []
+    for text in args.part:
+        try:
+            role, expect = parse_model_line(text)
+        except ValueError as error:
+            print(f"model_check: {error}")
+            return 2
+        if role != "implementer":
+            reason = "a part is an implementer line"
+        elif "implementer" in moved:
+            reason = "--part takes the place of an implementer --model line; give one or the other"
+        else:
+            reason = refusal(role, expect, pins)
+        if reason:
+            print(f"model_check: refused {text!r}: {reason}")
+            return 2
+        parts.append(expect)
+    numbered = tuple(Expect(part.model, part.effort, f"part {number} of {len(parts)}")
+                     for number, part in enumerate(parts, 1))
     root = Path(args.projects_root) if args.projects_root else default_projects_root()
     sessions = sessions_of(args.source, root, args.count, args.exclude)
     if isinstance(sessions, str):
@@ -297,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
     for index, path in enumerate(sessions):
         if index:
             print()
-        lines, mismatches = format_session(path, agent_calls(path), expectations)
+        lines, mismatches = format_session(path, agent_calls(path), expectations, numbered)
         total += mismatches
         for line in lines:
             print(line)

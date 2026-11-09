@@ -32,13 +32,15 @@ Everything specific to this project is in **`.claude/devflow.md`**: **Project**,
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Light summarization. |
 
-Don't pass `model` or `effort` in the calls below except to escalate, for a step's Model line, or for `fix-bug`'s diagnosis (`effort: "high"`, always). **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
+Don't pass `model` or `effort` in the calls below except to escalate, for a step's Model line or a design's part, or for `fix-bug`'s diagnosis (`effort: "high"`, always). **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
 
 ```
 Agent({ description: "...", subagent_type: "devflow:implementer", model: "opus", effort: "medium", prompt: <brief> })
 ```
 
 **A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Pass that `model` and `effort` on that role's call and on no other; for that step it overrides **Escalate**. A line that moves the locator, reviewer or planner below its pin, or `fix-bug`'s diagnosis below Opus, high, is not followed: say so in the report.
+
+**A design's parts.** When the approved design lists **Parts**, run step 4 once per part, in order: a fresh implementer call with that part's `model` and `effort`, over **Escalate** and an implementer Model line, described `<task>, part N of M`, its brief naming `part N of M` and adding the part and the earlier parts' reports, then step 4's checks for that part. The stop rules hold per part: a part still red stops the step on its model. One review follows the last part. For the model check, give one `--part "<line>"` per part, in order, in place of an implementer `--model`.
 
 **If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the `model` and `effort` the agent's file pins or the call passes, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 

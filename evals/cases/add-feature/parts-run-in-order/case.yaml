@@ -1,0 +1,4 @@
+schema_version: "1.1"
+name: add-feature-parts-run-in-order
+context:
+  scaffold_script: scaffold.sh

@@ -43,13 +43,15 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Light summarization. |
 
-Don't pass `model` or `effort` in the calls below except to escalate, for a step's Model line, or for `fix-bug`'s diagnosis (`effort: "high"`, always). **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
+Don't pass `model` or `effort` in the calls below except to escalate, for a step's Model line or a design's part, or for `fix-bug`'s diagnosis (`effort: "high"`, always). **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
 
 ```
 Agent({ description: "...", subagent_type: "devflow:implementer", model: "opus", effort: "medium", prompt: <brief> })
 ```
 
 **A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Pass that `model` and `effort` on that role's call and on no other; for that step it overrides **Escalate**. A line that moves the locator, reviewer or planner below its pin, or `fix-bug`'s diagnosis below Opus, high, is not followed: say so in the report.
+
+**A design's parts.** When the approved design lists **Parts**, run step 4 once per part, in order: a fresh implementer call with that part's `model` and `effort`, over **Escalate** and an implementer Model line, described `<task>, part N of M`, its brief naming `part N of M` and adding the part and the earlier parts' reports, then step 4's checks for that part. The stop rules hold per part: a part still red stops the step on its model. One review follows the last part. For the model check, give one `--part "<line>"` per part, in order, in place of an implementer `--model`.
 
 **If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the `model` and `effort` the agent's file pins or the call passes, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 
@@ -127,7 +129,7 @@ Present the plan to the user and proceed once they're on board (a "go ahead" wit
 Agent({ description: "Implement <feature>", subagent_type: "devflow:implementer", prompt: <self-contained brief> })
 ```
 
-The brief includes, verbatim: the **full approved plan**; the whole **Architecture rules** section; the **Verify**, **Edit bounds** and **See it working** sections; and: *"Read only the files in the plan plus the direct callers and callees you need. Edit only what Edit bounds allows. Implement the plan, then run every Verify command; if anything fails, fix and re-run, for at most two fix rounds after the first run; then stop and report what is still red. Do not commit or push. Report the files changed, the final test result, and a one-line smoke note."*
+The brief includes, verbatim: the **full approved plan**; the whole **Architecture rules** section; the **Verify**, **Edit bounds** and **See it working** sections; and: *"Implement the plan as your instructions say, within Edit bounds and at most two fix rounds after the first run. Do not commit or push."*
 
 When the agent returns, **verify before moving on**; this is the gate, not a formality. Run `git diff` and the project's main test command yourself, then walk this checklist against the diff:
 
