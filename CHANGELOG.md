@@ -10,6 +10,8 @@
 - Release: open plan steps (those the release step's **Needs** line names whose Status row is not `done` or `not needed`) stop publishing the candidate (A5) and the release (B5), and the report names them; they no longer stop a phase the maintainer named, so "carry on from the release gate" runs the gate. Before, a session could stop on open steps without running the gate, or publish with steps still open. Evals: `release-gate-runs-with-open-steps`; `release-stale-stamp-blocks-publish` marks the plan steps done so it can still publish.
 - UI changes: for new UI the add-feature implementer checks the finished UI against `build.md` §5 and reports each item met, not met or not checked; whenever the UI rules apply, the add-feature and fix-bug reviewers also get `motion.md` and apply its §5 when the diff moves something, a broken (M) rule a blocker and a (T) one a suggestion.
 - Skills: the stop rules (two fix rounds, one more round after BLOCKERS) now open `add-feature` and `fix-bug` as their first section, in the same words, and `tests/test_skills.py` fails when a skill's text after its front matter reaches 19,000 characters, below the 20,000 at which Claude Code cuts a skill re-attached after compaction.
+- Skills: `tests/test_skills.py` now also checks each skill's front matter, that every `.claude/devflow.md` heading a skill cites exists in `templates/devflow.md`, and that no skill carries a `$ARGUMENTS`/`$N` token, a `cd` into the plugin folder or a development file.
+- Release: step B7's open-steps check uses named awk variables instead of `$2`/`$3`, which Claude Code can read as skill arguments, so the check could not read the plan's Status table.
 
 ## 0.2.2
 

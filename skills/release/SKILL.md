@@ -178,7 +178,7 @@ Set the plan's own release row to `done, vX.Y.Z published <date>` (a `docs/`-onl
 
 ```bash
 plan=<plans folder>/release-X.Y.Z.md
-awk -F'|' '/^## Status/{t=1} t && /^\| [0-9]+ /{s=tolower($3); sub(/^ +/,"",s); if (s !~ /^(done|not needed)/) print "OPEN: " $2}' $plan
+awk -F'|' -v title=2 -v status=3 '/^## Status/{t=1} t && /^\| [0-9]+ /{s=tolower($status); sub(/^ +/,"",s); if (s !~ /^(done|not needed)/) print "OPEN: " $title}' $plan
 grep -n -i '\[ \]\|needs a human' $plan
 ```
 

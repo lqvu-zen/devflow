@@ -383,8 +383,8 @@ SKILL_COMMANDS = [
     'cd D:/Projects/RYOS && git commit --allow-empty -m "Release 2.4.0" && git push',
     "cd D:/Projects/RYOS && rm -rf dist/* build",
     "cd D:/Projects/RYOS && plan=docs/plans/release-2.4.0.md\n"
-    "awk -F'|' '/^## Status/{t=1} t && /^\\| [0-9]+ /{s=tolower($3); sub(/^ +/,\"\",s); "
-    "if (s !~ /^(done|not needed)/) print \"OPEN: \" $2}' $plan\n"
+    "awk -F'|' -v title=2 -v status=3 '/^## Status/{t=1} t && /^\\| [0-9]+ /{s=tolower($status); sub(/^ +/,\"\",s); "
+    "if (s !~ /^(done|not needed)/) print \"OPEN: \" $title}' $plan\n"
     "grep -n -i '\\[ \\]\\|needs a human' $plan",
     "cd D:/Projects/RYOS && git mv docs/plans/release-2.4.0.md docs/archive/release-2.4.0.md",
     "uv run --no-project python tools/devflow_checks.py version --base 5c76e95 --head HEAD",

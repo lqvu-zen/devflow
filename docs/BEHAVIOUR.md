@@ -79,14 +79,14 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **WF-10** Each workflow skill fires on its own prompts and not on the other three's. | SK | `eval::trigger/*` |
 | **WF-11** A coding session edits a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never with Write, a script, `sed` or a regex; where the plan is gitignored it saves the edit and commits nothing (the 2026-11-03 plan wipe). | SK | `eval::add-feature/claims-step-first-local-plans` |
 | **WF-12** Every skill's text after its front matter stays under 19,000 characters, so Claude Code's cut of a skill re-attached after compaction (at 20,000 characters, from the end) never reaches it; `add-feature` and `fix-bug` open with the stop rules (two fix rounds, one more round after BLOCKERS) as their first section, in the same words. | SK | `tests/test_skills.py::TestSkillSize`, `tests/test_skills.py::TestStopRules` (the wording and its place; whether a session stops is WF-06, untested) |
-| **WF-13** Every skill has front matter whose `name` is its folder's name (lowercase words joined by hyphens) and a description of 200 to 1,536 characters; no file in a skill's folder outside `vendor/` holds a `$ARGUMENTS` or `$N` token Claude Code would replace, a `cd` into the plugin folder, or a development file (`test-*.md`, a creation log). | SK | `tests/test_skills.py::TestFrontMatter`, `tests/test_skills.py::TestSkillFiles` |
+| **WF-13** Every skill has front matter whose `name` is its folder's name (lowercase words joined by hyphens) and a description of 200 to 1,536 characters; no Markdown file in a skill's folder outside `vendor/` holds a `$ARGUMENTS` or `$N` token Claude Code would replace, a `cd` into the plugin folder, or a development file (`test-*.md`, a creation log). | SK | `tests/test_skills.py::TestFrontMatter`, `tests/test_skills.py::TestSkillFiles` |
 
 ## 6. Setup and templates
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
 | **TP-01** `session_start.py` reads the Order and Status of a plan written from `templates/plan.md`. | TP SS | `tests/test_session_start.py::TestPlanReading` (inferred, please check it uses the template's shape) |
-| **TP-02** Every profile heading a skill cites (bold on a line about the profile, in the by-exact-heading list, or as a section or heading) exists in `templates/devflow.md`, and setup's fixed list is the template's headings in order. | TP SK | `tests/test_skills.py::TestProfileHeadings` |
+| **TP-02** Every profile heading a skill cites (bold on a line about the profile, in the by-exact-heading list, or as a section or heading) exists in `templates/devflow.md`, and setup's fixed list is the template's headings in order; every template heading is cited by some skill, so a heading no skill cites fails too. | TP SK | `tests/test_skills.py::TestProfileHeadings` |
 | **TP-03** `/devflow:setup` writes nothing before the maintainer has seen the drafts. | SK | **untested** |
 
 ## 7. UI review
@@ -119,6 +119,7 @@ Every bug found after a release gets one line here, in the fix's commit, and tha
 - dc45cfd (v0.2.0): `.claude-plugin/marketplace.json` was left at 0.1.0; should have been caught by CK-01 (`tools/devflow_checks.py version`); added the release cases in `tests/test_checks.py::TestVersionCheck` (a version file left behind, no version change, a missing file, a pattern that doesn't match).
 - 7de4103 (v0.2.1): a git failure reading a version file was reported as "has no <path>", and one reading a changed Python file was skipped, because `_show` treated every git error as a missing path; should have been caught by CK-01 and CK-02 (`tools/devflow_checks.py`); added `tests/test_checks.py::TestVersionCheck::test_a_git_failure_is_reported_with_its_cause` and `tests/test_checks.py::TestCommentCheck::test_a_git_failure_is_reported_not_skipped`.
 - dc45cfd (v0.2.0): `release` B2 ran `git add <version files> && git commit -m "Release X.Y.Z"` in a project whose version files are all numbers-only, where the candidate had already set them to X.Y.Z, so it failed with "nothing to commit", and B1 and the reviewer's release-mode item 8 rejected the empty promotion diff (still in v0.2.1 and v0.2.2); should have been caught by WF-08, whose release evals stopped before promotion; added `eval::release/promotes-numbers-only`.
+- b10ec79 (v0.1.0, still in v0.2.2): `release` B7's open-steps check used awk `$2` and `$3`, which Claude Code can replace with skill arguments, so the check could not read the plan's Status table (whether the substitution happened in a real release session is unconfirmed); should have been caught by WF-13; added `tests/test_skills.py::TestSkillFiles`.
 
 ## Harness escapes
 
