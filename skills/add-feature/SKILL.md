@@ -160,4 +160,4 @@ If this was a plan step, set its Status row to `done`, with the commit hash and 
 
 ### 7. Report back
 
-Tell the user, briefly: what was added and where it shows, which files changed, the commit hash, whether CI on it went green, any `**Gate:**` line that still waits for the maintainer and what they have to do, the "needs a human" items, and any known limitation or follow-up worth doing next.
+Tell the user, briefly: what was added and where it shows, which files changed, the commit hash, whether CI on it went green, any `**Gate:**` line that still waits for the maintainer and what they have to do, the "needs a human" items, and any known limitation or follow-up worth doing next. For new UI, list the implementer's §5 floor items with their marks (met, not met, not checked).
