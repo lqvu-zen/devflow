@@ -17,6 +17,7 @@
 - Release: step B7's open-steps check uses named awk variables instead of `$2`/`$3`, which Claude Code can read as skill arguments, so the check could not read the plan's Status table.
 - Release: B4 now stops after a second release review that still has blockers, the same round limit and words as `add-feature` and `fix-bug`; before, the fix and re-review loop had no cap.
 - Skills: the secretary's shared-rules list now cites `add-feature`'s "Stop rules" (they moved there and the list still named only the old heading); `add-feature` is tightened to leave over 1,500 characters below the size ceiling with every rule kept; and `tests/test_skills.py` now checks that a skill's citation of another skill's heading exists, that each shared rule sits under the heading the secretary cites, and that every skill file has CRLF endings.
+- Session review: `tools/session_extract.py` keeps each SessionStart hook's output as one `H` line, so the review's readers see the CI state a session started with, and the secretary's review counts that line as the CI check on HEAD; before, the extract dropped it and the review reported about 12 false "no CI check first" findings.
 
 ## 0.2.2
 

@@ -35,6 +35,11 @@ def record(kind: str, content, **extra) -> dict:
     return base
 
 
+def hook(event="SessionStart", stdout="devflow session start", kind="hook_success") -> dict:
+    return record("attachment", None, attachment={"type": kind, "hookEvent": event,
+                                                   "hookName": f"{event}:startup", "stdout": stdout})
+
+
 def write_session(folder: Path, name: str, records: list, raw_lines: list[str] | None = None) -> Path:
     path = folder / f"{name}.jsonl"
     lines = [json.dumps(item) for item in records] + (raw_lines or [])
@@ -117,6 +122,56 @@ class RecordTypes(SessionCase):
             record("assistant", [{"type": "text", "text": "sub"}], isSidechain=True),
         ])
         self.assertEqual(lines, ("A: main", "[sub] A: sub"))
+
+
+class HookOutput(SessionCase):
+    def test_session_start_hook_output_is_one_h_line(self):
+        stdout = ("devflow session start\nBranch: main\nUncommitted: none.\n"
+                  "CI on HEAD abc1234: success.\nNext open step in Order: 35 x")
+        lines = self.lines_of([hook(stdout=stdout), record("user", "hello")])
+        self.assertEqual(lines, (
+            "H: SessionStart: devflow session start Branch: main Uncommitted: none. "
+            "CI on HEAD abc1234: success. Next open step in Order: 35 x",
+            "U: hello"))
+
+    def test_records_without_hook_output_give_no_line(self):
+        bare = record("attachment", None, attachment="text")
+        missing = record("attachment", None, attachment={"type": "hook_success",
+                                                          "hookEvent": "SessionStart"})
+        cases = {
+            "empty": hook(stdout=""),
+            "blank": hook(stdout="  \n "),
+            "missing": missing,
+            "not a string": hook(stdout=5),
+            "bare attachment": bare,
+            "other kind": hook(kind="hook_non_blocking_error"),
+            "pre tool use": hook(event="PreToolUse", stdout='{"decision": "allow"}'),
+            "prompt submit": hook(event="UserPromptSubmit"),
+        }
+        for name, item in cases.items():
+            with self.subTest(name):
+                self.assertEqual(self.lines_of([item, record("user", "hello")]), ("U: hello",))
+
+    def test_cuts_long_hook_output(self):
+        lines = self.lines_of([hook(stdout="x" * 5000), record("user", "hello")])
+        self.assertLessEqual(len(lines[0]), len("H: SessionStart: ") + extract.HOOK_LIMIT)
+        self.assertTrue(lines[0].endswith("…"))
+
+    def test_ci_line_survives_fifteen_uncommitted_files(self):
+        files = [f"  M src/some/fairly/long/path/to/module_{n:02d}.py" for n in range(15)]
+        stdout = "\n".join(["devflow session start", "Uncommitted:"] + files
+                           + ["… and 3 more", "CI on HEAD abc1234: success."])
+        lines = self.lines_of([hook(stdout=stdout), record("user", "hello")])
+        self.assertIn("CI on HEAD abc1234: success.", lines[0])
+
+    def test_hook_only_session_gives_nothing(self):
+        path = write_session(self.folder, "hookonly", [hook()])
+        self.assertIsNone(extract.extract_session(path))
+
+    def test_legend_names_h(self):
+        path = write_session(self.folder, "case", [hook(), record("user", "hello")])
+        text = extract.render(extract.extract_session(path))
+        self.assertIn("H hook output", "\n".join(text.splitlines()[:5]))
 
 
 class Content(SessionCase):

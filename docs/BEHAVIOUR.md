@@ -60,7 +60,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
-| **PE-01** `tools/session_extract.py` finds the project's session folder, takes the most recent sessions without the current one, and writes one text file each with thinking dropped. | SK | `tests/test_session_extract.py` |
+| **PE-01** `tools/session_extract.py` finds the project's session folder, takes the most recent sessions without the current one, and writes one text file each with thinking dropped and each SessionStart hook's output kept as one `H` line (so the "CI on HEAD" line reaches the review); a session with no user or assistant turns gives no file. | SK | `tests/test_session_extract.py` (H line: `tests/test_session_extract.py::HookOutput`) |
 | **PE-02** The secretary's review reports when it finds no sessions, and stops. | SK | `eval::secretary/session-review-finds-no-sessions` |
 
 ## 5. Workflow skills
@@ -131,6 +131,7 @@ A process rule broken by a session (not a bug in the product) gets one line here
 - 2026-11-03 (`ui.md` step 7): a coding session set one Status row with a whole-file Python `re.sub(..., flags=re.S)` on `docs/plans/ui.md` and deleted everything from "Who does what" row 7 to the end; plans are gitignored, so git could not restore it. Now stopped by wording, not a hook (D2): "**Edit the plan one row at a time.**" in `skills/add-feature/SKILL.md` under "Before you start, and where you stop", in the same words in `fix-bug` (same heading), `release` (under "A. Release candidate") and the secretary's shared-rules list ("Process escapes: review recent sessions"); map entry WF-11.
 - 2026-11-05 (137546f): the stop rules moved into `add-feature`'s "Stop rules" section, but the secretary's shared-rules list still cited only "Before you start, and where you stop", so a secretary brief could leave them out. Now stopped by `tests/test_skills.py::TestSharedRules` (WF-14).
 - e7d0d64, 6954c80: five `review-ui` files (`SKILL.md` and `references/app.md`, `build.md`, `game.md`, `motion.md`) were written with LF endings and stayed LF in the working tree, against the repository's CRLF rule. Now stopped locally by `tests/test_skills.py::TestSkillFiles::test_every_skill_file_has_crlf_endings` (WF-13).
+- 2026-11-09 (step 1's session review): the review reported about 12 sessions as skipping the CI check first, but each had seen "CI on HEAD" in the SessionStart hook's output, which `tools/session_extract.py` dropped with every `attachment` record. Now stopped by the extract's `H` line and the secretary's "Process escapes: review recent sessions" wording that the SessionStart `H` line counts as the CI check on HEAD (PE-01, `tests/test_session_extract.py::HookOutput`).
 
 ---
 

@@ -8,6 +8,8 @@ from pathlib import Path
 from typing import Any, Iterator, NamedTuple
 
 KEPT_TYPES = ("user", "assistant")
+HOOK_EVENTS = ("SessionStart",)
+HOOK_LIMIT = 1500
 USER_LIMIT = 2000
 ASSISTANT_LIMIT = 1500
 SIDECHAIN_LIMIT = 400
@@ -110,6 +112,18 @@ def render_parts(kind: str, content: Any, sidechain: bool) -> Iterator[str]:
             yield f"{marker}: {text}" if text else f"{marker}:"
 
 
+def hook_line(record: dict) -> str | None:
+    attachment = record.get("attachment")
+    if not isinstance(attachment, dict) or attachment.get("type") != "hook_success":
+        return None
+    event = attachment.get("hookEvent")
+    stdout = attachment.get("stdout")
+    if event not in HOOK_EVENTS or not isinstance(stdout, str):
+        return None
+    text = squash(stdout, HOOK_LIMIT)
+    return f"H: {event}: {text}" if text else None
+
+
 def read_records(path: Path) -> Iterator[dict]:
     with path.open(encoding="utf-8", errors="replace") as handle:
         for raw in handle:
@@ -126,16 +140,24 @@ def extract_session(path: Path) -> Extract | None:
     branches: list[str] = []
     stamps: list[str] = []
     session_id = path.stem
+    has_turns = False
     for record in read_records(path):
-        if record.get("type") not in KEPT_TYPES:
-            continue
-        message = record.get("message")
-        if not isinstance(message, dict):
-            continue
         sidechain = bool(record.get("isSidechain"))
+        if record.get("type") == "attachment":
+            hook = hook_line(record)
+            if hook is None:
+                continue
+            found = [hook]
+        elif record.get("type") in KEPT_TYPES:
+            message = record.get("message")
+            if not isinstance(message, dict):
+                continue
+            found = list(render_parts(record["type"], message.get("content"), sidechain))
+            has_turns = has_turns or bool(found)
+        else:
+            continue
         prefix = "[sub] " if sidechain else ""
-        lines.extend(prefix + line for line in
-                     render_parts(record["type"], message.get("content"), sidechain))
+        lines.extend(prefix + line for line in found)
         if isinstance(record.get("timestamp"), str):
             stamps.append(record["timestamp"])
         branch = record.get("gitBranch")
@@ -143,7 +165,7 @@ def extract_session(path: Path) -> Extract | None:
             branches.append(branch)
         if isinstance(record.get("sessionId"), str):
             session_id = record["sessionId"]
-    if not lines:
+    if not has_turns:
         return None
     return Extract(session_id, tuple(branches), min(stamps, default=""), max(stamps, default=""),
                    tuple(lines))
@@ -153,7 +175,7 @@ def render(extract: Extract) -> str:
     header = [f"session: {extract.session_id}",
               f"branch: {', '.join(extract.branches) or 'unknown'}",
               f"time: {extract.first} to {extract.last}",
-              "lines: U user, A assistant, T tool call, R tool result (R! an error), [sub] a subagent",
+              "lines: U user, A assistant, T tool call, R tool result (R! an error), H hook output, [sub] a subagent",
               ""]
     return "\n".join(header + list(extract.lines)) + "\n"
 
