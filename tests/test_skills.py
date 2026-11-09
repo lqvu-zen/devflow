@@ -597,5 +597,74 @@ class TestSharedRules(unittest.TestCase):
         self.assertEqual(set(SHARED_RULES.values()) - cited, set())
 
 
+MODEL_RULES = (
+    "Don't pass `model`",
+    "**A step's Model line.**",
+    "**If the `devflow:*` agent types aren't listed**",
+    "**Check the models.**",
+)
+DESIGNER_CALL = 'subagent_type: "devflow:designer"'
+DESIGNER = ROOT / "agents" / "designer.md"
+
+
+def _paragraph(path: Path, lead_in: str) -> str:
+    found = [line for line in _reattached_text(path).splitlines() if line.startswith(lead_in)]
+    return found[0] if len(found) == 1 else f"{len(found)} paragraphs start with {lead_in!r}"
+
+
+def _designer_call(path: Path) -> str:
+    found = [line for line in _reattached_text(path).splitlines() if DESIGNER_CALL in line]
+    return found[0] if len(found) == 1 else f"{len(found)} designer calls"
+
+
+def _section(path: Path, heading: str) -> str:
+    lines = _reattached_text(path).splitlines()
+    start = lines.index(heading)
+    body = []
+    for line in lines[start + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    return "\n".join(body)
+
+
+def _high_designer_lines() -> list[str]:
+    paths = sorted(SKILLS.glob("*/SKILL.md")) + [ROOT / "README.md", ROOT / "CLAUDE.md"]
+    paths += sorted((ROOT / "agents").glob("*.md"))
+    found = []
+    for path in paths:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            lowered = line.lower()
+            if "designer" in lowered and "high" in lowered and "fix-bug" not in lowered and "diagnos" not in lowered:
+                found.append(f"{path.relative_to(ROOT).as_posix()}:{number}")
+    return found
+
+
+class TestModelRules(unittest.TestCase):
+    def test_model_rules_are_the_same_words(self):
+        for lead_in in MODEL_RULES:
+            with self.subTest(lead_in):
+                paragraph = _paragraph(ADD_FEATURE, lead_in)
+                self.assertTrue(paragraph.startswith(lead_in), paragraph)
+                self.assertEqual(paragraph, _paragraph(FIX_BUG, lead_in))
+
+    def test_the_designer_effort(self):
+        effort = [
+            line for line in DESIGNER.read_text(encoding="utf-8").split("---")[1].splitlines()
+            if line.startswith("effort:")
+        ]
+        self.assertEqual(effort, ["effort: medium"])
+        self.assertIn('effort: "high"', _designer_call(FIX_BUG))
+        self.assertIn(DESIGNER_CALL, _designer_call(ADD_FEATURE))
+        self.assertNotIn("effort", _designer_call(ADD_FEATURE))
+
+    def test_no_line_says_the_designer_runs_at_high_effort(self):
+        self.assertEqual(_high_designer_lines(), [])
+
+    def test_the_model_line_is_in_the_plan_template_and_the_secretary(self):
+        self.assertIn("**Model:**", (TEMPLATES / "plan.md").read_text(encoding="utf-8"))
+        self.assertIn("**Model:**", _section(SECRETARY, "## Adding a plan step"))
+
+
 if __name__ == "__main__":
     unittest.main()

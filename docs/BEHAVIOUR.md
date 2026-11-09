@@ -22,7 +22,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **CI** | `tools/devflow_checks.py` in a project's CI |
 | **SK** | a skill run in a session (`/devflow:*`) |
 | **TP** | the templates `/devflow:setup` copies into a project |
-| **EV** | the eval tools (`tools/eval_select.py`, `tools/eval_cost.py`, `evals/depends.json`, `evals/passes.json`) |
+| **EV** | the eval tools (`tools/eval_select.py`, `tools/eval_cost.py`, `tools/model_check.py`, `evals/depends.json`, `evals/passes.json`) |
 
 ## 1. Guard
 
@@ -81,6 +81,8 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **WF-12** Every skill's text after its front matter stays under 19,000 characters, so Claude Code's cut of a skill re-attached after compaction (at 20,000 characters, from the end) never reaches it; `add-feature` and `fix-bug` open with the stop rules (two fix rounds, one more round after BLOCKERS) as their first section, in the same words; `release` B4 stops after the same review-round limit, in the same words. | SK | `tests/test_skills.py::TestSkillSize`, `tests/test_skills.py::TestStopRules` (the wording and its place; whether a session stops is WF-06, untested), `tests/test_skills.py::TestStopRules::test_release_review_stops_after_the_same_round_limit` |
 | **WF-13** Every skill has front matter whose `name` is its folder's name (lowercase words joined by hyphens) and a description of 200 to 1,536 characters; no Markdown file in a skill's folder outside `vendor/` holds a `$ARGUMENTS` or `$N` token Claude Code would replace, a `cd` into the plugin folder, or a development file (`test-*.md`, a creation log); every text file in a skill's folder outside `vendor/` has CRLF endings in the working tree (a local check: a CI checkout is always CRLF). | SK | `tests/test_skills.py::TestFrontMatter`, `tests/test_skills.py::TestSkillFiles` |
 | **WF-14** A skill's quoted citation of another skill's heading (`x`'s "H", `skills/x/SKILL.md`, "H", `x` ("H")) names a heading that skill has; the secretary's shared-rules list cites every add-feature heading that holds a shared rule. | SK | `tests/test_skills.py::TestCrossSkillCitations`, `tests/test_skills.py::TestSharedRules` |
+| **WF-15** `tools/model_check.py` reports, per agent call in a session, the role, what the call passed, the model each reply ran on, the effort where recorded, and what was expected (the pin, or a `--model` line), marking every mismatch and naming what it could not read (no transcript, effort not recorded, unfinished, a general-purpose call's role); it refuses a Model line that moves the locator, reviewer or planner below its pin; `add-feature` and `fix-bug` run it at the end and the secretary's review reads it. | SK EV | `tests/test_model_check.py`, `eval::add-feature/model-line-moves-one-agent` |
+| **WF-16** A plan step's `**Model:** <role>: <Model>, <effort>; <why>` line moves that one role's call, and no other, overriding **Escalate** for that step; without it every agent runs on its pin; the designer's effort is medium in `add-feature` and high in `fix-bug`'s diagnosis. | SK TP | `tests/test_skills.py::TestModelRules`, `eval::add-feature/model-line-moves-one-agent`, `eval::add-feature/delegates-not-coding` |
 
 ## 6. Setup and templates
 

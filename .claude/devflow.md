@@ -37,7 +37,7 @@ The invariants that make this project work. Most "looked fine, broke in practice
 - **Python is standard library only, with no build step.** The hooks run in other people's projects as `uv run --no-project python …`, with no environment to install into. `review-ui` is the one exception (Node 22+ and a Chrome-family browser) and stays self-contained.
 - **Skills never hardcode a project's facts.** They read `.claude/devflow.md` by exact heading and paste sections verbatim into agent briefs. Renaming or removing a heading in `templates/devflow.md` breaks every skill that cites it; adding one is safe. (inferred from CLAUDE.md, please check the "adding is safe" half)
 - **A rule the skills share is written in the same words everywhere.** `fix-bug` and `release` reuse the `add-feature` pipeline, so a change to the stop rules, claiming a step, gates, the Files line, CI first or the verbatim-paste requirement is mirrored across `add-feature`, `fix-bug`, `release` and `secretary` in one change. A rule that drifts in one skill is a rule the agents get two ways.
-- **Model and effort are pinned in each agent's frontmatter.** Skills don't pass `model` or `effort` except to escalate, so one edit to `agents/*.md` changes every caller.
+- **Model and effort are pinned in each agent's frontmatter.** Skills don't pass `model` or `effort` except to escalate, for a plan step's `**Model:**` line, or for `fix-bug`'s diagnosis (`effort: "high"`), so one edit to `agents/*.md` changes every caller.
 - **The hooks do nothing without `.claude/devflow.json`.** `hooks/hooks.json` gates each command on that file, so installing the plugin for a user account is safe. Keep that gate in every hook added.
 - **The guard never lets a call through unchecked.** An exception, a broken config, missing `uv` or a guard that can't start produces an `ask` ("not checked"), never a silent allow. A deny is exit 2 with a reason on stderr; an ask is a JSON `permissionDecision: "ask"` on stdout.
 - **Every behaviour change in the guard or the checks has a matching test.** `tests/test_guard.py` runs it against an RYOS-shaped config, a Linux-style project and a minimal config; `tests/test_checks.py` uses real throwaway git repositories.
@@ -71,7 +71,7 @@ Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_
 
 ## Escalate
 
-The implementer runs on Opus at medium effort for: the guard (`hooks/guard.py`, `hooks/hooks.json`), the CI check (`tools/devflow_checks.py`), and any change to a rule the skills share (see Architecture rules), because a wrong word there changes what every agent does in every project.
+The implementer runs on Opus at medium effort for: the guard (`hooks/guard.py`, `hooks/hooks.json`), the CI check (`tools/devflow_checks.py`), and any change to a rule the skills share (see Architecture rules), because a wrong word there changes what every agent does in every project. A plan step's `**Model:**` line overrides this for that step.
 
 ## See it working
 

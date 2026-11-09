@@ -25,20 +25,22 @@ Everything specific to this project is in **`.claude/devflow.md`**: **Project**,
 |---|---|---|---|
 | 1. Reproduce & scope | orchestrator (you) | session model: run from Sonnet | Owns the conversation; pins down the repro and expected vs. actual. |
 | 2. Locate code | `devflow:locator` | Haiku | Cheap, fast search; returns the suspect code for diagnosis. |
-| 3. Diagnose + failing test | `devflow:designer` (bug mode) | Opus, high effort | Hardest reasoning: root cause and the minimal correct fix. |
+| 3. Diagnose + failing test | `devflow:designer` (bug mode) | Opus, high effort (passed on the call) | Hardest reasoning: root cause and the minimal correct fix. |
 | 4. Fix / verify | `devflow:implementer` | Sonnet (Opus, medium effort, when escalated) | Strong coder; fast across the fix-and-re-run loop. |
 | 4b. Verify | orchestrator (you) | session model | Re-runs tests and walks the checklist; the real gate is the review. |
 | 5. Review | `devflow:reviewer` | Opus, high effort | Confirms the fix addresses the cause, not the symptom, with no new regressions. |
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Light summarization. |
 
-Don't pass `model` or `effort` in the calls below except to escalate. **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
+Don't pass `model` or `effort` in the calls below except to escalate, for a step's Model line, or for `fix-bug`'s diagnosis (`effort: "high"`, always). **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
 
 ```
 Agent({ description: "...", subagent_type: "devflow:implementer", model: "opus", effort: "medium", prompt: <brief> })
 ```
 
-**If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the same model, `effort: "high"` for the designer and reviewer, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
+**A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Pass that `model` and `effort` on that role's call and on no other; for that step it overrides **Escalate**. A line that moves the locator, reviewer or planner below its pin, or `fix-bug`'s diagnosis below Opus, high, is not followed: say so in the report.
+
+**If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the `model` and `effort` the agent's file pins or the call passes, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 
 **When the work is a step from a release plan**, paste the whole step section verbatim, from its `### N —` heading to the next heading, into the diagnosis, fix and review briefs. That includes its **Needs** and **Done when** lines and its `**Tried:**` line, if it has one. Tell the designer to read Tried and not repeat an approach it lists unless it says why this time is different. Report the step's "needs a human" items.
 
@@ -144,7 +146,7 @@ The brief gives the bug and its repro in a line or two plus the **Where things l
 ### 3. Diagnose the root cause and write a failing test
 
 ```
-Agent({ description: "Diagnose <bug>", subagent_type: "devflow:designer", prompt: <self-contained brief> })
+Agent({ description: "Diagnose <bug>", subagent_type: "devflow:designer", effort: "high", prompt: <self-contained brief> })
 ```
 
 Start the brief with **"Bug mode."** and paste, verbatim: the confirmed repro and expected/actual behaviour; any traceback; the **Where things live** table and the whole **Architecture rules** section; the excerpts and map rows from step 2; whether the bug escaped a release (and which); and: *"Find the ROOT CAUSE, not the symptom. Write a test that FAILS on the current code and will PASS once fixed. Do NOT write the fix. Produce the sections in your instructions, and if this is an escape, name the check that should have caught it."*
@@ -181,6 +183,8 @@ BLOCKERS get one more round, then stop and report.
 ### 6. Commit and push
 
 As in `add-feature` step 6: match the commit style, stage by path, attribution lines from your session's instructions, push per the project's rules, watch CI on the pushed commit, and set the plan step's Status row to `done` with the hash.
+
+**Check the models.** Run `python <plugin>/tools/model_check.py` (`tools/` is two folders up from this skill's base directory), adding `--model "<role>: <Model>, <effort>"` for each role this run moved off its pin: each Model line followed, an escalated implementer (`implementer: Opus, medium`) and `fix-bug`'s diagnosis (`designer: Opus, high`); a Model line for the designer replaces that entry, not a second one. It lists each agent call's role, the model it ran on, its effort where recorded, and what was expected. Put every mismatch, and what it could not read, in the report and the step's Status row.
 
 ### 7. Report back
 

@@ -32,7 +32,7 @@ Use Bash only to read: `git log`, `git show`, `git diff`, `gh issue view`, `gh i
   - **a testable Done when:** what a test proves, every surface, the map entry to add or update, and the release-gate case if the step affects builds or upgrades;
   - **Needs:** the steps it depends on;
   - a **`**Gate:**` line** when the maintainer must do or decide something before the step can go on (name a version, sign, install a build, approve a list);
-  - an **escalation note** when the step is in an area **Escalate** in `.claude/devflow.md` names (implementer on Opus at medium effort).
+  - an **escalation note** when the step is in an area **Escalate** in `.claude/devflow.md` names (implementer on Opus at medium effort), and a `**Model:** <role>: <Model>, <effort>; <why>` line when a role should move off its pin for this step, with the reason.
 - **Parallel lanes and merging:** only when the brief asks for two tabs at once. Use the section in the plugin's `templates/plan.md`, and fill in which steps form each lane from the Files lines.
 - **Order:** risky and foundational work first; bug fixes before features; the release test phase, then the release last, through the release-candidate flow.
 - **Status:** a table, every step `—`. Rows read `| N title | state |`, because the session-start hook parses them.

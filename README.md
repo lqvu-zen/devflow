@@ -13,7 +13,7 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | Skill | `/devflow:secretary` | Keeps the status file and the decision log, triages issues, and turns decisions into plan steps with paste-ready prompts. Keeps the prompt book (`docs/PROMPTS.md`, from `templates/PROMPTS.md`). Reviews recent sessions for process rules the agents broke (`tools/session_extract.py` shrinks them) and proposes Harness escapes lines for the maintainer to approve. |
 | Skill | `/devflow:review-ui` | One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or game UI, in one report format. On the web it measures the page in headless Chrome, reads phone and desktop screenshots, drives the states and audits WCAG 2.2 AA. For apps and games it reads screenshots of each state at each size or resolution, and the UI source. Prioritized report with file:line fixes. Read-only. The web path needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `skills/review-ui/vendor/`. |
 | Agent | `devflow:locator` | Haiku, read-only. Quotes the code and the behaviour-map rows. |
-| Agent | `devflow:designer` | Opus, high effort. A plan or a root cause, never code. |
+| Agent | `devflow:designer` | Opus, medium effort (high for `fix-bug`'s diagnosis). A plan or a root cause, never code. |
 | Agent | `devflow:implementer` | Sonnet. Implements and verifies, with at most two fix rounds. Never commits. |
 | Agent | `devflow:reviewer` | Opus, high effort. Diff review, or a release review before publishing. |
 | Agent | `devflow:planner` | Opus, high effort, read-only. Drafts release plans for the secretary. |
@@ -93,7 +93,7 @@ The skills are rules in prose, so `evals/` checks that an edit hasn't broken the
 What is in it:
 
 - `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
-- `evals/cases/<skill>/<case>/`: 36 behaviour cases. `add-feature` 10, `fix-bug` 7, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
+- `evals/cases/<skill>/<case>/`: 37 behaviour cases. `add-feature` 11, `fix-bug` 7, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
 - `evals/cases/trigger/`: 31 trigger cases: six per skill, three prompts that should fire it and three near misses that belong to another skill, and seven for `review-ui` (four that should fire it, three near misses). They allow only `Skill` and need no shell. The four `review-ui` cases that name a file (1, 2, 3 and 7) have a scaffold (`ui_fixture`), so run them with `--scaffold`.
 - `evals/depends.json`: which files each skill's cases depend on (the skill's folder, the agents it calls, the review references it cites), which skill each near miss points at, and `hooks/` for every behaviour case. `tests/test_evals.py` checks it against what each `SKILL.md` cites.
 - `evals/passes.json`: the latest pass of every case, as `{commit, date, runs}`, one line per case. `tools/eval_select.py` compares it with the working tree to say which cases a change can reach.
@@ -132,6 +132,8 @@ To see where a run's cost goes, `python tools/eval_cost.py evals/results/<timest
 | implementer | Sonnet | $0.1186 | 5.9% |
 
 The Opus main session and designer are about 80% of the run, the reviewer 16% and the Sonnet implementer 6%, so trimming should target the orchestrator's context and the designer's brief.
+
+To see which model each agent actually ran on, `python tools/model_check.py [SOURCE]` reads a session's transcripts (a session `.jsonl`, an eval run's workspace, or a project path, which takes its newest session; `--count N` and `--exclude ID` pick more) and prints, per agent call, the role, what the call passed, the model each reply ran on, the effort where the transcript records it, and what was expected: the agent file's pin, or a `--model "<role>: <Model>, <effort>"` line for a role the run moved. It marks every mismatch, exits 1 when there is one, and says what it could not read (a call with no transcript, effort not recorded, an unfinished agent, the role of a `general-purpose` call). It refuses a line that moves the locator, reviewer or planner below its pin. `add-feature` and `fix-bug` run it at the end, and the secretary's session review reads it. A plan step's `**Model:** <role>: <Model>, <effort>; <why>` line is how a step moves one role off its pin.
 
 The cases are written so that a session which stops and asks, as the skills tell it to, passes. The fixture's CI and plan facts are made to agree with each other, because the sessions check them.
 

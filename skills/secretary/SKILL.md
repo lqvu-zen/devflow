@@ -70,7 +70,7 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
 2. **What and why,** with facts the team needs: files and modules if you know them, related `docs/BEHAVIOUR.md` entries and their surfaces, earlier commits. Don't prescribe the design; that's the designer's job.
 3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence.
 4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated.
-5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation to Opus for any area **Escalate** names.
+5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation to Opus for any area **Escalate** names. To move a role off its pin for this step, propose a `**Model:** <role>: <Model>, <effort>; <why>` line, one role per line, with the reason: any role may move up; only the designer, implementer and tester may move down, and never `fix-bug`'s diagnosis below Opus, high; it overrides **Escalate** for that step.
 6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on.
 7. **The plan's other sections updated to match:**
    - the **Goals** list, if it adds a goal;
@@ -117,7 +117,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
    ```bash
    python <plugin>/tools/session_extract.py <project path> --count 15 --out <scratchpad>/sessions --exclude <this session's id>
    ```
-   It finds `~/.claude/projects/<project folder>/*.jsonl`, takes the most recent sessions (15 to 20) without the current one, and writes one text file per session: the session id, branch and time range, then the user's and assistant's text, each tool call as one line, and each tool result cut short. Thinking is dropped. A subagent's records are kept and marked `[sub]`. It prints each file with its size; if it finds no folder, say so and stop. **Never commit transcript text**, and don't quote more of it than the short examples below.
+   It finds `~/.claude/projects/<project folder>/*.jsonl`, takes the most recent sessions (15 to 20) without the current one, and writes one text file per session: the session id, branch and time range, then the user's and assistant's text, each tool call as one line, and each tool result cut short. Thinking is dropped. A subagent's records are kept and marked `[sub]`. It prints each file with its size; if it finds no folder, say so and stop. **Never commit transcript text**, and don't quote more of it than the short examples below. Then run `python <plugin>/tools/model_check.py <project path> --count 15 --exclude <this session's id>`: per agent call, the model it ran on, its effort where recorded, and the pin it should have run on.
 2. **Read them in batches.** Group the files by size into batches of roughly 200 KB each and give each to a `general-purpose` agent with `model: "sonnet"`, in parallel. Paste into every brief, verbatim:
    - the profile's **Architecture rules**, **Edit bounds** and **Standing rules**;
    - the project's `CLAUDE.md`;
@@ -129,6 +129,8 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
    - **how often**, and in how many sessions;
    - **one short quoted example,** with its session id;
    - **a proposed § Harness escapes line:** what happened, and the one thing that now stops it. Name it exactly: the guard rule (`.claude/devflow.json`), the `tools/devflow_checks.py` check, or the skill or profile wording it adds, with the file and heading. A rule that only needs a reminder gets wording, not a hook.
+
+   Add the model check's mismatches as findings, leaving out each one that the step's Model line, an **Escalate** area or `fix-bug`'s diagnosis accounts for, and each from a session that ran before the pin last changed.
 
    Then list the **rules nobody needed** (no session came near them), as a note and not a proposal to remove them.
 4. **Gate: the maintainer approves each proposal,** one at a time. Log each decision. An approved one becomes a plan step in the way "Adding a plan step" describes, with the guard, check or wording change as its content; a `deny` or `ask` rule is marked an **Escalate** step (Opus) with a `**Gate:**`. You make no code, guard, check or skill changes yourself, and the coding session that carries out the step adds the § Harness escapes line in the same commit as the change; you don't edit `docs/BEHAVIOUR.md`. Rejected proposals are logged and not raised again unless the same break shows up in later sessions.
