@@ -93,7 +93,7 @@ The skills are rules in prose, so `evals/` checks that an edit hasn't broken the
 What is in it:
 
 - `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
-- `evals/cases/<skill>/<case>/`: 34 behaviour cases. `add-feature` 9, `fix-bug` 6, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
+- `evals/cases/<skill>/<case>/`: 36 behaviour cases. `add-feature` 10, `fix-bug` 7, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
 - `evals/cases/trigger/`: 31 trigger cases: six per skill, three prompts that should fire it and three near misses that belong to another skill, and seven for `review-ui` (four that should fire it, three near misses). They allow only `Skill` and need no shell. The four `review-ui` cases that name a file (1, 2, 3 and 7) have a scaffold (`ui_fixture`), so run them with `--scaffold`.
 - `evals/depends.json`: which files each skill's cases depend on (the skill's folder, the agents it calls, the review references it cites), which skill each near miss points at, and `hooks/` for every behaviour case. `tests/test_evals.py` checks it against what each `SKILL.md` cites.
 - `evals/passes.json`: the latest pass of every case, as `{commit, date, runs}`, one line per case. `tools/eval_select.py` compares it with the working tree to say which cases a change can reach.
@@ -153,6 +153,7 @@ Recorded runs:
 | 2026-11-04 | behaviour, `fix-bug` (6 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 | 6 pass | $4.66 |
 | 2026-11-04 | behaviour, `add-feature` (9 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 (the 7 older cases and the 2 UI cases) | 9 pass | $6.35 |
 | 2026-11-05 | behaviour, `release` (7 cases, Sonnet judge), WSL; step 4, numbers-only promotion | `release-promotes-numbers-only`: 2 of 2 pass on the fix, 0 of 2 on the old B2 (it never reached `--allow-empty`). The other 6 release cases pass 1 run each, except `waits-for-the-version`, whose judge failed 1 of 3 runs on the fix and 1 of 3 on the old skill (the case stops before B, so the change cannot reach it) | $2.81 |
+| 2026-11-09 | behaviour, the 2 new §5 cases (1 run each, Sonnet judge), WSL; step 9 | `fix-bug-ui-bug-reviewer-gets-motion` passes. `add-feature-new-ui-gets-build-and-motion` failed `floor-in-report` (3 of 3 judge votes: `add-feature` never told the orchestrator to carry the implementer's §5 floor into its report); after one line in step 7, 4 of 4 graders pass | $1.62 plus $2.24 before and $2.45 after the fix |
 
 ## Where it came from
 
