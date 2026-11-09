@@ -14,13 +14,14 @@ python -m unittest tests.test_guard
 python -m unittest tests.test_guard.<TestClass>.<test_name>
 python tools/eval_select.py select [--release] [--repo PATH]
 python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json [--repo PATH]
+python tools/eval_cost.py evals/results/<timestamp>/aggregate-result.json [--root DIR]
 ```
 
 The hooks run in consumer projects as `uv run --no-project python …`. The CI check runs as `python tools/devflow_checks.py version|comments [--base SHA] [--head REF] [--repo PATH]`.
 
 ## Architecture
 
-The plugin is mostly prompts and config; the only real code is four Python files.
+The plugin is mostly prompts and config; the only real code is the Python in `hooks/` and `tools/`.
 
 - **Skills** (`skills/*/SKILL.md`): `setup`, `add-feature`, `fix-bug`, `release`, `secretary`, `review-ui`. The orchestrating session runs these and delegates every phase to an agent. `fix-bug` and `release` reuse the `add-feature` pipeline, so changes to shared rules (stop rules, claiming a plan step, gates, the briefs' verbatim-paste requirement) usually need to be mirrored across the skills. `review-ui` is standalone: it does not delegate to agents, reads **Design system** and **See it working** when the profile exists and works without it, and `skills/review-ui/vendor/` is third-party code to be updated only by re-copying from upstream.
 - **Agents** (`agents/*.md`): `locator` (Haiku), `designer`, `reviewer`, `planner` (Opus, high effort), `implementer`, `tester` (Sonnet). Model and effort are pinned in each agent's frontmatter, so skills should not pass `model` or `effort` except to escalate.
@@ -30,11 +31,12 @@ The plugin is mostly prompts and config; the only real code is four Python files
 - **`hooks/session_start.py`**: prints branch, uncommitted files, CI state on HEAD and the plan's next open step, skipping steps another tab has claimed. All subprocess calls share one deadline.
 - **`tools/devflow_checks.py`**: CI check. `version` fails commits that change a configured version file unless the commit is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`, and fails a release-titled commit that leaves any listed version file at another version. `comments` fails new Python comment lines in configured folders, tokenizing old and new files so moved comments pass.
 - **`tools/eval_select.py`**: lists the eval cases a change can reach since each case's last recorded pass (`evals/depends.json`, `evals/passes.json`) and records new passes.
+- **`tools/eval_cost.py`**: splits an eval run's recorded cost by agent from its session transcripts (`config/projects` in the run's workspace), counting each message once and sharing each model's cost by weighted tokens.
 - **`templates/`**: files `/devflow:setup` copies into a consumer project (profile, config, behaviour map, status file, plan, CI workflow, `CLAUDE.md` section, settings).
 
 ## Testing notes
 
-`tests/test_guard.py` loads `hooks/guard.py` by file path and runs it against an RYOS-shaped config, a Linux-style project and a minimal config. `tests/test_checks.py` builds real throwaway git repositories. `tests/test_evals.py` compiles every grader pattern in `evals/cases/` and tests the selection and record on throwaway repositories. `tests/test_skill_references.py` checks that the UI briefs in `add-feature` and `fix-bug` name the `review-ui` reference files and that they exist. `tests/test_skills.py` fails when a skill's text after its front matter reaches 19,000 characters, and checks that the stop rules open `add-feature` and `fix-bug` as their first section, in the same words. Behaviour changes in the guard or checks need a matching test.
+`tests/test_guard.py` loads `hooks/guard.py` by file path and runs it against an RYOS-shaped config, a Linux-style project and a minimal config. `tests/test_checks.py` builds real throwaway git repositories. `tests/test_evals.py` compiles every grader pattern in `evals/cases/` and tests the selection and record on throwaway repositories. `tests/test_skill_references.py` checks that the UI briefs in `add-feature` and `fix-bug` name the `review-ui` reference files and that they exist. `tests/test_skills.py` fails when a skill's text after its front matter reaches 19,000 characters, and checks that the stop rules open `add-feature` and `fix-bug` as their first section, in the same words. It also lints every skill: front matter with `name` equal to the folder and a 200 to 1,536-character description; every profile heading a skill cites present in `templates/devflow.md` (so renaming a heading fails CI) and setup's fixed list equal to the template's headings; and no `$ARGUMENTS`/`$N` token, `cd` into the plugin folder or development file outside `review-ui/vendor/`. Behaviour changes in the guard or checks need a matching test.
 
 ## Conventions
 

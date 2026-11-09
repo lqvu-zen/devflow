@@ -122,6 +122,17 @@ TMPDIR=$HOME/ev claude plugin eval . --tag behaviour --runs 1 --ablation none --
 
 `--case "<glob>"` picks one case (`"release-*"` for a skill), and `--tag costly` the six that run real agent pipelines. `--ablation none` skips the no-plugin arm, which can't follow a `/devflow:*` prompt. `--judge-model sonnet` is worth the cost: the default Haiku judge disagrees with itself on rubrics of more than one clause. Results land in `evals/results/` (not committed): `aggregate-result.json` and `report.html`. The run exits 1 below the threshold. A full behaviour run costs about $11 to $14 and a subscription can hit its session limit partway: runs that hit it are reported as errors scoring 0, so rerun just those cases.
 
+To see where a run's cost goes, `python tools/eval_cost.py evals/results/<timestamp>/aggregate-result.json` splits each run's recorded cost across the main session and each agent type (add `--root DIR` for workspaces moved elsewhere, such as `//wsl.localhost/Ubuntu-24.04/home/ubuntu/ev` from Windows). It reads the transcripts the runner keeps under the workspace's `config/projects`, so run it before the temporary workspaces are deleted. It does not use `out/trace.jsonl`, whose assistant lines carry partial output tokens. Measured on `add-feature-ui-change-covers-states-and-inputs` (devflow 0.2.1, before the design trim), a session total of $1.9969 plus $0.0087 for the judge:
+
+| Part | Model | Cost | Share |
+|---|---|---|---|
+| main session | Opus | $0.7578 | 38.0% |
+| designer | Opus | $0.8093 | 40.5% |
+| reviewer | Opus | $0.3111 | 15.6% |
+| implementer | Sonnet | $0.1186 | 5.9% |
+
+The Opus main session and designer are about 80% of the run, the reviewer 16% and the Sonnet implementer 6%, so trimming should target the orchestrator's context and the designer's brief.
+
 The cases are written so that a session which stops and asks, as the skills tell it to, passes. The fixture's CI and plan facts are made to agree with each other, because the sessions check them.
 
 Known gap: no case reaches the "at most two fix rounds, then report Still red" rule. The sessions find a conflict while designing and stop earlier, which `add-feature-stops-on-conflicting-check` covers. A fixture that only fails during implementation would be needed, and a reviewer BLOCKERS rule needs a scripted reviewer.

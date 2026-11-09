@@ -22,7 +22,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **CI** | `tools/devflow_checks.py` in a project's CI |
 | **SK** | a skill run in a session (`/devflow:*`) |
 | **TP** | the templates `/devflow:setup` copies into a project |
-| **EV** | the eval tools (`tools/eval_select.py`, `evals/depends.json`, `evals/passes.json`) |
+| **EV** | the eval tools (`tools/eval_select.py`, `tools/eval_cost.py`, `evals/depends.json`, `evals/passes.json`) |
 
 ## 1. Guard
 
@@ -79,13 +79,14 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **WF-10** Each workflow skill fires on its own prompts and not on the other three's. | SK | `eval::trigger/*` |
 | **WF-11** A coding session edits a plan only in its own Status row and its step's Tried line, in place with the Edit tool, never with Write, a script, `sed` or a regex; where the plan is gitignored it saves the edit and commits nothing (the 2026-11-03 plan wipe). | SK | `eval::add-feature/claims-step-first-local-plans` |
 | **WF-12** Every skill's text after its front matter stays under 19,000 characters, so Claude Code's cut of a skill re-attached after compaction (at 20,000 characters, from the end) never reaches it; `add-feature` and `fix-bug` open with the stop rules (two fix rounds, one more round after BLOCKERS) as their first section, in the same words. | SK | `tests/test_skills.py::TestSkillSize`, `tests/test_skills.py::TestStopRules` (the wording and its place; whether a session stops is WF-06, untested) |
+| **WF-13** Every skill has front matter whose `name` is its folder's name (lowercase words joined by hyphens) and a description of 200 to 1,536 characters; no file in a skill's folder outside `vendor/` holds a `$ARGUMENTS` or `$N` token Claude Code would replace, a `cd` into the plugin folder, or a development file (`test-*.md`, a creation log). | SK | `tests/test_skills.py::TestFrontMatter`, `tests/test_skills.py::TestSkillFiles` |
 
 ## 6. Setup and templates
 
 | Behaviour | Surfaces | Guarded by |
 | --- | --- | --- |
 | **TP-01** `session_start.py` reads the Order and Status of a plan written from `templates/plan.md`. | TP SS | `tests/test_session_start.py::TestPlanReading` (inferred, please check it uses the template's shape) |
-| **TP-02** Every heading a skill cites exists in `templates/devflow.md`. | TP SK | **untested** |
+| **TP-02** Every profile heading a skill cites (bold on a line about the profile, in the by-exact-heading list, or as a section or heading) exists in `templates/devflow.md`, and setup's fixed list is the template's headings in order. | TP SK | `tests/test_skills.py::TestProfileHeadings` |
 | **TP-03** `/devflow:setup` writes nothing before the maintainer has seen the drafts. | SK | **untested** |
 
 ## 7. UI review
@@ -109,6 +110,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **EV-02** `select` lists exactly the cases a change can reach since each case's last pass, by `evals/depends.json`: a case with no record or an unknown commit is listed; uncommitted, untracked and renamed files count; trigger cases are listed only when their skill's (or their near-miss target's) front matter changed, and all of them with `--release`; one command is printed per `--case` glob. | EV | `tests/test_evals.py::TestSelect` |
 | **EV-03** `record` keeps a pass only when every run scored 1 with no error and no skipped paid grader, and refuses a case with uncommitted inputs. It prints `skipped <case>: <reason>` (no runs, a run's error, a skipped paid grader or a score below 1) for each case it did not keep, which leaves the exit code at 0, and refuses a result file whose `startedAt` is missing or not `YYYY-MM-DD`. | EV | `tests/test_evals.py::TestRecord` |
 | **EV-04** `evals/depends.json` names every agent and plugin file each skill cites and every near miss, whether a `SKILL.md` names a review reference by path or only by bare name (`build.md`, `motion.md`, `core.md`); `evals/passes.json` names only cases on disk. | EV | `tests/test_evals.py::TestEvalFiles` |
+| **EV-05** `tools/eval_cost.py` splits a recorded eval run's cost by agent from the run's session transcripts (`config/projects`). It shares each model's recorded cost across the main session and each subagent type by weighted tokens, counting each message id once, so the rows add up to the run's total. It counts calls per agent type. A run whose files are gone, or that recorded no cost, is named rather than dropped. `--root` finds workspaces moved elsewhere. | EV | `tests/test_eval_cost.py` |
 
 ## Escapes
 
@@ -129,7 +131,6 @@ A process rule broken by a session (not a bug in the product) gets one line here
 ## Untested: backlog
 
 - **WF-06** two fix rounds, then "Still red": needs a fixture that fails only during implementation (see `README.md`, Skill evals, Known gap).
-- **TP-02** profile headings: a unit test that greps every `**<Heading>**` the skills cite against `templates/devflow.md`.
 - **TP-03** setup writes nothing before approval: an eval case.
 - **UI-02** `allow` list in `.claude/ui-review.json`: no eval or test yet.
 - **UI-01, UI-03, UI-04, UI-05** `review-ui`: phone and desktop width, never editing code, the platform fallback order, the game path's no-inspector, screenshots taken per See it working, the shared report format on the app and game paths, and running without a profile have no eval.
