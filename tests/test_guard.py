@@ -80,8 +80,8 @@ def dirty() -> list[str]:
     return ["docs/STATUS.md", "docs/plans/release-2.4.0.md"]
 
 
-def verdict(command: str, tool: str = "Bash", secretary=clean, config=RYOS, env=ENV):
-    return guard.decide(tool, {"command": command}, env, secretary, config)
+def verdict(command: str, tool: str = "Bash", managed=clean, config=RYOS, env=ENV):
+    return guard.decide(tool, {"command": command}, env, managed, config)
 
 
 def file_verdict(path: str, tool: str = "Write", config=RYOS, env=ENV):
@@ -90,8 +90,8 @@ def file_verdict(path: str, tool: str = "Write", config=RYOS, env=ENV):
 
 
 class TestGuardRefuses(unittest.TestCase):
-    def assertRefused(self, command: str, tool: str = "Bash", secretary=clean) -> str:
-        result = verdict(command, tool, secretary)
+    def assertRefused(self, command: str, tool: str = "Bash", managed=clean) -> str:
+        result = verdict(command, tool, managed)
         self.assertEqual(result.kind, "deny", f"{tool}: {command!r} was {result}")
         self.assertTrue(result.reason)
         return result.reason
@@ -204,7 +204,7 @@ class TestGuardRefuses(unittest.TestCase):
         self.assertIn("Vũ's to run", reason)
         self.assertRefused("uv run --with cryptography python tools/sign_release.py new")
 
-    def test_reverting_secretary_files(self):
+    def test_reverting_managed_files(self):
         self.assertRefused("git checkout -- docs/STATUS.md")
         self.assertRefused(r"git restore docs\plans\release-2.4.0.md")
         self.assertRefused("git -C D:/Projects/RYOS checkout HEAD -- docs/plans/")
@@ -216,7 +216,7 @@ class TestGuardRefuses(unittest.TestCase):
         self.assertRefused("cd docs && git checkout -- STATUS.md")
         self.assertRefused("cd docs/plans; git restore release-2.4.0.md", "PowerShell")
 
-    def test_whole_tree_discards_while_secretary_edits_wait(self):
+    def test_whole_tree_discards_while_managed_edits_wait(self):
         for command in ("git checkout -- .", "git checkout .", "git checkout -f main",
                         "git restore :/", "git stash", "git stash -u", "git stash push",
                         "git clean -fd", "git checkout -- docs", "git restore docs/*.md",
@@ -224,13 +224,14 @@ class TestGuardRefuses(unittest.TestCase):
                         "git checkout -- STATUS.md", "git restore STATUS.md",
                         "git switch -f main", "git switch --discard-changes main",
                         "cd /c/elsewhere && git restore x"):
-            reason = self.assertRefused(command, secretary=dirty)
+            reason = self.assertRefused(command, managed=dirty)
             self.assertIn("docs/STATUS.md", reason)
+            self.assertIn("status and plan edits", reason)
 
 
 class TestGuardAllows(unittest.TestCase):
-    def assertAllowed(self, command: str, tool: str = "Bash", secretary=clean) -> None:
-        result = verdict(command, tool, secretary)
+    def assertAllowed(self, command: str, tool: str = "Bash", managed=clean) -> None:
+        result = verdict(command, tool, managed)
         self.assertEqual(result.kind, "allow", f"{tool}: {command!r} was {result}")
 
     def test_the_app_with_a_throwaway_data_folder(self):
@@ -309,19 +310,19 @@ class TestGuardAllows(unittest.TestCase):
         self.assertAllowed("grep -n sign tools/sign_release.py")
         self.assertAllowed("uv run python tools/sign_release.py check dist/SHA256SUMS.txt")
 
-    def test_git_that_keeps_secretary_edits(self):
-        self.assertAllowed("git checkout -- ryos/qtui/shell.py", secretary=dirty)
+    def test_git_that_keeps_managed_edits(self):
+        self.assertAllowed("git checkout -- ryos/qtui/shell.py", managed=dirty)
         self.assertAllowed("git checkout -- .")
-        self.assertAllowed("git restore --staged ryos/x.py", secretary=dirty)
-        self.assertAllowed("git stash list", secretary=dirty)
-        self.assertAllowed("git checkout -b feature/x", secretary=dirty)
-        self.assertAllowed("git checkout main", secretary=dirty)
-        self.assertAllowed("git switch main", secretary=dirty)
+        self.assertAllowed("git restore --staged ryos/x.py", managed=dirty)
+        self.assertAllowed("git stash list", managed=dirty)
+        self.assertAllowed("git checkout -b feature/x", managed=dirty)
+        self.assertAllowed("git checkout main", managed=dirty)
+        self.assertAllowed("git switch main", managed=dirty)
         self.assertAllowed("git restore docs/*.md")
-        self.assertAllowed("cd D:/Projects/RYOS && git checkout -- ryos/cli.py", secretary=dirty)
+        self.assertAllowed("cd D:/Projects/RYOS && git checkout -- ryos/cli.py", managed=dirty)
         self.assertAllowed("git mv docs/plans/release-2.4.0.md docs/archive/release-2.4.0.md")
 
-    def test_the_secretary_check_runs_only_for_a_discard(self):
+    def test_the_managed_check_runs_only_for_a_discard(self):
         calls = []
 
         def counting() -> list[str]:
@@ -329,9 +330,9 @@ class TestGuardAllows(unittest.TestCase):
             return []
 
         verdict("git status --short && uv run --no-project --with pytest pytest -q",
-                secretary=counting)
+                managed=counting)
         self.assertEqual(calls, [])
-        verdict("git stash", secretary=counting)
+        verdict("git stash", managed=counting)
         self.assertEqual(calls, [1])
 
 
@@ -396,13 +397,13 @@ class TestGuardSkillCommands(unittest.TestCase):
     def test_every_skill_command_runs(self):
         for command in SKILL_COMMANDS:
             with self.subTest(command=command[:70]):
-                result = verdict(command, secretary=dirty)
+                result = verdict(command, managed=dirty)
                 self.assertEqual(result.kind, "allow", f"{command!r} was {result}")
 
 
 class TestAnotherProject(unittest.TestCase):
-    def check(self, command: str, tool: str = "Bash", secretary=clean):
-        return verdict(command, tool, secretary, config=NOTES, env=LINUX_ENV)
+    def check(self, command: str, tool: str = "Bash", managed=clean):
+        return verdict(command, tool, managed, config=NOTES, env=LINUX_ENV)
 
     def test_its_real_data(self):
         self.assertEqual(self.check("rm -rf ~/.local/share/notes").kind, "deny")
@@ -424,10 +425,10 @@ class TestAnotherProject(unittest.TestCase):
         self.assertEqual(self.check("ls ~/.notes-keys").kind, "deny")
         self.assertEqual(self.check("cat x.pem").kind, "allow")
 
-    def test_its_secretary_files(self):
+    def test_its_managed_files(self):
         self.assertEqual(self.check("git checkout -- STATUS.md").kind, "deny")
         self.assertEqual(self.check("git restore plans/next.md").kind, "deny")
-        reason = self.check("git stash", secretary=lambda: ["STATUS.md"]).reason
+        reason = self.check("git stash", managed=lambda: ["STATUS.md"]).reason
         self.assertIn("STATUS.md", reason)
         self.assertEqual(self.check("git checkout -- src/app.py").kind, "allow")
 
@@ -441,7 +442,7 @@ class TestAnotherProject(unittest.TestCase):
 
 
 class TestMinimalConfig(unittest.TestCase):
-    def test_an_empty_config_still_keeps_secrets_and_secretary_edits(self):
+    def test_an_empty_config_still_keeps_secrets_and_managed_edits(self):
         self.assertEqual(verdict("cat x.pem", config={}).kind, "deny")
         self.assertEqual(verdict("git checkout -- docs/STATUS.md", config={}).kind, "deny")
         self.assertEqual(verdict("rm -rf build", config={}).kind, "allow")

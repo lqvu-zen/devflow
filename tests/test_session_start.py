@@ -161,9 +161,9 @@ class TestPlanReading(unittest.TestCase):
         self.assertEqual(session_start.current_plan("See work/plans/v1.md.", layout),
                          "work/plans/v1.md")
         self.assertIsNone(session_start.current_plan("See docs/plans/v1.md.", layout))
-        self.assertTrue(layout.is_secretary_path("STATUS.md"))
-        self.assertTrue(layout.is_secretary_path("work/plans/v1.md"))
-        self.assertFalse(layout.is_secretary_path("docs/STATUS.md"))
+        self.assertTrue(layout.is_managed_path("STATUS.md"))
+        self.assertTrue(layout.is_managed_path("work/plans/v1.md"))
+        self.assertFalse(layout.is_managed_path("docs/STATUS.md"))
         self.assertEqual(session_start.plan_lines(None, None, layout),
                          ["Plan: none found in STATUS.md."])
 
@@ -210,13 +210,15 @@ class TestGitAndCi(unittest.TestCase):
                          "Branch: main (up to date with origin/main)")
         self.assertEqual(session_start.branch_line(("x", "", 0, 0, "abc")), "Branch: x (no upstream)")
 
-    def test_changes_and_secretary_line(self):
+    def test_changes_and_managed_line(self):
         many = "\n".join(f"?? file{i}.txt" for i in range(17))
         lines = session_start.change_lines(lambda argv: " M docs/STATUS.md\n" + many)
         self.assertEqual(lines[0], "Uncommitted (18):")
         self.assertEqual(lines[1], "   M docs/STATUS.md")
         self.assertEqual(lines[16], "  … and 3 more")
-        self.assertTrue(lines[-1].startswith("Secretary edits waiting: docs/STATUS.md."))
+        self.assertTrue(lines[-1].startswith("Status and plan edits waiting: docs/STATUS.md."))
+        clean = session_start.change_lines(lambda argv: "")
+        self.assertTrue(clean[-1].startswith("Status and plan edits waiting: none."))
 
 
 MODEL_PLAN = PLAN.replace("### 1 — Fix\n", "### 1 — Fix\n\n### 31 — Harness\n\n"

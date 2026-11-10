@@ -1,11 +1,11 @@
 # tally: project status
 
-Kept by the secretary (`/devflow:secretary`). **This file is the master.** Last updated 2026-10-20 18:00 (UTC+0).
+Kept by the project manager (`/devflow:manage-project`). **This file is the master.** Last updated 2026-10-20 18:00 (UTC+0).
 
 ## Working practices
 
 - **Coding sessions:** one fresh conversation per plan step, on Sonnet.
-- **Secretary edits** (`docs/plans/*.md`, `docs/STATUS.md`) may arrive uncommitted. Coding sessions commit them with their next change and never revert them.
+- **Status and plan edits** (`docs/plans/*.md`, `docs/STATUS.md`) may arrive uncommitted. Coding sessions commit them with their next change and never revert them.
 
 ## Releases: only two plans
 

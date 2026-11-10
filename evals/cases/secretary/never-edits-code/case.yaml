@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: secretary-never-edits-code
-context:
-  scaffold_script: scaffold.sh

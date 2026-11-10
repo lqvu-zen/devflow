@@ -1,12 +1,12 @@
 # <Project> prompt book
 
-Paste-ready prompts for running <Project> with the devflow team. Replace anything in `{braces}`. Kept by the secretary (`/devflow:secretary`) next to `docs/STATUS.md`; it adds a prompt when a new one proves useful.
+Paste-ready prompts for running <Project> with the devflow team. Replace anything in `{braces}`. Kept by the project manager (`/devflow:manage-project`) next to `docs/STATUS.md`; it adds a prompt when a new one proves useful.
 
 **Which tab, which model:**
 
 | Tab | Model and effort | For |
 |---|---|---|
-| Secretary | Sonnet | `/devflow:secretary`: status, issues, decisions, plan steps |
+| Project manager | Sonnet | `/devflow:manage-project`: status, issues, decisions, plan steps |
 | Coding | Sonnet (high effort for the release test phase and releases) | one plan step per fresh tab |
 | Planning | Opus, high effort | a whole release plan, a big design question |
 
@@ -16,14 +16,14 @@ Open a new tab for each session. Switch the model from the model picker under th
 
 ## 1. Starting a session
 
-**Secretary, in Claude Code (once the plugin is installed):**
+**Project manager, in Claude Code (once the plugin is installed):**
 ```
-/devflow:secretary
+/devflow:manage-project
 ```
 
-**Secretary, in claude.ai or a Claude Code tab without the plugin:**
+**Project manager, in claude.ai or a Claude Code tab without the plugin:**
 ```
-You're my <Project> secretary: not the planner, and you never write code.
+You're my <Project> project manager: not the planner, and you never write code.
 You keep docs/STATUS.md (decisions, open items, issues) and add plan steps
 to docs/plans/ when I decide something. Read docs/STATUS.md, then check
 git log, gh issue list -R <owner/name> and the current plan's Status table
@@ -51,7 +51,7 @@ Do step {N} of docs/plans/release-{X.Y.Z}.md. Paste the step and its
 
 ---
 
-## 2. Planning (secretary tab, unless marked)
+## 2. Planning (project-manager tab, unless marked)
 
 **What should we do this week?**
 ```
@@ -85,7 +85,7 @@ Decision: {decision}. Log it, update the plans it affects, and give me the
 prompt for the coding session.
 ```
 
-**Turn a brief into a plan** (planning tab on Opus at high effort, or the secretary calling `devflow:planner`):
+**Turn a brief into a plan** (planning tab on Opus at high effort, or the project manager calling `devflow:planner`):
 ```
 Turn {docs/plans/release-X.Y.Z-brief.md} into docs/plans/release-{X.Y.Z}.md, in
 the format of {the latest plan in docs/archive/, or templates/plan.md}. Check every
@@ -150,7 +150,7 @@ Run devflow:tester on the {vX.Y.Z-rcN} artifacts, following Try it in
 Report PASS or FAIL per flow, with screenshots for failures.
 ```
 
-**Report what you found while using a release candidate** (secretary tab):
+**Report what you found while using a release candidate** (project-manager tab):
 ```
 While using {vX.Y.Z-rcN} I found: {what happened, steps, which download}.
 File it as a GitHub issue, triage it, and tell me whether it blocks
@@ -233,9 +233,9 @@ remove, archive or keep for each, and fix links in the same commit once I
 agree.
 ```
 
-**Review recent sessions for process escapes** (secretary tab; after a release, or every couple of weeks):
+**Review recent sessions for process escapes** (project-manager tab; after a release, or every couple of weeks):
 ```
-Review my last {15} sessions for process escapes, as the secretary skill
+Review my last {15} sessions for process escapes, as the manage-project skill
 describes: extract them to the scratchpad, read them in batches, and report
 each broken rule with how often, a short quote and its session id, and a
 proposed Harness escapes line. List the rules nobody needed. I'll approve each
@@ -255,14 +255,14 @@ I approve, then run every Verify command and the release gate.
 
 **Too much context in a coding tab:** finish the current step, then open a new tab with the "continue the plan" prompt from section 1.
 
-**A secretary edit got reverted** (coding tab):
+**A status or plan edit got reverted** (coding tab):
 ```
-The secretary's edit to {file} was reverted. Restore it from {where} and
-commit it; secretary edits to docs/STATUS.md and docs/plans/ are always
+The project manager's edit to {file} was reverted. Restore it from {where} and
+commit it; edits to docs/STATUS.md and docs/plans/ are always
 committed, never reverted.
 ```
 
-**Where did this decision come from?** (secretary tab):
+**Where did this decision come from?** (project-manager tab):
 ```
 Why did we decide {thing}? Find it in the decision log, and the commit or
 plan step that carried it out.

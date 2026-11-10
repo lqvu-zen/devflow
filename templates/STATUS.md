@@ -1,21 +1,21 @@
 # <Project>: project status
 
-Kept by the secretary (`/devflow:secretary`). **This file is the master.** Coding sessions **read** it but don't edit it: plan progress goes in each plan's own Status table. Last updated <YYYY-MM-DD HH:MM> (<UTC+N>).
+Kept by the project manager (`/devflow:manage-project`). **This file is the master.** Coding sessions **read** it but don't edit it: plan progress goes in each plan's own Status table. Last updated <YYYY-MM-DD HH:MM> (<UTC+N>).
 
 ## Roles
 
 - **<Maintainer> (maintainer):** decides, merges, picks version numbers, uses each release candidate, runs the manual checks, reviews the behaviour map.
 - **Coding sessions:** Claude Code running `/devflow:add-feature`, `/devflow:fix-bug` and `/devflow:release` with the `devflow:*` agents (locator, designer, implementer, reviewer, tester).
-- **Secretary:** `/devflow:secretary`. Keeps this file, the decision log and the open items; checks GitHub issues; writes plan steps when the maintainer decides something. Never writes code; commits only its own doc files and never pushes.
-- **Planner:** the `devflow:planner` agent, called by the secretary for a whole plan or a big feature.
+- **Project manager:** `/devflow:manage-project`. Keeps this file, the decision log and the open items; checks GitHub issues; writes plan steps when the maintainer decides something. Never writes code; commits only its own doc files and never pushes.
+- **Planner:** the `devflow:planner` agent, called by the project manager for a whole plan or a big feature.
 
 ## Working practices
 
 - **Coding sessions:** one fresh conversation per plan step, on Sonnet; the agents' models come from the board in `.claude/devflow.json` (the plugin's pins where it says `default`); `python <plugin>/tools/model_check.py --board` shows them. The prompt to continue, which names no plan file:
   > Read docs/STATUS.md to find the current plan, then continue with its next open step in Order that is not already in progress. Claim it first, and update the Status table when it's done.
-- **The secretary:** run `/devflow:secretary` at the start of each working day, so this file catches up with the plans' Status tables and the git log.
+- **The project manager:** run `/devflow:manage-project` at the start of each working day, so this file catches up with the plans' Status tables and the git log.
 - **Prompts:** paste-ready prompts for every kind of session are in `docs/PROMPTS.md`.
-- **Secretary edits** (`docs/plans/*.md`, `docs/STATUS.md`) may arrive uncommitted. Coding sessions commit them with their next change and never revert them.
+- **Status and plan edits** (`docs/plans/*.md`, `docs/STATUS.md`) may arrive uncommitted. Coding sessions commit them with their next change and never revert them.
 
 ## Releases: only two plans
 

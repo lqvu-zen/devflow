@@ -109,7 +109,7 @@ How the tester agent uses a built candidate the way a user would:
 
 ## Standing rules
 
-Rules from the decision log that every session keeps (the secretary adds to these):
+Rules from the decision log that every session keeps (the project manager adds to these):
 
 - Few release plans: the current one and the next at most.
 - The version number is the maintainer's.

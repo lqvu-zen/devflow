@@ -1,6 +1,6 @@
 # <Project> vX.Y.Z: <one-line theme>
 
-_Created <YYYY-MM-DD> by the secretary from <the brief / the maintainer's decisions>. Replaces <nothing / the earlier plan>. Each code step goes through the devflow agent team via its skill._
+_Created <YYYY-MM-DD> by the project manager from <the brief / the maintainer's decisions>. Replaces <nothing / the earlier plan>. Each code step goes through the devflow agent team via its skill._
 
 ## Goals
 
@@ -60,7 +60,7 @@ Bug fixes first: 1. Then 2. Then 3, the release, through the candidate phase.
 
 ## Parallel lanes and merging
 
-_Keep this section only when two tabs will work at once. The secretary keeps it up to date._ When two lanes run at once:
+_Keep this section only when two tabs will work at once. The project manager keeps it up to date._ When two lanes run at once:
 
 1. One worktree and branch per lane (`lane/a`, `lane/b`), each made from the main branch.
 2. A lane edits only its own rows of the Status table, and only its own new `docs/BEHAVIOUR.md` entries.

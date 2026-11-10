@@ -50,8 +50,8 @@ class Rules(NamedTuple):
     key_word: re.Pattern
     key_path: re.Pattern
     key_end: re.Pattern
-    secretary_paths: tuple[str, ...]
-    secretary_names: str
+    managed_paths: tuple[str, ...]
+    managed_names: str
     whole_tree: frozenset[str]
     self_guarding: tuple[str, ...]
     maintainer_only: tuple[tuple[str, tuple[str, ...]], ...]
@@ -292,9 +292,9 @@ def rules_from(config: Mapping[str, Any], env: Mapping[str, str]) -> Rules:
         else "docs/STATUS.md"
     plans_dir = config.get("plans_dir") if isinstance(config.get("plans_dir"), str) \
         else "docs/plans"
-    secretary = tuple(p for p in (_relative_form(status_file), _relative_form(plans_dir)) if p)
+    managed = tuple(p for p in (_relative_form(status_file), _relative_form(plans_dir)) if p)
     whole_tree = set(ALWAYS_WHOLE_TREE)
-    for path in secretary:
+    for path in managed:
         if "/" in path:
             top = path.split("/", 1)[0]
             whole_tree.update({top, top + "/", "./" + top, "./" + top + "/"})
@@ -315,8 +315,8 @@ def rules_from(config: Mapping[str, Any], env: Mapping[str, str]) -> Rules:
         key_word=key_word,
         key_path=key_path,
         key_end=key_end,
-        secretary_paths=secretary,
-        secretary_names=" and ".join(
+        managed_paths=managed,
+        managed_names=" and ".join(
             p for p in (status_file, plans_dir.rstrip("/\\") + "/" if plans_dir else "") if p),
         whole_tree=frozenset(whole_tree),
         self_guarding=tuple(_relative_form(s) for s in
@@ -1021,7 +1021,7 @@ def _dirty_reason(what: str, dirty: Callable[[], list[str]]) -> str | None:
     files = dirty()
     if not files:
         return None
-    return (f"guard.py refused: {what} would discard uncommitted secretary edits "
+    return (f"guard.py refused: {what} would discard uncommitted status and plan edits "
             f"({', '.join(files)}). Commit them with your next change; never revert them.")
 
 
@@ -1033,29 +1033,30 @@ def _bare_file(form: str) -> bool:
     return "/" not in form and bool(re.search(r"\.\w+$", form))
 
 
-def reverts_secretary_files(words: list[str], dirty: Callable[[], list[str]],
-                            prefix: str | None, rules: Rules) -> str | None:
-    names = rules.secretary_names
+def reverts_managed_files(words: list[str], dirty: Callable[[], list[str]],
+                          prefix: str | None, rules: Rules) -> str | None:
+    names = rules.managed_names
     if words and command_name(words[0]) == "xargs":
         inner = _git(_after_xargs(words))
         if inner and inner[0] in ("checkout", "restore"):
             return (f"guard.py refused: `git checkout` / `git restore` fed by xargs can revert "
-                    f"{names} (secretary edits); name the paths yourself.")
+                    f"{names} (status and plan edits); name the paths yourself.")
         return None
     found = _git(words)
     if found is None:
         return None
     sub, args, directory = found
     if sub == "reset" and "--hard" in args:
-        return "guard.py refused: `git reset --hard` discards uncommitted secretary edits; never run it."
+        return ("guard.py refused: `git reset --hard` discards uncommitted status and plan "
+                "edits; never run it.")
     if sub in ("checkout", "restore"):
         base = posixpath.join(prefix or "", directory) if prefix is not None else directory
         paths, after = _pathspec(args)
         for path in paths:
             form = _path_form(path, base)
-            if any(form.startswith(p) or "/" + p in form for p in rules.secretary_paths):
-                return (f"guard.py refused: `git {sub}` on {path} reverts a secretary edit "
-                        f"({names} are the secretary's; commit them, never revert).")
+            if any(form.startswith(p) or "/" + p in form for p in rules.managed_paths):
+                return (f"guard.py refused: `git {sub}` on {path} reverts a status or plan edit "
+                        f"({names} belong to `manage-project`; commit them, never revert).")
             if "$(" in path or "`" in path:
                 return (f"guard.py refused: `git {sub}` fed by a command substitution can revert "
                         f"{names}; name the paths yourself.")
@@ -1339,7 +1340,7 @@ def _segment_verdict(segment: Segment, rules: Rules, assigned: dict[str, str],
         if not app.isolate_env or any(_not_isolated(assigned.get(v), app, places)
                                       for v in app.isolate_env):
             return Verdict("deny", app_message(rules)), False
-    reason = reverts_secretary_files(expanded, dirty, location.relative, rules)
+    reason = reverts_managed_files(expanded, dirty, location.relative, rules)
     if reason:
         return Verdict("deny", reason), False
     what = publishing(expanded) if rules.release_stamp is not None else None
@@ -1358,13 +1359,13 @@ def _segment_verdict(segment: Segment, rules: Rules, assigned: dict[str, str],
 
 
 def command_verdict(command: str, shell: str, rules: Rules,
-                    secretary_dirty: Callable[[], list[str]]) -> Verdict:
+                    managed_dirty: Callable[[], list[str]]) -> Verdict:
     assigned: dict[str, str] = {}
     location = Location(rules.places.project)
     tainted = False
     asked: Verdict | None = None
     for segment in segments(command, shell):
-        verdict, tainted_out = _segment_verdict(segment, rules, assigned, secretary_dirty,
+        verdict, tainted_out = _segment_verdict(segment, rules, assigned, managed_dirty,
                                                 tainted and segment.piped, location)
         if verdict.kind == "deny":
             return verdict
@@ -1396,12 +1397,12 @@ def file_verdict(path: str, rules: Rules, reading: bool = False) -> Verdict:
 
 
 def decide(tool_name: str, tool_input: Mapping, env: Mapping[str, str],
-           secretary_dirty: Callable[[], list[str]], config: Mapping[str, Any]) -> Verdict:
+           managed_dirty: Callable[[], list[str]], config: Mapping[str, Any]) -> Verdict:
     rules = rules_from(config, env)
     if tool_name in ("Bash", "PowerShell"):
         command = tool_input.get("command") or ""
         shell = "bash" if tool_name == "Bash" else "powershell"
-        return command_verdict(command, shell, rules, secretary_dirty)
+        return command_verdict(command, shell, rules, managed_dirty)
     if tool_name in READ_TOOLS:
         keys = {"Read": ("file_path",), "Grep": ("path", "glob"), "Glob": ("path", "pattern")}
         for key in keys[tool_name]:
@@ -1417,7 +1418,7 @@ def decide(tool_name: str, tool_input: Mapping, env: Mapping[str, str],
     return ALLOW
 
 
-def secretary_files(config: Mapping[str, Any]) -> list[str]:
+def managed_files(config: Mapping[str, Any]) -> list[str]:
     status_file = config.get("status_file") if isinstance(config.get("status_file"), str) \
         else "docs/STATUS.md"
     plans_dir = config.get("plans_dir") if isinstance(config.get("plans_dir"), str) \
@@ -1425,7 +1426,7 @@ def secretary_files(config: Mapping[str, Any]) -> list[str]:
     return [p for p in (status_file, plans_dir) if p]
 
 
-def secretary_changes(project_dir: str, paths: list[str]) -> list[str]:
+def managed_changes(project_dir: str, paths: list[str]) -> list[str]:
     try:
         result = subprocess.run(
             ["git", "status", "--porcelain", "--", *paths],
@@ -1458,7 +1459,7 @@ def main() -> int:
         if config is None:
             return 0
         verdict = decide(data.get("tool_name", ""), data.get("tool_input") or {}, os.environ,
-                         lambda: secretary_changes(project, secretary_files(config)), config)
+                         lambda: managed_changes(project, managed_files(config)), config)
     except Exception as error:
         verdict = Verdict("ask", f"guard.py failed: {type(error).__name__}: {error} -- not checked")
     if verdict.kind == "deny":

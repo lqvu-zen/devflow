@@ -430,7 +430,7 @@ class TestBoard(BoardFixture):
             "reviewer": ["opus", "high", "floor (board said sonnet, medium)"],
             "planner": ["opus", "high", "pin"],
             "tester": ["sonnet", "medium", "board"],
-            "secretary.readers": ["sonnet", "-", "default"],
+            "manage-project.readers": ["sonnet", "-", "default"],
         }
         for key, cells in expected.items():
             self.assertEqual(table[key][1:4], cells, key)
@@ -441,7 +441,7 @@ class TestBoard(BoardFixture):
         self.assertEqual(table["designer"][4], 'model: "sonnet", effort: "medium"')
         self.assertEqual(table["designer.diagnosis"][4], 'model: "opus", effort: "high"')
         self.assertEqual(table["implementer.escalate"][4], 'model: "opus", effort: "high"')
-        self.assertEqual(table["secretary.readers"][4], 'model: "sonnet"')
+        self.assertEqual(table["manage-project.readers"][4], 'model: "sonnet"')
         for key in ("locator", "implementer", "reviewer", "planner", "tester"):
             self.assertEqual(table[key][4], "nothing", key)
         self.assertEqual(table["orchestrator"][4], "session model, set with /model; this session's model was not read")

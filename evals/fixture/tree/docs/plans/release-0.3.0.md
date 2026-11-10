@@ -1,6 +1,6 @@
 # tally v0.3.0: median, JSON output and an empty-list fix
 
-_Created 2026-10-20 by the secretary from Ada's decisions. Each code step goes through the devflow agent team via its skill._
+_Created 2026-10-20 by the project manager from Ada's decisions. Each code step goes through the devflow agent team via its skill._
 
 ## Goals
 

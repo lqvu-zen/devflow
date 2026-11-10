@@ -30,7 +30,7 @@ class Layout:
         self.models = config.get("models")
         self.has_board = "models" in config
 
-    def is_secretary_path(self, path: str) -> bool:
+    def is_managed_path(self, path: str) -> bool:
         form = path.replace("\\", "/")
         return (form == self.status_file or form.startswith(self.plans_dir + "/")
                 or form == self.plans_dir)
@@ -108,12 +108,12 @@ def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
         result += [f"  {line}" for line in lines[:MAX_CHANGES]]
         if len(lines) > MAX_CHANGES:
             result.append(f"  … and {len(lines) - MAX_CHANGES} more")
-    secretary = [_path_of(line) for line in lines if layout.is_secretary_path(_path_of(line))]
-    if secretary:
-        result.append(f"Secretary edits waiting: {', '.join(secretary)}. Commit them with your "
-                      "next change; never revert them.")
+    managed = [_path_of(line) for line in lines if layout.is_managed_path(_path_of(line))]
+    if managed:
+        result.append(f"Status and plan edits waiting: {', '.join(managed)}. Commit them with "
+                      "your next change; never revert them.")
     else:
-        result.append("Secretary edits waiting: none. (When listed: commit them with your next "
+        result.append("Status and plan edits waiting: none. (When listed: commit them with your next "
                       "change; never revert them.)")
     return result
 

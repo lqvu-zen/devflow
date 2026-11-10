@@ -1,4 +1,0 @@
-schema_version: "1.1"
-name: secretary-new-step-has-a-files-line
-context:
-  scaffold_script: scaffold.sh

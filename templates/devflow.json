@@ -41,6 +41,6 @@
     "reviewer": "default",
     "planner": "default",
     "tester": "default",
-    "secretary.readers": "default"
+    "manage-project.readers": "default"
   }
 }

@@ -25,13 +25,6 @@
   "review-ui-design-system-choice-not-reported": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
   "review-ui-game-finds-hud-and-focus": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
   "review-ui-web-finds-planted-issues": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "secretary-flaky-fix-goes-first": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
-  "secretary-never-edits-code": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
-  "secretary-never-pushes": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
-  "secretary-new-step-has-a-files-line": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
-  "secretary-no-unbacked-done": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
-  "secretary-session-review-finds-no-sessions": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
-  "secretary-version-is-the-maintainers": {"commit": "ffc682b23f691e00e78f7b41dbd8f91123f009f0", "date": "2026-10-28", "runs": 1},
   "trigger-add-feature-1-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
   "trigger-add-feature-2-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
   "trigger-add-feature-3-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
@@ -56,11 +49,5 @@
   "trigger-review-ui-4-near-miss": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
   "trigger-review-ui-5-near-miss": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
   "trigger-review-ui-6-near-miss": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-review-ui-7-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-secretary-1-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-secretary-2-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-secretary-3-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-secretary-4-near-miss": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-secretary-5-near-miss": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1},
-  "trigger-secretary-6-near-miss": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1}
+  "trigger-review-ui-7-fires": {"commit": "3b3416fd7179ea97571beca0c68e43af80ed1ed8", "date": "2026-11-03", "runs": 1}
 }

@@ -1,6 +1,6 @@
 ---
 name: release
-description: 'Cut a release the devflow way, through a release candidate: ask the maintainer for the version, commit it, build every artifact, pass the release gate, publish vX.Y.Z-rcN as a pre-release, have the tester agent and the maintainer test it, then promote the same commit to vX.Y.Z after a fresh release review. Reads the build, gate, publish and lineup details from the Release section of .claude/devflow.md. Use whenever the user wants to ship: "cut a release", "release v1.6.5", "make a release candidate", "cut an rc", "promote the rc", "publish a new version", "ship it", "tag a release". Do NOT use it to write features (add-feature), fix bugs (fix-bug), or for status (secretary).'
+description: 'Cut a release the devflow way, through a release candidate: ask the maintainer for the version, commit it, build every artifact, pass the release gate, publish vX.Y.Z-rcN as a pre-release, have the tester agent and the maintainer test it, then promote the same commit to vX.Y.Z after a fresh release review. Reads the build, gate, publish and lineup details from the Release section of .claude/devflow.md. Use whenever the user wants to ship: "cut a release", "release v1.6.5", "make a release candidate", "cut an rc", "promote the rc", "publish a new version", "ship it", "tag a release". Do NOT use it to write features (add-feature), fix bugs (fix-bug), or for status (manage-project).'
 ---
 
 # Releasing
@@ -56,7 +56,7 @@ git status --porcelain && gh run list -L 3 --json conclusion,status,headSha,disp
   --jq '.[] | "\(.status)\t\(.conclusion // "-")\t\(.headSha[0:7])\t\(.displayTitle)"'
 ```
 
-The tree must be clean and HEAD must have a **successful** run. Wait for a run still in progress (`gh run watch <id> --exit-status`). Triage a red run as in `fix-bug` ("When the bug is a red CI run") before treating it as a blocker; a flaky run is rerun once with `gh run rerun <id> --failed`, and if it goes green you carry on with your task and tell the maintainer that the flaky test's fix is the next step; the secretary adds it first in Order. If the candidate commit's CI went green only on a rerun, the release report says so. Any other failure is a stop.
+The tree must be clean and HEAD must have a **successful** run. Wait for a run still in progress (`gh run watch <id> --exit-status`). Triage a red run as in `fix-bug` ("When the bug is a red CI run") before treating it as a blocker; a flaky run is rerun once with `gh run rerun <id> --failed`, and if it goes green you carry on with your task and tell the maintainer that the flaky test's fix is the next step, first in Order. If the candidate commit's CI went green only on a rerun, the release report says so. Any other failure is a stop.
 
 Then check the latest published tags (`gh release list -R <repo> -L 5`) and **ask the maintainer for the version number X.Y.Z, and wait for the answer** before changing anything. You may suggest one (patch for fixes, minor for notable features), but the maintainer names it. A bare "release" or "go ahead" is not approval of a version suggested earlier in the conversation. Work out N. Gather release notes; if the maintainer didn't give any, draft them from `git log <last final tag>..HEAD --oneline` and show them for approval. Notes are for users, not a changelog: say what changed for someone using the product, and flag anything that will behave differently.
 
@@ -186,7 +186,7 @@ awk -F'|' -v title=2 -v status=3 '/^## Status/{t=1} t && /^\| [0-9]+ /{s=tolower
 grep -n -i '\[ \]\|needs a human' $plan
 ```
 
-Any output means the plan is **not** complete: leave it where it is and list the open rows in the report. When it prints nothing, archive it. Where the plan is committed, `git mv` the plan (and its brief, if any) into `docs/archive/`, point every reference at the archived path, commit only those paths as `docs: archive release-X.Y.Z plan`, and push. Where the plan is gitignored, `mv` it (and its brief) into `docs/archive/` instead (`mkdir -p docs/archive` first), point every reference at the archived path, and commit only the references git tracks, by path, under the same title, and push; when none is tracked, commit and push nothing. Moving a finished plan is the one change to a plan file beyond its row and Tried line. The status file is left to the secretary.
+Any output means the plan is **not** complete: leave it where it is and list the open rows in the report. When it prints nothing, archive it. Where the plan is committed, `git mv` the plan (and its brief, if any) into `docs/archive/`, point every reference at the archived path, commit only those paths as `docs: archive release-X.Y.Z plan`, and push. Where the plan is gitignored, `mv` it (and its brief) into `docs/archive/` instead (`mkdir -p docs/archive` first), point every reference at the archived path, and commit only the references git tracks, by path, under the same title, and push; when none is tracked, commit and push nothing. Moving a finished plan is the one change to a plan file beyond its row and Tried line. The status file is left to `manage-project`.
 
 ### B8. Report
 

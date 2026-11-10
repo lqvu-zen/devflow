@@ -5,23 +5,23 @@
     "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md", "skills/review-ui/references/core.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py"],
     "release": ["skills/release/", "skills/add-feature/SKILL.md", "agents/tester.md", "agents/reviewer.md", "tools/model_check.py"],
     "review-ui": ["skills/review-ui/"],
-    "secretary": ["skills/secretary/", "agents/planner.md", "tools/model_check.py"]
+    "manage-project": ["skills/manage-project/","agents/planner.md", "tools/model_check.py"]
   },
   "near_misses": {
     "add-feature-4-near-miss": "fix-bug",
     "add-feature-5-near-miss": "release",
-    "add-feature-6-near-miss": "secretary",
+    "add-feature-6-near-miss": "manage-project",
     "fix-bug-4-near-miss": "add-feature",
     "fix-bug-5-near-miss": "release",
-    "fix-bug-6-near-miss": "secretary",
+    "fix-bug-6-near-miss": "manage-project",
     "release-4-near-miss": "add-feature",
     "release-5-near-miss": "fix-bug",
-    "release-6-near-miss": "secretary",
+    "release-6-near-miss": "manage-project",
     "review-ui-4-near-miss": "add-feature",
     "review-ui-5-near-miss": "fix-bug",
     "review-ui-6-near-miss": null,
-    "secretary-4-near-miss": "add-feature",
-    "secretary-5-near-miss": "fix-bug",
-    "secretary-6-near-miss": "release"
+    "manage-project-4-near-miss": "add-feature",
+    "manage-project-5-near-miss": "fix-bug",
+    "manage-project-6-near-miss": "release"
   }
 }

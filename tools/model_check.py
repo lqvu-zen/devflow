@@ -30,7 +30,7 @@ BOARD_KEY = "models"
 DEFAULT_WORD = "default"
 BOARD_VALUE = re.compile(r"^\s*([A-Za-z]+)\s*(?:,\s*([A-Za-z]+)\s*)?$")
 BOARD_KEYS = ("orchestrator", "locator", "designer", "designer.diagnosis", "implementer",
-              "implementer.escalate", "reviewer", "planner", "tester", "secretary.readers")
+              "implementer.escalate", "reviewer", "planner", "tester", "manage-project.readers")
 STEP_HEADING = re.compile(r"^###\s+(\d{1,3})(?!\d)")
 SESSION_PASS = "session model, set with /model"
 
@@ -44,7 +44,7 @@ class Expect(NamedTuple):
 PHASES = {"designer.diagnosis": ("designer", Expect("opus", "high", "default")),
           "implementer.escalate": ("implementer", Expect("opus", "medium", "default"))}
 GENERAL = {"orchestrator": Expect("sonnet", None, "default"),
-           "secretary.readers": Expect("sonnet", None, "default")}
+           "manage-project.readers": Expect("sonnet", None, "default")}
 DIAGNOSIS_FLOOR = Expect("opus", "high", "floor")
 
 

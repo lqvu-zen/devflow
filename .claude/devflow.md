@@ -4,7 +4,7 @@ The devflow skills and agents read this file for everything specific to this pro
 
 ## Project
 
-- **What it is:** a Claude Code plugin, and its own single-plugin marketplace. It ships a working method: skills that send each phase of a feature, bug fix or release to a fresh agent with a pinned model; a secretary that keeps the status file and plans; and hooks and a CI check that turn the process rules into checks. Maintainers of other projects install it from this repository and adopt it with `/devflow:setup`. RYOS keeps its own copies of these skills; devflow is the general version.
+- **What it is:** a Claude Code plugin, and its own single-plugin marketplace. It ships a working method: skills that send each phase of a feature, bug fix or release to a fresh agent with a pinned model; a project manager that keeps the status file and plans; and hooks and a CI check that turn the process rules into checks. Maintainers of other projects install it from this repository and adopt it with `/devflow:setup`. RYOS keeps its own copies of these skills; devflow is the general version.
 - **Repo:** lqvu-zen/devflow (main branch: `main`)
 - **Maintainer:** Vu Le-Quang (lqvu-zen), time zone UTC+7. They decide, name versions, and run the manual checks.
 - **Languages and stack:** Markdown (skills, agents, templates); Python 3.13, standard library only (hooks and tools); Node 22+ for `review-ui` only; bash for the hook commands and the eval scaffolds; GitHub Actions on Linux and Windows.
@@ -15,7 +15,7 @@ The devflow skills and agents read this file for everything specific to this pro
 |---|---|
 | Plugin manifest and version | `.claude-plugin/plugin.json` |
 | Marketplace entry | `.claude-plugin/marketplace.json` |
-| Workflow skills | `skills/{setup,add-feature,fix-bug,release,secretary}/SKILL.md` |
+| Workflow skills | `skills/{setup,add-feature,fix-bug,release,manage-project}/SKILL.md` |
 | UI review skill (standalone, Node) | `skills/review-ui/` (`vendor/` is third-party) |
 | Agents, with pinned model and effort | `agents/*.md` |
 | Hook registration | `hooks/hooks.json` |
@@ -36,7 +36,7 @@ The invariants that make this project work. Most "looked fine, broke in practice
 
 - **Python is standard library only, with no build step.** The hooks run in other people's projects as `uv run --no-project python …`, with no environment to install into. `review-ui` is the one exception (Node 22+ and a Chrome-family browser) and stays self-contained.
 - **Skills never hardcode a project's facts.** They read `.claude/devflow.md` by exact heading and paste sections verbatim into agent briefs. Renaming or removing a heading in `templates/devflow.md` breaks every skill that cites it; adding one is safe. (inferred from CLAUDE.md, please check the "adding is safe" half)
-- **A rule the skills share is written in the same words everywhere.** `fix-bug` and `release` reuse the `add-feature` pipeline, so a change to the stop rules, claiming a step, gates, the Files line, CI first or the verbatim-paste requirement is mirrored across `add-feature`, `fix-bug`, `release` and `secretary` in one change. A rule that drifts in one skill is a rule the agents get two ways.
+- **A rule the skills share is written in the same words everywhere.** `fix-bug` and `release` reuse the `add-feature` pipeline, so a change to the stop rules, claiming a step, gates, the Files line, CI first or the verbatim-paste requirement is mirrored across `add-feature`, `fix-bug`, `release` and `manage-project` in one change. A rule that drifts in one skill is a rule the agents get two ways.
 - **Each agent's model and effort default to its pin in `agents/*.md`; a project sets its own in the `models` board in `.claude/devflow.json`.** Every agent call passes what `tools/model_check.py --board` prints for its role and phase (nothing where the board and the pin agree), so one edit to the board changes every call in that project, and one edit to a pin changes every project that leaves that role on `default`. A step's `**Model:**` line or a design's part goes over the board; the locator, reviewer and planner never go below their pins, nor `fix-bug`'s diagnosis below Opus, high, whatever the board says.
 - **The hooks do nothing without `.claude/devflow.json`.** `hooks/hooks.json` gates each command on that file, so installing the plugin for a user account is safe. Keep that gate in every hook added.
 - **The guard never lets a call through unchecked.** An exception, a broken config, missing `uv` or a guard that can't start produces an `ask` ("not checked"), never a silent allow. A deny is exit 2 with a reason on stderr; an ask is a JSON `permissionDecision: "ask"` on stdout.
@@ -104,11 +104,11 @@ The maintainer's manual checks for every release:
 
 ## Standing rules
 
-Rules from the decision log that every session keeps (the secretary adds to these):
+Rules from the decision log that every session keeps (the project manager adds to these):
 
 - Few release plans: the current one and the next at most.
 - The version number is the maintainer's.
 - **devflow releases without a candidate** (2026-10-28): a `Release X.Y.Z` commit that changes both version files, a `vX.Y.Z` tag, and a GitHub release with notes, done by hand as the plan's release step. Don't run `/devflow:release` here: its runbook always cuts a candidate.
-- **The status file, plans, archive and prompt book stay local** (2026-10-28): `docs/STATUS.md`, `docs/plans/`, `docs/archive/` and `docs/PROMPTS.md` are gitignored. The secretary saves them and commits nothing; coding sessions never stage them.
+- **The status file, plans, archive and prompt book stay local** (2026-10-28): `docs/STATUS.md`, `docs/plans/`, `docs/archive/` and `docs/PROMPTS.md` are gitignored. The project manager saves them and commits nothing; coding sessions never stage them.
 - Every escaped bug adds its check.
 - Coding sessions: one fresh conversation per plan step.

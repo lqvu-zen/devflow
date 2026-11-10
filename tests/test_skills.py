@@ -15,7 +15,7 @@ STOP_RULES = "**Stop rules in the loop.**"
 ADD_FEATURE = SKILLS / "add-feature" / "SKILL.md"
 FIX_BUG = SKILLS / "fix-bug" / "SKILL.md"
 RELEASE = SKILLS / "release" / "SKILL.md"
-SECRETARY = SKILLS / "secretary" / "SKILL.md"
+MANAGE_PROJECT = SKILLS / "manage-project" / "SKILL.md"
 REVIEW_LIMIT = "A reviewer's BLOCKERS"
 TEMPLATES = ROOT / "templates"
 SETUP = SKILLS / "setup" / "SKILL.md"
@@ -55,9 +55,15 @@ SHARED_RULES = {
     "**Edit the plan one row at a time.**": BEFORE_YOU_START,
     "**Check CI on HEAD first**": BEFORE_YOU_START,
     "**Keep to the step's Files line.**": BEFORE_YOU_START,
-    "**Secretary edits.**": BEFORE_YOU_START,
+    "**Status and plan edits.**": BEFORE_YOU_START,
     "**Stop at a `**Gate:**` line.**": BEFORE_YOU_START,
 }
+MANAGER_OWNS = "## What you own, and what you never touch"
+MANAGER_PLAN_EDIT_RULE = (
+    "Edit plans with the Edit tool, a section at a time; never rewrite a plan file with Write, a script, "
+    "sed or a regex. A split, move or renumbering is a series of Edits, after a copy of the file to your "
+    "scratchpad."
+)
 LF_ONLY = re.compile(rb"(?<!\r)\n")
 
 
@@ -585,8 +591,8 @@ class TestSharedRules(unittest.TestCase):
             with self.subTest(lead_in):
                 self.assertEqual(_section_of(ADD_FEATURE, lead_in), heading)
 
-    def test_the_secretary_cites_every_heading_holding_a_shared_rule(self):
-        lines = [line for line in _reattached_text(SECRETARY).splitlines() if SHARED_LIST in line]
+    def test_the_project_manager_cites_every_heading_holding_a_shared_rule(self):
+        lines = [line for line in _reattached_text(MANAGE_PROJECT).splitlines() if SHARED_LIST in line]
         self.assertEqual(len(lines), 1)
         cited = {
             name
@@ -595,6 +601,9 @@ class TestSharedRules(unittest.TestCase):
             for name in names
         }
         self.assertEqual(set(SHARED_RULES.values()) - cited, set())
+
+    def test_the_project_manager_has_its_own_plan_edit_rule(self):
+        self.assertIn(MANAGER_PLAN_EDIT_RULE, _section(MANAGE_PROJECT, MANAGER_OWNS))
 
 
 MODEL_RULES = (
@@ -659,7 +668,7 @@ class TestModelRules(unittest.TestCase):
                 self.assertEqual(paragraph, _paragraph(FIX_BUG, lead_in))
 
     def test_the_board_rule_is_the_same_words_in_every_delegating_skill(self):
-        for path in (ADD_FEATURE, FIX_BUG, RELEASE, SECRETARY):
+        for path in (ADD_FEATURE, FIX_BUG, RELEASE, MANAGE_PROJECT):
             with self.subTest(path.parent.name):
                 paragraph = _paragraph(path, "**The model board.**")
                 self.assertTrue(paragraph.startswith(BOARD_RULE), paragraph)
@@ -689,9 +698,9 @@ class TestModelRules(unittest.TestCase):
     def test_no_line_says_the_designer_runs_at_high_effort(self):
         self.assertEqual(_high_designer_lines(), [])
 
-    def test_the_model_line_is_in_the_plan_template_and_the_secretary(self):
+    def test_the_model_line_is_in_the_plan_template_and_the_project_manager(self):
         self.assertIn("**Model:**", (TEMPLATES / "plan.md").read_text(encoding="utf-8"))
-        self.assertIn("**Model:**", _section(SECRETARY, "## Adding a plan step"))
+        self.assertIn("**Model:**", _section(MANAGE_PROJECT,"## Adding a plan step"))
 
     def test_parts_keep_the_stop_rules_and_one_review(self):
         paragraph = _paragraph(ADD_FEATURE, "**A design's parts.**")

@@ -1,6 +1,6 @@
 ---
 name: fix-bug
-description: 'Diagnose and fix a bug the devflow way: reproduce it, prove it with a failing test, find the root cause with a fresh Opus agent, fix it with a Sonnet agent, review with a fresh Opus agent, commit and push, and record the escape when the bug got past a release. Uses the project''s behaviour map and architecture rules from .claude/devflow.md. Use whenever the user reports the product misbehaves: a crash, traceback, freeze or hang, wrong output, a setting that doesn''t stick, a broken migration, "X used to work and now doesn''t", or a red CI run, even when they just describe the broken behaviour without saying "bug". Do NOT use it to add capabilities (use add-feature), to cut a release (use release), or for status and planning (use secretary).'
+description: 'Diagnose and fix a bug the devflow way: reproduce it, prove it with a failing test, find the root cause with a fresh Opus agent, fix it with a Sonnet agent, review with a fresh Opus agent, commit and push, and record the escape when the bug got past a release. Uses the project''s behaviour map and architecture rules from .claude/devflow.md. Use whenever the user reports the product misbehaves: a crash, traceback, freeze or hang, wrong output, a setting that doesn''t stick, a broken migration, "X used to work and now doesn''t", or a red CI run, even when they just describe the broken behaviour without saying "bug". Do NOT use it to add capabilities (use add-feature), to cut a release (use release), or for status and planning (use manage-project).'
 ---
 
 # Fixing a bug
@@ -72,7 +72,7 @@ and adds that check in the same commit. The designer names the missing check in 
 
 ## Before you start, and where you stop
 
-**Claim your step**, **check CI on HEAD first**, **commit secretary edits, never revert them**, **stop at a `**Gate:**` line**, **keep to the step's Files line** and **edit the plan one row at a time** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row before any work and, where the plan is committed, push that alone; a red CI on HEAD comes first; a step with a Files line edits and commits only those files and asks before touching another; a session that stops without finishing edits its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
+**Claim your step**, **check CI on HEAD first**, **commit status and plan edits, never revert them**, **stop at a `**Gate:**` line**, **keep to the step's Files line** and **edit the plan one row at a time** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row before any work and, where the plan is committed, push that alone; a red CI on HEAD comes first; a step with a Files line edits and commits only those files and asks before touching another; a session that stops without finishing edits its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
 
 **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
 
@@ -113,7 +113,7 @@ The failed run is the repro; the log is the traceback, so don't ask the user for
    gh run watch <id> --exit-status
    ```
 
-   If the rerun goes green, carry on with your task and tell the maintainer that the flaky test's fix is the next step; the secretary adds it first in Order. If the red run was the whole task, stop and report instead. If the rerun is red again, it is not flaky: go on to step 3.
+   If the rerun goes green, carry on with your task and tell the maintainer that the flaky test's fix is the next step, first in Order. If the red run was the whole task, stop and report instead. If the rerun is red again, it is not flaky: go on to step 3.
 
 3. **The breaking commit.** From the same listing, take the last run where the job passed and the first where it failed, then list what lies between:
 

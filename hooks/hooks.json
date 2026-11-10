@@ -1,5 +1,5 @@
 {
-  "description": "devflow guard (refuses writes to real data, touching or reading secrets and reverting secretary edits; asks before release and forced-push commands) and the session-start summary (branch, uncommitted files, CI on HEAD, the plan's next open step). Both do nothing in a project without .claude/devflow.json.",
+  "description": "devflow guard (refuses writes to real data, touching or reading secrets and reverting uncommitted status and plan edits; asks before release and forced-push commands) and the session-start summary (branch, uncommitted files, CI on HEAD, the plan's next open step). Both do nothing in a project without .claude/devflow.json.",
   "hooks": {
     "PreToolUse": [
       {
