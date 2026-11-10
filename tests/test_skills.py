@@ -747,5 +747,32 @@ class TestAttributionRule(unittest.TestCase):
                     self.assertNotIn(old, text)
 
 
+UV_CHECK = "**Check for `uv` first.**"
+UV_WORDS = (
+    "`uv --version`",
+    "`winget install astral-sh.uv`",
+    "`curl -LsSf https://astral.sh/uv/install.sh | sh`",
+    "https://docs.astral.sh/uv/getting-started/installation/",
+    "stop here, before reading the codebase or drafting anything",
+    "new terminal",
+    "`/devflow:setup` again",
+)
+
+
+class TestSetupChecksUv(unittest.TestCase):
+    def test_the_check_opens_the_first_step(self):
+        paragraph = _paragraph(SETUP, UV_CHECK)
+        self.assertTrue(paragraph.startswith(UV_CHECK), paragraph)
+        section = _section(SETUP, "## 1. See what is already there")
+        self.assertIn(paragraph, section)
+        self.assertLess(section.index(paragraph), section.index("Check, and report"))
+
+    def test_the_check_names_the_install_commands_and_the_rerun(self):
+        paragraph = _paragraph(SETUP, UV_CHECK)
+        for words in UV_WORDS:
+            with self.subTest(words):
+                self.assertIn(words, paragraph)
+
+
 if __name__ == "__main__":
     unittest.main()

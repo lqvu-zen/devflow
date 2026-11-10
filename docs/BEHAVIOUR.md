@@ -102,6 +102,7 @@ Each entry is one line the user would recognise, **every surface** it appears on
 | **TP-03** `/devflow:setup` writes nothing before the maintainer has seen the drafts. | SK | **untested** |
 | **TP-04** The template's `models` board has every entry `default` and parses with nothing ignored, and `/devflow:setup` copies it. The copying is untested, like TP-03. | TP SK | `tests/test_model_check.py::TestRealPins` |
 | **TP-05** The templates carry `"attribution": "none"` in `devflow.json`, Claude Code's `attribution` setting with empty `commit` and `pr` in `settings.json`, and the attribution step in `ci-devflow.yml` (devflow's own repo the same); `/devflow:setup` asks, recommending none, and for none writes both, otherwise leaves both out. The asking and writing are untested, like TP-03. | TP SK | `tests/test_checks.py::TestAttributionWiring` |
+| **TP-06** `/devflow:setup` runs `uv --version` before anything else; without `uv` it stops before reading or drafting anything, gives the install command (`winget install astral-sh.uv` on Windows, the official install script with its docs link on macOS and Linux) and says to rerun setup from a new terminal; with `uv` it carries on as before. Whether a session really stops is untested, like TP-03. | SK | `tests/test_skills.py::TestSetupChecksUv` (the wording) |
 
 ## 7. UI review
 
@@ -150,6 +151,6 @@ A process rule broken by a session (not a bug in the product) gets one line here
 ## Untested: backlog
 
 - **WF-06** two fix rounds, then "Still red": needs a fixture that fails only during implementation (see `README.md`, Skill evals, Known gap).
-- **TP-03** setup writes nothing before approval: an eval case.
+- **TP-03, TP-06** setup writes nothing before approval, and stops without `uv`: an eval case (a scaffold that hides `uv` from `PATH`).
 - **UI-02** `allow` list in `.claude/ui-review.json`: no eval or test yet.
 - **UI-01, UI-03, UI-04, UI-05** `review-ui`: phone and desktop width, never editing code, the platform fallback order, the game path's no-inspector, screenshots taken per See it working, the shared report format on the app and game paths, and running without a profile have no eval.

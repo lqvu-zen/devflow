@@ -74,7 +74,7 @@ Optional: put `.claude/ui-review.json` in the project to set the server URL, pag
 
 ## Requirements
 
-- `uv` on `PATH`. The hooks run as `uv run --no-project python …`, using only the standard library.
+- `uv` on `PATH`. The hooks run as `uv run --no-project python …`, using only the standard library. `/devflow:setup` checks for it first and, if it is missing, stops and gives the install command.
 - Node 22+ and Chrome, Edge or Chromium, only for `/devflow:review-ui` on a web page.
 - `git`. `gh`, logged in, for the CI line, issues and releases.
 - The hooks are run by `bash`. On Windows, that's the Git Bash that Claude Code uses.

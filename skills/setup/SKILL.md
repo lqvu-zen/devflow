@@ -16,6 +16,8 @@ Templates for everything are in the plugin's `templates/` folder, two folders up
 
 ## 1. See what is already there
 
+**Check for `uv` first.** Run `uv --version`. devflow's hooks run as `uv run --no-project python …`, so without `uv` the guard asks "not checked" on every guarded call and session start prints nothing. If the command is not found or fails, stop here, before reading the codebase or drafting anything, and give the maintainer the install command to run themselves (don't install it for them): on Windows `winget install astral-sh.uv`; on macOS and Linux `curl -LsSf https://astral.sh/uv/install.sh | sh` (other ways: https://docs.astral.sh/uv/getting-started/installation/). Then tell them to close Claude Code, open a new terminal so `PATH` picks up `uv`, start Claude Code there and run `/devflow:setup` again. There is no fallback to plain `python`.
+
 Check, and report in a few lines:
 
 - `.claude/devflow.md`, `.claude/devflow.json`: if they exist, this is a refresh. Read them, and change only what the maintainer asks for or what is now wrong.
