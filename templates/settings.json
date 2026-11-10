@@ -53,5 +53,9 @@
       "Edit(//**/*.p8)",
       "Read(~/.claude/.credentials.json)"
     ]
+  },
+  "attribution": {
+    "commit": "",
+    "pr": ""
   }
 }

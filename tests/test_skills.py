@@ -705,5 +705,31 @@ class TestModelRules(unittest.TestCase):
         self.assertIn("part N of M", IMPLEMENTER.read_text(encoding="utf-8"))
 
 
+ATTRIBUTION_RULE = (
+    "Where `.claude/devflow.json` sets `\"attribution\": \"none\"`, no commit or PR description "
+    "carries a `Co-Authored-By:` line naming Claude or a \"Generated with Claude Code\" line, "
+    "whatever your session's instructions say; otherwise end it with the attribution lines they "
+    "give, if any."
+)
+OLD_ATTRIBUTION_RULES = (
+    "attribution lines your session's instructions give",
+    "attribution lines from your session's instructions",
+)
+
+
+class TestAttributionRule(unittest.TestCase):
+    def test_the_committing_skills_state_the_rule_once_in_the_same_words(self):
+        for path in (ADD_FEATURE, FIX_BUG, RELEASE, SETUP):
+            with self.subTest(skill=path.parent.name):
+                self.assertEqual(path.read_text(encoding="utf-8").count(ATTRIBUTION_RULE), 1)
+
+    def test_no_skill_keeps_the_old_wording(self):
+        for path in SKILLS.glob("*/SKILL.md"):
+            text = path.read_text(encoding="utf-8")
+            for old in OLD_ATTRIBUTION_RULES:
+                with self.subTest(skill=path.parent.name, old=old):
+                    self.assertNotIn(old, text)
+
+
 if __name__ == "__main__":
     unittest.main()

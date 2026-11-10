@@ -150,7 +150,7 @@ If the reviewer reports BLOCKERS, fix them or delegate back to the implementer v
 
 ### 6. Commit and push
 
-Match the existing commit style (`git log --oneline -5`). Stage only the relevant files, by path; never what **Edit bounds** says is never staged, and never `git add -A`. End the message with the attribution lines your session's instructions give, if any. Push to the main branch when the project's rules or the user's standing preferences say so; otherwise ask.
+Match the commit style (`git log --oneline -5`). Stage only the relevant files, by path; never what **Edit bounds** says is never staged, and never `git add -A`. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any. Push to the main branch when the project's rules or the user's preferences say so; otherwise ask.
 
 Then watch CI on the pushed commit: `gh run list -L 1 --json databaseId,headSha` to find its run, and `gh run watch <id> --exit-status`. A red run makes its fix the next step, ahead of anything else; say so in the report.
 

@@ -39,6 +39,8 @@ The version changes **only here**, never per feature or fix, and never with a `-
 - N is one more than the highest number among the existing `vX.Y.Z-rc*` tags (`git tag -l "vX.Y.Z-rc*"`) and any `-rcN` already in the version files at HEAD; 1 when there is none. A failed candidate's number is never reused or re-tagged.
 - The commit titles are exactly `Release candidate X.Y.Z-rcN` and `Release X.Y.Z`. The `devflow_checks.py version` CI check fails any other commit that changes a version file, and fails a release commit that leaves any listed version file at another version.
 
+Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any.
+
 ## A. Release candidate
 
 **Claim your step before anything else**, when the release is a plan step: as in `add-feature` (this plugin's `skills/add-feature/SKILL.md`, "Before you start, and where you stop").

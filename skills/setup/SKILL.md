@@ -61,6 +61,7 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
    - `guard.self_guarding_scripts`: the project's own harnesses that protect real data themselves;
    - `guard.release_stamp` (`path`, `binds`, optional `gate`): only if the gate writes a stamp, or the maintainer wants it added to the gate now; the guard then refuses to publish a release without a stamp for the current HEAD and the current hash of `binds`. If the gate can't write one, leave the key out: publishing stays an ask. Record the choice in **Release** under **Stamp**;
    - `checks.version_files` (path and a regex whose group 1 is the version; `numbers_only` for files that take `X.Y.Z` only) and `checks.no_new_python_comments` (folders, Python only);
+   - `attribution`: ask whether commits and PR descriptions carry AI attribution (Claude's `Co-Authored-By:` trailer, the "Generated with Claude Code" footer), recommending none; for none keep the template's `"attribution": "none"`, otherwise remove the key;
    - `models`: copy the template's board as it is (every entry `default`) and tell the maintainer this is where every agent's model and effort are set; `python <plugin>/tools/model_check.py --board` shows what each resolves to.
 3. **`docs/BEHAVIOUR.md`** from `templates/BEHAVIOUR.md`. Start small and true: the surfaces the product really has, and the main areas with a few rows each, every row with the test that guards it today or **untested**. Tell the maintainer the map grows with every change from here on and that they should review it.
 4. **`docs/DESIGN.md`** and the **Design system** heading of the profile, if the project has a user interface. Copy `templates/DESIGN.md`.
@@ -69,8 +70,8 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
    - Fill **Platforms the project ships to** and **UI surfaces** in the profile from what the code and the behaviour map show. A project with no user interface gets neither the heading nor the file. An existing `docs/DESIGN.md` is kept as it is.
 5. **`docs/STATUS.md`** from `templates/STATUS.md`, and an empty `docs/plans/` and `docs/archive/` (a `.gitkeep` each). Skip any that already exist.
    - **`docs/PROMPTS.md`** from `templates/PROMPTS.md`, the prompt book, with the project's name, repo and tab names filled in. Keep the `{braces}` as they are: they are filled in when a prompt is pasted. An existing `docs/PROMPTS.md` is kept as it is.
-6. **`.claude/settings.json`**: merge `templates/settings.json`'s `ask` and `deny` lists into the existing file, keeping everything already there. Change `docs/STATUS.md` and `docs/plans` in the deny rules if `status_file` or `plans_dir` differ. New `ask` and `deny` rules need the maintainer's approval: list them and wait for a yes.
-7. **CI**, if the project has GitHub Actions and `checks` has anything in it: copy the plugin's `tools/devflow_checks.py` to `tools/devflow_checks.py` in the project, and add the job in `templates/ci-devflow.yml` to the main workflow.
+6. **`.claude/settings.json`**: merge `templates/settings.json`'s `ask` and `deny` lists into the existing file, keeping everything already there. Change `docs/STATUS.md` and `docs/plans` in the deny rules if `status_file` or `plans_dir` differ. Where `attribution` is `none`, also add the template's `attribution` key (Claude Code's setting; empty `commit` and `pr` strings turn off its trailer and footer: https://code.claude.com/docs/en/settings-reference.md); otherwise leave it out. New `ask` and `deny` rules and the `attribution` setting need the maintainer's approval: list them and wait for a yes.
+7. **CI**, if the project has GitHub Actions and `checks` has anything in it or `attribution` is `none`: copy the plugin's `tools/devflow_checks.py` to `tools/devflow_checks.py` in the project, and add the job in `templates/ci-devflow.yml` to the main workflow.
 8. **`CLAUDE.md`**: add the section in `templates/CLAUDE-section.md` (create the file if there is none). Don't rewrite the rest of it.
 
 ## 5. Check it works
@@ -84,6 +85,6 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
 
 ## 6. Commit
 
-Ask before committing. Stage only the files you wrote, by path, in one commit titled `Adopt devflow`, ending with the attribution lines your session's instructions give. Push only if the maintainer says so.
+Ask before committing. Stage only the files you wrote, by path, in one commit titled `Adopt devflow`. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any. Push only if the maintainer says so.
 
 Then tell the maintainer, in a few lines: what was written, what you inferred and they should check, the rules that need their eye (the architecture rules, the real-data folders, the new `ask` and `deny` rules), and the next step: `/devflow:secretary` to start the first plan, or `/devflow:add-feature` / `/devflow:fix-bug` for the work at hand.

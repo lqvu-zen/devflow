@@ -180,7 +180,7 @@ BLOCKERS get one more round, then stop and report.
 
 ### 6. Commit and push
 
-As in `add-feature` step 6: match the commit style, stage by path, attribution lines from your session's instructions, push per the project's rules, watch CI on the pushed commit, and set the plan step's Status row to `done` with the hash.
+As in `add-feature` step 6: match the commit style, stage by path, push per the project's rules, watch CI on the pushed commit, and set the plan step's Status row to `done` with the hash. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any.
 
 **Check the models.** Run the board command again without `--board`, with the same `--model` lines, `--escalated` if the implementer was escalated and `--diagnosis` in `fix-bug`. It lists each agent call's role, the model it ran on, its effort where recorded, and what was expected and from where. Put every mismatch, and what it could not read, in the report and the step's Status row.
 

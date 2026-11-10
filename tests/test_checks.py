@@ -57,16 +57,17 @@ class GitRepo:
             raise AssertionError(result.stderr)
         return result.stdout.strip()
 
-    def commit(self, title: str, files: dict[str, str | None]) -> str:
-        for name, body in files.items():
+    def commit(self, title: str, files: dict[str, str | None], body: str = "") -> str:
+        for name, text in files.items():
             path = self.folder / name
-            if body is None:
+            if text is None:
                 path.unlink()
                 continue
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(body, encoding="utf-8", newline="\n")
+            path.write_text(text, encoding="utf-8", newline="\n")
         self.git("add", "-A")
-        self.git("commit", "-q", "--allow-empty", "-m", title)
+        message = ["-m", title, "-m", body] if body else ["-m", title]
+        self.git("commit", "-q", "--allow-empty", *message)
         return self.git("rev-parse", "HEAD")
 
     def drop_object(self, rev: str) -> str:
@@ -275,6 +276,116 @@ class TestCommentCheck(_RepoCase):
         self.repo.drop_object("HEAD:app/c.py")
         with self.assertRaises(checks.GitError):
             self.problems()
+
+
+CLAUDE_TRAILER = "Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
+GENERATED_FOOTER = "🤖 Generated with [Claude Code](https://claude.com/claude-code)"
+
+
+class TestAttributionCheck(_RepoCase):
+    def setUp(self):
+        super().setUp()
+        self.base = self.repo.commit("Turn attribution off", {
+            ".claude/devflow.json": json.dumps({**CONFIG, "attribution": "none"})})
+
+    def set_attribution(self, value) -> None:
+        config = dict(CONFIG)
+        if value is not None:
+            config["attribution"] = value
+        self.base = self.repo.commit("Set attribution", {".claude/devflow.json": json.dumps(config)})
+
+    def problems(self) -> list[str]:
+        repo = str(self.tmp)
+        config = checks.checks_from(checks.load_config(repo))
+        commits = checks.commits_in(repo, checks.commit_range(repo, self.base, "HEAD"), "HEAD")
+        return checks.attribution_problems_in(repo, commits, config.no_attribution)
+
+    def run_cli(self) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(CHECKS_PATH), "attribution", "--base", self.base,
+                               "--head", "HEAD", "--repo", str(self.tmp)],
+                              capture_output=True, text=True, encoding="utf-8")
+
+    def test_a_claude_co_author_trailer_fails(self):
+        sha = self.repo.commit("feat: x", {"app/b.py": "b = 1\n"}, body=CLAUDE_TRAILER)
+        self.assertEqual(self.problems(), [
+            f'{sha[:7]} "feat: x" carries "{CLAUDE_TRAILER}", but .claude/devflow.json sets '
+            f'"attribution": "none" (.claude/devflow.json, attribution)'])
+
+    def test_the_generated_with_claude_code_footer_fails(self):
+        self.repo.commit("feat: x", {}, body=GENERATED_FOOTER)
+        problems = self.problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn(GENERATED_FOOTER, problems[0])
+
+    def test_a_plain_generated_with_claude_code_line_fails(self):
+        self.repo.commit("feat: x", {}, body="Generated with Claude Code")
+        self.assertEqual(len(self.problems()), 1)
+
+    def test_a_lower_case_trailer_fails(self):
+        self.repo.commit("feat: x", {}, body="co-authored-by: claude <noreply@anthropic.com>")
+        self.assertEqual(len(self.problems()), 1)
+
+    def test_a_plain_commit_passes(self):
+        self.repo.commit("feat: x", {"app/b.py": "b = 1\n"}, body="Explains the change.")
+        self.assertEqual(self.problems(), [])
+
+    def test_a_human_co_author_passes(self):
+        self.repo.commit("feat: x", {}, body="Co-Authored-By: Jane <jane@example.com>")
+        self.assertEqual(self.problems(), [])
+
+    def test_without_the_setting_or_with_another_value_every_commit_passes(self):
+        for value in (None, "default", False):
+            with self.subTest(value=value):
+                self.set_attribution(value)
+                self.repo.commit("feat: x", {}, body=f"{CLAUDE_TRAILER}\n\n{GENERATED_FOOTER}")
+                self.assertEqual(self.problems(), [])
+
+    def test_a_commit_before_the_base_is_not_read(self):
+        self.repo.commit("feat: old", {}, body=CLAUDE_TRAILER)
+        self.base = self.repo.commit("feat: new", {}, body="Clean.")
+        self.repo.commit("feat: newer", {"app/b.py": "b = 1\n"})
+        self.assertEqual(self.problems(), [])
+
+    def test_main_reports_and_exits(self):
+        self.repo.commit("feat: x", {}, body=CLAUDE_TRAILER)
+        result = self.run_cli()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn(f'carries "{CLAUDE_TRAILER}"', result.stdout)
+        self.set_attribution(None)
+        self.repo.commit("feat: y", {}, body=CLAUDE_TRAILER)
+        result = self.run_cli()
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, "attribution: ok (1 commits)"))
+
+    def test_only_none_turns_attribution_off(self):
+        self.assertTrue(checks.checks_from({"attribution": "none"}).no_attribution)
+        for value in ("None", "default", False, None, {"commit": ""}):
+            with self.subTest(value=value):
+                self.assertFalse(checks.checks_from({"attribution": value}).no_attribution)
+        self.assertFalse(checks.checks_from({}).no_attribution)
+
+    def test_a_crlf_message_is_read_line_by_line(self):
+        message = f"feat: x\r\n\r\nBody.\r\n{CLAUDE_TRAILER}\r\n{GENERATED_FOOTER}\r\n"
+        self.assertEqual(checks.attribution_lines(message), [CLAUDE_TRAILER, GENERATED_FOOTER])
+
+
+class TestAttributionWiring(unittest.TestCase):
+    STEP = 'devflow_checks.py attribution --base "$BASE" --head "$HEAD_SHA"'
+
+    def test_the_ci_files_run_the_check(self):
+        for path in (ROOT / "templates" / "ci-devflow.yml", ROOT / ".github" / "workflows" / "test.yml"):
+            with self.subTest(path=path.name):
+                self.assertIn(self.STEP, path.read_text(encoding="utf-8"))
+
+    def test_the_settings_turn_claude_code_attribution_off(self):
+        for path in (ROOT / "templates" / "settings.json", ROOT / ".claude" / "settings.json"):
+            with self.subTest(path=str(path)):
+                data = json.loads(path.read_text(encoding="utf-8"))
+                self.assertEqual(data["attribution"], {"commit": "", "pr": ""})
+
+    def test_the_devflow_configs_set_attribution_none(self):
+        for path in (ROOT / "templates" / "devflow.json", ROOT / ".claude" / "devflow.json"):
+            with self.subTest(path=str(path)):
+                self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["attribution"], "none")
 
 
 if __name__ == "__main__":

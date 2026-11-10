@@ -1,5 +1,5 @@
   devflow:
-    name: devflow (version bump, new comments)
+    name: devflow (version bump, new comments, AI attribution)
     runs-on: ubuntu-latest
     env:
       BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -16,3 +16,6 @@
 
       - name: No new comment lines in the listed folders
         run: uv run --no-project python tools/devflow_checks.py comments --base "$BASE" --head "$HEAD_SHA"
+
+      - name: No AI attribution where the project turned it off
+        run: uv run --no-project python tools/devflow_checks.py attribution --base "$BASE" --head "$HEAD_SHA"

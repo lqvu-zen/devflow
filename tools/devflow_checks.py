@@ -18,6 +18,10 @@ COMMENTS_RULE = "(.claude/devflow.md, Architecture rules)"
 DIRECTIVE = re.compile(r"#\s*(noqa|type:\s*ignore|pragma|pyright:|mypy:|ruff:|fmt:)", re.IGNORECASE)
 CODING = re.compile(r"^#.*coding[:=]\s*[-\w.]+")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
+ATTRIBUTION_RULE = "(.claude/devflow.json, attribution)"
+CLAUDE_TRAILER = re.compile(r"^[ \t]*co-authored-by:.*(claude|anthropic\.com)",
+                            re.IGNORECASE | re.MULTILINE)
+GENERATED_LINE = re.compile(r"^.*generated with \[?claude code", re.IGNORECASE | re.MULTILINE)
 
 
 class GitError(Exception):
@@ -34,6 +38,7 @@ class Checks(NamedTuple):
     version_files: tuple[VersionFile, ...]
     comment_dirs: tuple[str, ...]
     default_base: str
+    no_attribution: bool
 
 
 def checks_from(config: Mapping[str, Any]) -> Checks:
@@ -47,7 +52,7 @@ def checks_from(config: Mapping[str, Any]) -> Checks:
     dirs = tuple(d.replace("\\", "/") for d in section.get("no_new_python_comments") or []
                  if isinstance(d, str) and d)
     branch = config.get("main_branch") if isinstance(config.get("main_branch"), str) else "main"
-    return Checks(tuple(files), dirs, f"origin/{branch}")
+    return Checks(tuple(files), dirs, f"origin/{branch}", config.get("attribution") == "none")
 
 
 def load_config(repo: str) -> dict:
@@ -182,6 +187,31 @@ def version_problems_in(repo: str, commits: list[str],
     return problems
 
 
+def _message(repo: str, commit: str) -> str:
+    return git(repo, "log", "-1", "--format=%B", commit).replace("\r", "")
+
+
+def attribution_lines(message: str) -> list[str]:
+    lines = message.replace("\r", "").splitlines()
+    return [line.strip() for line in lines
+            if CLAUDE_TRAILER.match(line) or GENERATED_LINE.match(line)]
+
+
+def attribution_problems_in(repo: str, commits: list[str], off: bool) -> list[str]:
+    if not off:
+        return []
+    problems: list[str] = []
+    for commit in commits:
+        found = attribution_lines(_message(repo, commit))
+        if not found:
+            continue
+        label = f'{commit[:7]} "{_short_title(_title(repo, commit))}"'
+        for line in found:
+            problems.append(f'{label} carries "{line}", but .claude/devflow.json sets '
+                            f'"attribution": "none" {ATTRIBUTION_RULE}')
+    return problems
+
+
 def comment_tokens(source: str) -> list[tuple[int, str]]:
     found = []
     for token in tokenize.generate_tokens(io.StringIO(source).readline):
@@ -272,7 +302,7 @@ def comment_problems_in(repo: str, start: str | None, head: str,
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="devflow process checks for CI.")
-    parser.add_argument("check", choices=("version", "comments"))
+    parser.add_argument("check", choices=("version", "comments", "attribution"))
     parser.add_argument("--base", default="")
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--repo", default=".")
@@ -285,6 +315,8 @@ def main(argv: list[str] | None = None) -> int:
         commits = commits_in(args.repo, start, args.head)
         if args.check == "version":
             problems = version_problems_in(args.repo, commits, checks.version_files)
+        elif args.check == "attribution":
+            problems = attribution_problems_in(args.repo, commits, checks.no_attribution)
         else:
             problems = comment_problems_in(args.repo, start, args.head, checks.comment_dirs)
     except (GitError, OSError, ValueError) as error:
