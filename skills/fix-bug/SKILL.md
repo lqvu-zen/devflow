@@ -144,7 +144,7 @@ The brief gives the bug and its repro in a line or two plus the **Where things l
 ### 3. Diagnose the root cause and write a failing test
 
 ```
-Agent({ description: "Diagnose <bug>", subagent_type: "devflow:designer", model: "opus", effort: "high", prompt: <self-contained brief> })
+Agent({ description: "Diagnose <bug>", subagent_type: "devflow:designer", <the designer.diagnosis row's pass>, prompt: <self-contained brief> })
 ```
 
 Start the brief with **"Bug mode."** and paste, verbatim: the confirmed repro and expected/actual behaviour; any traceback; the **Where things live** table and the whole **Architecture rules** section; the excerpts and map rows from step 2; whether the bug escaped a release (and which); and: *"Find the ROOT CAUSE, not the symptom. Write a test that FAILS on the current code and will PASS once fixed. Do NOT write the fix. Produce the sections in your instructions, and if this is an escape, name the check that should have caught it."*

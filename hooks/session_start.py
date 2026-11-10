@@ -279,8 +279,8 @@ def plan_lines(plan: str | None, plan_md: str | None,
 
 def _read(path: Path) -> str | None:
     try:
-        return path.read_text(encoding="utf-8")
-    except OSError:
+        return path.read_text(encoding="utf-8-sig")
+    except (OSError, ValueError):
         return None
 
 

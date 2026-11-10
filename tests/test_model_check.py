@@ -596,6 +596,87 @@ class TestCheckAgainstBoard(BoardFixture):
         code, output = self.board("--run", str(self.base / "nowhere"))
         self.assertEqual(code, 2)
 
+    def test_a_board_that_moves_the_diagnosis_moves_what_the_call_passes(self):
+        self.write_board({"designer.diagnosis": "Opus, max"})
+        self.assertEqual(board_table(self.board()[1])["designer.diagnosis"][1:5],
+                         ["opus", "max", "board", 'model: "opus", effort: "max"'])
+        code, output = self.check("--diagnosis")
+        self.assertEqual(rows(output)["designer"][4], "opus, max (board)")
+
+
+class TestBoardFileEncoding(BoardFixture):
+    def config(self) -> Path:
+        return self.project / ".claude" / "devflow.json"
+
+    def test_a_board_with_a_byte_order_mark_loads(self):
+        self.config().write_text(json.dumps({"models": {"designer": "Sonnet, low"}}), encoding="utf-8-sig")
+        config, label = model_check.load_board_config(self.config())
+        self.assertEqual(config, {"models": {"designer": "Sonnet, low"}})
+        self.assertTrue(label.endswith('"models"'), label)
+        self.assertEqual(board_table(self.board()[1])["designer"][1:4], ["sonnet", "low", "board"])
+
+    def test_bad_json_or_bad_bytes_give_one_line(self):
+        session = make_board_session(self.base / "sessions")
+        for content, reason in ((b"{bad", "not JSON"), (b'{"models": "\xff"}', "not UTF-8")):
+            with self.subTest(reason):
+                self.config().write_bytes(content)
+                code, output = self.board()
+                self.assertEqual(code, 0, output)
+                header = output.splitlines()[0]
+                self.assertTrue(header.startswith("model board: "), header)
+                self.assertIn(reason, header)
+                self.assertIn("the plugin's pins", header)
+                code, output = run([str(session), "--agents", str(self.agents), "--config", str(self.config())])
+                first = output.splitlines()[0]
+                self.assertTrue(first.startswith("model_check: board: "), first)
+                self.assertIn(reason, first)
+
+    def test_status_and_plan_files_with_a_mark_or_bad_bytes(self):
+        status = self.project / "docs" / "STATUS.md"
+        status.write_text(STEP_STATUS, encoding="utf-8-sig")
+        self.assertIn("  step 12 (open): ", self.board()[1])
+        status.write_bytes(b"\xff\xfe\x00")
+        code, output = self.board()
+        self.assertEqual(code, 0, output)
+        self.assertIn("open steps with a Model line: none", output)
+
+
+class TestAgentsOffTheBoard(BoardFixture):
+    def setUp(self):
+        super().setUp()
+        (self.agents / "auditor.md").write_text("---\r\nname: auditor\r\nmodel: sonnet\r\neffort: low\r\n---\r\n",
+                                                encoding="utf-8")
+        folder = self.base / "sessions"
+        self.session = folder / "audit.jsonl"
+        _write_jsonl(self.session, [_call("x1", "auditor")])
+        _subagent(folder / "audit" / "subagents", "x1",
+                  {"agentType": "devflow:auditor", "toolUseId": "x1", "finished": True},
+                  [_reply("r-x1", "claude-sonnet-5-5", "low")])
+
+    def check(self, *extra: str) -> tuple[int, str]:
+        return run([str(self.session), "--agents", str(self.agents),
+                    "--config", str(self.project / ".claude" / "devflow.json"), *extra])
+
+    def test_an_agent_the_board_does_not_list_is_judged_against_its_pin(self):
+        code, output = self.check()
+        self.assertEqual(rows(output)["auditor"][4:], ["sonnet, low (pin)", "ok"])
+        self.assertEqual(code, 0, output)
+        self.assertEqual(board_table(self.board()[1])["auditor"][1:5], ["sonnet", "low", "pin", "nothing"])
+
+    def test_a_model_line_moves_an_agent_the_board_does_not_list(self):
+        code, output = self.check("--model", "auditor: Opus, high; x")
+        self.assertEqual(rows(output)["auditor"][4:], ["opus, high (Model line)", "MISMATCH"])
+        self.assertEqual(code, 1, output)
+
+
+class TestEscalatedWithoutABoard(Fixture):
+    def test_an_escalated_implementer_on_the_default_is_ok(self):
+        missing = str(self.base / "no-config.json")
+        code, output = self.check("--config", missing)
+        self.assertEqual(rows(output)["implementer"][4:], ["sonnet, medium (pin)", "MISMATCH"])
+        code, output = self.check("--config", missing, "--escalated")
+        self.assertEqual(rows(output)["implementer"][4:], ["opus, medium (default)", "ok"])
+
 
 class TestRealPins(unittest.TestCase):
     def test_reads_the_real_pins(self):

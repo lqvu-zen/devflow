@@ -206,13 +206,17 @@ def _floor_of(key: str, expect: Expect, pins: dict[str, Expect]) -> Expect | Non
     return None
 
 
-def _model_line_keys(role: str) -> list[str]:
-    return [key for key in BOARD_KEYS if agent_of(key) == role]
+def _model_line_keys(role: str, keys: tuple[str, ...]) -> list[str]:
+    return [key for key in keys if agent_of(key) == role]
 
 
 def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=()) -> tuple[list[Row], list[tuple[str, str]]]:
     defaults = board_defaults(pins)
     current = dict(defaults)
+    extra = tuple(role for role in sorted(pins) if role not in BOARD_KEYS)
+    keys = BOARD_KEYS + extra
+    for role in extra:
+        current[role] = pins[role]
     entries, ignored = read_board(config)
     notes: list[tuple[str, str]] = [("ignored", text) for text in ignored]
     for key, value in entries.items():
@@ -240,13 +244,13 @@ def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=()) -> t
             notes.append(("not followed", f"{text!r}: {reason}"))
             continue
         moved.add(role)
-        for key in _model_line_keys(role):
+        for key in _model_line_keys(role, keys):
             if key == "designer.diagnosis" and _below(expect, DIAGNOSIS_FLOOR):
                 notes.append(("not followed", f"{text!r} for designer.diagnosis: fix-bug's diagnosis may not "
                                               f"move below opus, high"))
                 continue
             current[key] = expect
-    rows = [Row(key, agent_of(key), current[key], "") for key in BOARD_KEYS]
+    rows = [Row(key, agent_of(key), current[key], "") for key in keys]
     accepted: list[Expect] = []
     for text in parts:
         try:
@@ -316,8 +320,8 @@ def _session_start():
 
 def _read_text(path: Path) -> str | None:
     try:
-        return path.read_text(encoding="utf-8")
-    except OSError:
+        return path.read_text(encoding="utf-8-sig")
+    except (OSError, ValueError):
         return None
 
 
@@ -396,15 +400,22 @@ def board_summary(config: object, pins: dict[str, Expect], step: int | None, ste
         said.append("board moves " + " and ".join(moves))
     said += [f"{row.key} kept on {shown(row.expect)} (floor)" for row in rows if row.source.startswith("floor")]
     if step is not None and step_lines:
-        roles = []
+        roles: list[str] = []
+        refused: list[str] = []
         for text in step_lines:
             try:
-                role, _expect = parse_model_line(text)
+                role, expect = parse_model_line(text)
             except ValueError:
-                role = "an unreadable role"
-            if role not in roles:
-                roles.append(role)
-        said.append(f"step {step}'s Model line moves {' and '.join(roles)}")
+                role, reason = "an unreadable role", "unreadable"
+            else:
+                reason = refusal(role, expect, pins) or ("second line" if role in roles else None)
+            found = refused if reason else roles
+            if role not in found:
+                found.append(role)
+        if roles:
+            said.append(f"step {step}'s Model line moves {' and '.join(roles)}")
+        if refused:
+            said.append(f"step {step}'s Model line for {' and '.join(refused)} is not followed")
     ignored = sum(1 for kind, _text in notes if kind == "ignored")
     if ignored:
         said.append(f"{ignored} {'entry' if ignored == 1 else 'entries'} ignored")
@@ -418,7 +429,7 @@ def board_summary(config: object, pins: dict[str, Expect], step: int | None, ste
 
 def expectations_from(rows: list[Row], escalated: bool = False, diagnosis: bool = False) -> dict[str, Expect]:
     by_key = {row.key: row.expect for row in rows}
-    chosen = {key: key for key in BOARD_KEYS if agent_of(key) == key}
+    chosen = {row.key: row.key for row in rows if row.agent == row.key}
     if escalated:
         chosen["implementer"] = "implementer.escalate"
     if diagnosis:
@@ -617,9 +628,11 @@ def config_path(source: str, given: str | None) -> Path:
 
 def load_board_config(path: Path) -> tuple[object, str]:
     try:
-        text = path.read_text(encoding="utf-8")
+        text = path.read_text(encoding="utf-8-sig")
     except OSError:
         return {}, f"{path} (no file; the plugin's pins)"
+    except ValueError as error:
+        return {}, f"{path} (not UTF-8: {error}; the plugin's pins)"
     try:
         config = json.loads(text)
     except ValueError as error:
@@ -707,6 +720,7 @@ def main(argv: list[str] | None = None) -> int:
     expectations = expectations_from(rows, args.escalated, args.diagnosis)
     parts = tuple(row.expect for row in rows if row.key.startswith("implementer part "))
     if not args.board:
+        print(f"model_check: board: {label}")
         for kind, text in notes:
             print(f"model_check: {kind}: {text}")
         return _check(args.source, root, args, expectations, parts)

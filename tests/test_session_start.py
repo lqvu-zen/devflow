@@ -79,6 +79,15 @@ class TestPlanReading(unittest.TestCase):
     def test_order_from_the_plan(self):
         self.assertEqual(session_start.step_order(PLAN), [1, 2, 3, 31, 32, 33, 4, 6, 5, 7, 12, 13])
 
+    def test_a_file_with_a_mark_or_bad_bytes(self):
+        path = Path(tempfile.mkdtemp(prefix="devflow-read-"))
+        self.addCleanup(shutil.rmtree, path, ignore_errors=True)
+        path = path / "STATUS.md"
+        path.write_bytes(b"\xff\xfe\x00")
+        self.assertIsNone(session_start._read(path))
+        path.write_bytes(b"\xef\xbb\xbfx\n")
+        self.assertEqual(session_start._read(path), "x\n")
+
     def test_a_bold_number_and_a_sentence_final_number(self):
         plan = "## Order\n\n1. First **12**, then 40.\n2. **Part B** 41 and 7.\n"
         self.assertEqual(session_start.step_order(plan), [12, 40, 41, 7])
@@ -248,6 +257,24 @@ class TestModelsLine(unittest.TestCase):
         self.assertEqual(self.line({"models": {}}, MODEL_PLAN),
                          f"Models: step 31's Model line moves implementer. {VIEW}")
         self.assertEqual(self.line({"models": {}}, PLAN), f"Models: board, every role on its default. {VIEW}")
+
+    def test_a_refused_model_line_is_marked(self):
+        refused = MODEL_PLAN.replace("implementer: Opus, medium; the download is subtle", "reviewer: Sonnet, high; cheap")
+        self.assertEqual(self.line({"models": {}}, refused),
+                         f"Models: step 31's Model line for reviewer is not followed. {VIEW}")
+        both = MODEL_PLAN.replace("**Model:** implementer: Opus, medium; the download is subtle\n",
+                                  "**Model:** implementer: Opus, medium; x\n**Model:** reviewer: Sonnet, high; y\n")
+        self.assertEqual(self.line({"models": {}}, both),
+                         f"Models: step 31's Model line moves implementer; step 31's Model line for reviewer "
+                         f"is not followed. {VIEW}")
+        twice = MODEL_PLAN.replace("**Model:** implementer: Opus, medium; the download is subtle\n",
+                                   "**Model:** implementer: Opus, medium; x\n**Model:** implementer: Opus, high; y\n")
+        self.assertEqual(self.line({"models": {}}, twice),
+                         f"Models: step 31's Model line moves implementer; step 31's Model line for implementer "
+                         f"is not followed. {VIEW}")
+        unreadable = MODEL_PLAN.replace("implementer: Opus, medium; the download is subtle", "implementer: Opus")
+        self.assertEqual(self.line({"models": {}}, unreadable),
+                         f"Models: step 31's Model line for an unreadable role is not followed. {VIEW}")
 
     def test_a_broken_board_gives_the_error_line(self):
         self.assertIn("1 entry ignored", self.line({"models": ["not", "an", "object"]}))

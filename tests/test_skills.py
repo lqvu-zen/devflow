@@ -691,7 +691,10 @@ class TestModelRules(unittest.TestCase):
             if line.startswith("effort:")
         ]
         self.assertEqual(effort, ["effort: medium"])
-        self.assertIn('effort: "high"', _designer_call(FIX_BUG))
+        diagnosis = _designer_call(FIX_BUG)
+        self.assertIn("designer.diagnosis", diagnosis)
+        self.assertNotIn('model: "', diagnosis)
+        self.assertNotIn('effort: "', diagnosis)
         self.assertIn(DESIGNER_CALL, _designer_call(ADD_FEATURE))
         self.assertNotIn("effort", _designer_call(ADD_FEATURE))
 
@@ -701,6 +704,10 @@ class TestModelRules(unittest.TestCase):
     def test_the_model_line_is_in_the_plan_template_and_the_project_manager(self):
         self.assertIn("**Model:**", (TEMPLATES / "plan.md").read_text(encoding="utf-8"))
         self.assertIn("**Model:**", _section(MANAGE_PROJECT,"## Adding a plan step"))
+
+    def test_escalation_names_the_board_entry(self):
+        self.assertIn("implementer.escalate", (ROOT / "agents" / "planner.md").read_text(encoding="utf-8"))
+        self.assertIn("implementer.escalate", _section(MANAGE_PROJECT, "## Adding a plan step"))
 
     def test_parts_keep_the_stop_rules_and_one_review(self):
         paragraph = _paragraph(ADD_FEATURE, "**A design's parts.**")

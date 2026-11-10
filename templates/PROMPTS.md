@@ -122,7 +122,8 @@ test and the map entry, and reference #{N} in the commit.
 **Work in an Escalate area:**
 ```
 {Feature or bug prompt from above.} This touches {an area the Escalate section
-of .claude/devflow.md names}: escalate the implementer to Opus at medium effort.
+of .claude/devflow.md names}: escalate the implementer to the board's `implementer.escalate` entry
+(Opus at medium effort by default).
 ```
 
 **An independent review of work that already landed:**
