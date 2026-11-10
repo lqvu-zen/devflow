@@ -18,5 +18,17 @@
       {"path": ".claude-plugin/marketplace.json", "pattern": "^      \"version\": \"([^\"]+)\"", "numbers_only": true}
     ],
     "no_new_python_comments": ["hooks/", "tools/", "tests/"]
+  },
+  "models": {
+    "orchestrator": "default",
+    "locator": "default",
+    "designer": "default",
+    "designer.diagnosis": "default",
+    "implementer": "default",
+    "implementer.escalate": "default",
+    "reviewer": "default",
+    "planner": "default",
+    "tester": "default",
+    "secretary.readers": "default"
   }
 }

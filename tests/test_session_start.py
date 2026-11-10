@@ -219,6 +219,62 @@ class TestGitAndCi(unittest.TestCase):
         self.assertTrue(lines[-1].startswith("Secretary edits waiting: docs/STATUS.md."))
 
 
+MODEL_PLAN = PLAN.replace("### 1 — Fix\n", "### 1 — Fix\n\n### 31 — Harness\n\n"
+                                           "**Model:** implementer: Opus, medium; the download is subtle\n")
+VIEW = f"Full view: python {ROOT / 'tools' / 'model_check.py'} --board"
+
+
+class TestModelsLine(unittest.TestCase):
+    def line(self, config: dict, plan_md: str | None = None) -> str:
+        return session_start.models_line(session_start.Layout(config), plan_md)
+
+    def test_no_board(self):
+        self.assertEqual(self.line({}), f"Models: the plugin's pins (no board in .claude/devflow.json). {VIEW}")
+
+    def test_a_board_that_moves_nothing(self):
+        self.assertEqual(self.line({"models": {"designer": "default", "reviewer": "Opus, high"}}),
+                         f"Models: board, every role on its default. {VIEW}")
+
+    def test_a_board_that_moves_a_role_and_hits_a_floor(self):
+        line = self.line({"models": {"designer": "Sonnet, medium", "reviewer": "Sonnet, medium", "x": "Opus"}})
+        self.assertEqual(line, "Models: board moves designer to sonnet, medium; reviewer kept on opus, high "
+                               f"(floor); 1 entry ignored. {VIEW}")
+
+    def test_the_next_steps_model_line(self):
+        self.assertEqual(session_start.next_open(session_start.step_order(MODEL_PLAN),
+                                                 session_start.step_states(MODEL_PLAN)), 31)
+        self.assertEqual(self.line({"models": {}}, MODEL_PLAN),
+                         f"Models: step 31's Model line moves implementer. {VIEW}")
+        self.assertEqual(self.line({"models": {}}, PLAN), f"Models: board, every role on its default. {VIEW}")
+
+    def test_a_broken_board_gives_the_error_line(self):
+        self.assertIn("1 entry ignored", self.line({"models": ["not", "an", "object"]}))
+        import model_check
+        original = model_check.board_summary
+
+        def broken(*args):
+            raise KeyError("models")
+
+        model_check.board_summary = broken
+        try:
+            line = self.line({"models": {}})
+        finally:
+            model_check.board_summary = original
+        self.assertEqual(line, f"Models: couldn't read the board (KeyError: 'models'). {VIEW}")
+
+    def test_report_runs_no_more_commands_with_a_board(self):
+        project = Path(tempfile.mkdtemp(prefix="devflow-models-"))
+        self.addCleanup(shutil.rmtree, project, ignore_errors=True)
+        counts = []
+        for config in ({}, {"models": {"designer": "Sonnet, medium"}}):
+            calls = []
+            text = session_start.report(lambda argv: calls.append(argv) or None, project,
+                                        session_start.Layout(config))
+            counts.append(len(calls))
+            self.assertIn("\nModels: ", text)
+        self.assertLessEqual(counts[1], counts[0])
+
+
 class TestMain(unittest.TestCase):
     def setUp(self):
         self.project = Path(tempfile.mkdtemp(prefix="devflow-session-"))
@@ -245,8 +301,18 @@ class TestMain(unittest.TestCase):
         self.assertTrue(result.stdout.startswith("Notes session start"))
         self.assertIn("Plan: none found in docs/STATUS.md.", result.stdout)
         self.assertIn("Run /devflow:setup", result.stdout)
+        self.assertIn("\nModels: the plugin's pins (no board in .claude/devflow.json). Full view: python ",
+                      result.stdout)
         (self.project / ".claude" / "devflow.md").write_text("# profile\n", encoding="utf-8")
         self.assertNotIn("Run /devflow:setup", self.run_hook().stdout)
+
+    def test_prints_the_models_line_for_a_board(self):
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_text(
+            json.dumps({"name": "Notes", "models": {"designer": "Sonnet, medium"}}), encoding="utf-8")
+        result = self.run_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("\nModels: board moves designer to sonnet, medium. Full view: python ", result.stdout)
 
 
 if __name__ == "__main__":

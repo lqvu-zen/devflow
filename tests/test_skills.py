@@ -598,12 +598,20 @@ class TestSharedRules(unittest.TestCase):
 
 
 MODEL_RULES = (
-    "Don't pass `model`",
+    "**The model board.**",
     "**A step's Model line.**",
     "**A design's parts.**",
     "**If the `devflow:*` agent types aren't listed**",
     "**Check the models.**",
 )
+BOARD_RULE = (
+    "**The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up "
+    "from this skill's base directory) prints each role's model and effort, where each comes from, and "
+    "what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing "
+    "where it shows nothing), and report each line it marks `floor` or `ignored`."
+)
+OLD_MODEL_RULE = "Don't pass `model`"
+OLD_ESCALATE_RULE = "except to escalate"
 DESIGNER_CALL = 'subagent_type: "devflow:designer"'
 DESIGNER = ROOT / "agents" / "designer.md"
 IMPLEMENTER = ROOT / "agents" / "implementer.md"
@@ -649,6 +657,24 @@ class TestModelRules(unittest.TestCase):
                 paragraph = _paragraph(ADD_FEATURE, lead_in)
                 self.assertTrue(paragraph.startswith(lead_in), paragraph)
                 self.assertEqual(paragraph, _paragraph(FIX_BUG, lead_in))
+
+    def test_the_board_rule_is_the_same_words_in_every_delegating_skill(self):
+        for path in (ADD_FEATURE, FIX_BUG, RELEASE, SECRETARY):
+            with self.subTest(path.parent.name):
+                paragraph = _paragraph(path, "**The model board.**")
+                self.assertTrue(paragraph.startswith(BOARD_RULE), paragraph)
+
+    def test_the_board_rule_names_the_floor_and_the_report(self):
+        self.assertIn("`floor`", BOARD_RULE)
+        self.assertIn("report", BOARD_RULE)
+
+    def test_the_old_pin_only_rule_is_gone(self):
+        for path in sorted(SKILLS.glob("*/SKILL.md")):
+            with self.subTest(path.parent.name):
+                self.assertNotIn(OLD_MODEL_RULE, path.read_text(encoding="utf-8"))
+        for path in (ROOT / "CLAUDE.md", ROOT / ".claude" / "devflow.md"):
+            with self.subTest(path.name):
+                self.assertNotIn(OLD_ESCALATE_RULE, path.read_text(encoding="utf-8"))
 
     def test_the_designer_effort(self):
         effort = [

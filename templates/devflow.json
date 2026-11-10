@@ -29,5 +29,17 @@
       {"path": "myapp/__init__.py", "pattern": "^__version__ = \"([^\"]+)\""}
     ],
     "no_new_python_comments": ["myapp/"]
+  },
+  "models": {
+    "orchestrator": "default",
+    "locator": "default",
+    "designer": "default",
+    "designer.diagnosis": "default",
+    "implementer": "default",
+    "implementer.escalate": "default",
+    "reviewer": "default",
+    "planner": "default",
+    "tester": "default",
+    "secretary.readers": "default"
   }
 }

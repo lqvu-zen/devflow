@@ -454,6 +454,35 @@ class TestMinimalConfig(unittest.TestCase):
         self.assertEqual(verdict("tool --help", config=config).kind, "allow")
 
 
+BOARD = {"designer": "Sonnet, medium", "reviewer": "Sonnet, medium", "builder": "Opus, high",
+         "implementer.escalate": "default"}
+
+
+class TestBoardKey(unittest.TestCase):
+    SAMPLES = ('echo x > "$APPDATA/RYOS/settings.json"', "cat x.pem", "gh release create v1",
+               "uv run ryos list", "rm -rf build", "git checkout -- docs/STATUS.md")
+
+    def test_the_board_changes_no_verdict(self):
+        for config in (RYOS, {}):
+            with_board = dict(config, models=BOARD)
+            for command in self.SAMPLES:
+                with self.subTest(config=config.get("name"), command=command):
+                    plain = verdict(command, config=config)
+                    boarded = verdict(command, config=with_board)
+                    self.assertEqual((boarded.kind, boarded.reason), (plain.kind, plain.reason))
+        kinds = {verdict(command, config=dict(RYOS, models=BOARD)).kind for command in self.SAMPLES}
+        self.assertEqual(kinds, {"deny", "ask", "allow"})
+        self.assertEqual(verdict("rm -rf build", config={"models": "not an object"}).kind, "allow")
+
+    def test_editing_the_config_is_left_to_the_settings_ask(self):
+        for tool in ("Edit", "Write"):
+            with self.subTest(tool):
+                self.assertNotEqual(file_verdict(".claude/devflow.json", tool, config=dict(RYOS, models=BOARD)).kind,
+                                    "deny")
+        settings = json.loads((ROOT / "templates" / "settings.json").read_text(encoding="utf-8"))
+        self.assertIn("Edit(/.claude/devflow.json)", settings["permissions"]["ask"])
+
+
 GATE = "uv run python tests/release_check.py"
 STAMPED = {"guard": {"release_stamp": {"path": "dist/release_check.passed",
                                        "binds": "dist/SHA256SUMS.txt", "gate": GATE}}}

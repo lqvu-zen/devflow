@@ -48,7 +48,7 @@ Run from the repo root. All must pass before a change is reviewed.
 
 ## Escalate
 
-The implementer runs on Opus at medium effort for: <data migrations, packaging and builds, concurrency, security, payments>. A plan step's `**Model:**` line overrides this for that step.
+The implementer runs on the board's `implementer.escalate` model, Opus at medium effort by default, for: <data migrations, packaging and builds, concurrency, security, payments>. A plan step's `**Model:**` line overrides this for that step.
 
 ## See it working
 

@@ -27,6 +27,8 @@ class Layout:
         self.plans_dir = self.plans_dir.replace("\\", "/").strip("/")
         self.name = name if isinstance(name, str) and name else "devflow"
         self.plan_pattern = re.compile(re.escape(self.plans_dir) + r"/[\w.\-]+\.md")
+        self.models = config.get("models")
+        self.has_board = "models" in config
 
     def is_secretary_path(self, path: str) -> bool:
         form = path.replace("\\", "/")
@@ -289,6 +291,27 @@ def profile_line(project: Path) -> str | None:
             "Run /devflow:setup to write it.")
 
 
+TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
+VIEW_PATH = TOOLS_DIR / "model_check.py"
+
+
+def models_line(layout: Layout, plan_md: str | None) -> str:
+    try:
+        step = None
+        if plan_md:
+            step = next_open(step_order(plan_md), step_states(plan_md))
+        if str(TOOLS_DIR) not in sys.path:
+            sys.path.insert(0, str(TOOLS_DIR))
+        import model_check
+        config = {"models": layout.models} if layout.has_board else {}
+        step_lines = model_check.step_model_lines(plan_md).get(step, []) if plan_md and step is not None else []
+        pins = model_check.load_pins(model_check.PINS_DIR)
+        return model_check.board_summary(config, pins, step, step_lines, str(VIEW_PATH))
+    except Exception as error:
+        return (f"Models: couldn't read the board ({type(error).__name__}: {error}). "
+                f"Full view: python {VIEW_PATH} --board")
+
+
 def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT) -> str:
     state = upstream_state(run)
     _branch, upstream, ahead, _behind, head = state
@@ -299,6 +322,7 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT) -> str:
     plan = current_plan(status_md, layout) if status_md else None
     plan_md = _read(project / plan) if plan else None
     lines += plan_lines(plan, plan_md, layout)
+    lines.append(models_line(layout, plan_md))
     missing = profile_line(project)
     if missing:
         lines.append(missing)

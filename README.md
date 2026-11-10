@@ -20,6 +20,7 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | Agent | `devflow:tester` | Sonnet, read-only. Uses a candidate the way a user would. |
 | Hook | guard (PreToolUse) | Refuses writes to the project's real data, anything touching or reading secrets (shell, file tools, Read, Grep, Glob), maintainer-only scripts, and reverting the secretary's uncommitted edits. Asks before `gh release` writes and forced pushes. |
 | Hook | session start | Shows the branch, uncommitted files, CI on HEAD, and the plan's next open step (skipping steps another tab has claimed). |
+| Tool | `tools/model_check.py --board` | Prints each agent's model and effort, where each comes from (the plugin's pin, the `models` board in `.claude/devflow.json`, a step's Model line or a floor) and what a call passes. The agent rows above are defaults; a project sets its own in the `models` board. Without `--board` it checks a session's agent calls against the same values. |
 | Tool | `tools/devflow_checks.py` | A CI check. It fails a commit that changes the version unless the commit is titled `Release candidate X.Y.Z-rcN` or `Release X.Y.Z`, fails a release commit that leaves any listed version file at another version, and fails new Python comment lines in the listed folders. |
 
 ## How a project plugs in
@@ -93,7 +94,7 @@ The skills are rules in prose, so `evals/` checks that an edit hasn't broken the
 What is in it:
 
 - `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
-- `evals/cases/<skill>/<case>/`: 37 behaviour cases. `add-feature` 11, `fix-bug` 7, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
+- `evals/cases/<skill>/<case>/`: 39 behaviour cases. `add-feature` 13, `fix-bug` 7, `release` 8, `review-ui` 4, `secretary` 7. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
 - `evals/cases/trigger/`: 31 trigger cases: six per skill, three prompts that should fire it and three near misses that belong to another skill, and seven for `review-ui` (four that should fire it, three near misses). They allow only `Skill` and need no shell. The four `review-ui` cases that name a file (1, 2, 3 and 7) have a scaffold (`ui_fixture`), so run them with `--scaffold`.
 - `evals/depends.json`: which files each skill's cases depend on (the skill's folder, the agents it calls, the review references it cites), which skill each near miss points at, and `hooks/` for every behaviour case. `tests/test_evals.py` checks it against what each `SKILL.md` cites.
 - `evals/passes.json`: the latest pass of every case, as `{commit, date, runs}`, one line per case. `tools/eval_select.py` compares it with the working tree to say which cases a change can reach.

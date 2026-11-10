@@ -32,7 +32,7 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 
 ## Who does each phase
 
-| Phase | Runs as | Model (set in the agent file) | Why |
+| Phase | Runs as | Model (default; the board sets it) | Why |
 |---|---|---|---|
 | 1. Understand | orchestrator (you) | session model: run from Sonnet | Owns the conversation; needs sound judgment, not peak reasoning. |
 | 2. Locate code | `devflow:locator` | Haiku | Cheap, fast search; returns the code excerpts the design brief needs. |
@@ -43,17 +43,13 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Light summarization. |
 
-Don't pass `model` or `effort` in the calls below except to escalate, for a step's Model line or a design's part, or for `fix-bug`'s diagnosis (`effort: "high"`, always). **Run this skill from a Sonnet session.** **Escalate the implementer** to Opus at medium effort for any area **Escalate** names:
+**The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up from this skill's base directory) prints each role's model and effort, where each comes from, and what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing where it shows nothing), and report each line it marks `floor` or `ignored`. Run it before step 2. **Run this skill from the session model the board's `orchestrator` row names.** An area **Escalate** names takes the `implementer.escalate` row; `fix-bug`'s diagnosis takes `designer.diagnosis`.
 
-```
-Agent({ description: "...", subagent_type: "devflow:implementer", model: "opus", effort: "medium", prompt: <brief> })
-```
+**A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Give each to the board command as `--model "<line>"`; for that step it goes over the board and **Escalate** for that role's rows. A line the command refuses (the locator, reviewer or planner below its pin, `fix-bug`'s diagnosis below Opus, high) is not followed: say so in the report.
 
-**A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Pass that `model` and `effort` on that role's call and on no other; for that step it overrides **Escalate**. A line that moves the locator, reviewer or planner below its pin, or `fix-bug`'s diagnosis below Opus, high, is not followed: say so in the report.
+**A design's parts.** When the approved design lists **Parts**, run step 4 once per part, in order: a fresh implementer call with that part's `model` and `effort`, over the board, **Escalate** and an implementer Model line, described `<task>, part N of M`, its brief naming `part N of M` and adding the part and the earlier parts' reports, then step 4's checks for that part. The stop rules hold per part: a part still red stops the step on its model. One review follows the last part. For the model check, give one `--part "<line>"` per part, in order, in place of an implementer `--model`.
 
-**A design's parts.** When the approved design lists **Parts**, run step 4 once per part, in order: a fresh implementer call with that part's `model` and `effort`, over **Escalate** and an implementer Model line, described `<task>, part N of M`, its brief naming `part N of M` and adding the part and the earlier parts' reports, then step 4's checks for that part. The stop rules hold per part: a part still red stops the step on its model. One review follows the last part. For the model check, give one `--part "<line>"` per part, in order, in place of an implementer `--model`.
-
-**If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the `model` and `effort` the agent's file pins or the call passes, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
+**If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for that role, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 
 **When the work is a step from a release plan** (in the plans folder, `docs/plans/` unless `.claude/devflow.json` names another), paste the whole step section verbatim, from its `### N —` heading to the next heading, into the design, implement and review briefs. That includes its **Needs** and **Done when** lines and its `**Tried:**` line, if it has one. Tell the designer to read Tried and not repeat an approach it lists unless it says why this time is different. The reviewer checks every "Done when" item, and the step isn't finished until each one is met or marked "needs a human". Report the "needs a human" items to the user.
 
@@ -158,7 +154,7 @@ Match the existing commit style (`git log --oneline -5`). Stage only the relevan
 
 Then watch CI on the pushed commit: `gh run list -L 1 --json databaseId,headSha` to find its run, and `gh run watch <id> --exit-status`. A red run makes its fix the next step, ahead of anything else; say so in the report.
 
-**Check the models.** Run `python <plugin>/tools/model_check.py` (`tools/` is two folders up from this skill's base directory), adding `--model "<role>: <Model>, <effort>"` for each role this run moved off its pin: each Model line followed, an escalated implementer (`implementer: Opus, medium`) and `fix-bug`'s diagnosis (`designer: Opus, high`); a Model line for the designer replaces that entry, not a second one. It lists each agent call's role, the model it ran on, its effort where recorded, and what was expected. Put every mismatch, and what it could not read, in the report and the step's Status row.
+**Check the models.** Run the board command again without `--board`, with the same `--model` lines, `--escalated` if the implementer was escalated and `--diagnosis` in `fix-bug`. It lists each agent call's role, the model it ran on, its effort where recorded, and what was expected and from where. Put every mismatch, and what it could not read, in the report and the step's Status row.
 
 If this was a plan step, set its Status row to `done`, with the commit hash and one line on what landed, in the same commit or a `docs`-only one straight after; where the plan is gitignored, save it and don't commit it.
 

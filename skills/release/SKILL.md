@@ -93,6 +93,8 @@ gh release create vX.Y.Z-rcN <artifacts> -R <repo> --prerelease --latest=false \
 
 The guard hook asks the maintainer before any `gh release` write; that is expected. If **Stamp** is set, it first refuses to publish (`gh release create`, `upload`, a publishing `edit`, `gh api` writes) unless the stamp names the current HEAD and the current hash of the bound file; if it refuses, run A4 again, don't work around it. Record the time it was published.
 
+**The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up from this skill's base directory) prints each role's model and effort, where each comes from, and what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing where it shows nothing), and report each line it marks `floor` or `ignored`.
+
 ### A6. Test the candidate (hard gate)
 
 Spawn the tester, which hasn't seen this session:
@@ -151,7 +153,7 @@ Spawn a fresh reviewer:
 Agent({ description: "Release review vX.Y.Z", subagent_type: "devflow:reviewer", prompt: <brief> })
 ```
 
-(If `devflow:reviewer` isn't listed, use `subagent_type: "general-purpose"`, `model: "opus"`, `effort: "high"`, and paste the plugin's `agents/reviewer.md` at the top of the brief.)
+(If `devflow:reviewer` isn't listed, use `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for the reviewer, and paste the plugin's `agents/reviewer.md` at the top of the brief.)
 
 The brief starts with **"Release mode."** and includes, verbatim: the version, the candidate tag it promotes, and the last released tag; the approved release notes; the **Lineup**; the build output and the whole gate output from B3; the tester's last report and the state of the checklist; the B1 diff (empty when every version file is numbers-only); and the release plan's final step with its "Done when" items, if there is one.
 
