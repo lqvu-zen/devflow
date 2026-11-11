@@ -57,7 +57,7 @@ def checks_from(config: Mapping[str, Any]) -> Checks:
 
 def load_config(repo: str) -> dict:
     path = os.path.join(repo, ".claude", "devflow.json")
-    with open(path, encoding="utf-8") as handle:
+    with open(path, encoding="utf-8-sig") as handle:
         data = json.load(handle)
     if not isinstance(data, dict):
         raise ValueError(f"{path} must hold a JSON object")

@@ -687,7 +687,7 @@ def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]
 def load_config(project: Path) -> dict | None:
     path = project / ".claude" / "devflow.json"
     try:
-        data = json.loads(path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8-sig"))
     except FileNotFoundError:
         return None
     if not isinstance(data, dict):

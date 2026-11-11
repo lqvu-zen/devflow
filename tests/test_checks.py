@@ -368,6 +368,41 @@ class TestAttributionCheck(_RepoCase):
         self.assertEqual(checks.attribution_lines(message), [CLAUDE_TRAILER, GENERATED_FOOTER])
 
 
+class TestConfigWithAByteOrderMark(_RepoCase):
+    def setUp(self):
+        super().setUp()
+        (self.tmp / ".claude" / "devflow.json").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps({**CONFIG, "attribution": "none"}).encode("utf-8"))
+        self.repo.git("add", "-A")
+        self.repo.git("commit", "-q", "-m", "Save the config with a mark")
+        self.base = self.repo.git("rev-parse", "HEAD")
+
+    def run_cli(self, check: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(CHECKS_PATH), check, "--base", self.base,
+                               "--head", "HEAD", "--repo", str(self.tmp)],
+                              capture_output=True, text=True, encoding="utf-8")
+
+    def test_every_check_runs_on_a_clean_commit(self):
+        self.repo.commit("feat: clean", {"app/a.py": "def a():\n    return 2  # keeps one\n"})
+        for check in ("version", "comments", "attribution"):
+            with self.subTest(check=check):
+                result = self.run_cli(check)
+                self.assertEqual((result.returncode, result.stdout.strip()), (0, f"{check}: ok (1 commits)"))
+
+    def test_every_check_applies_the_config(self):
+        self.repo.commit("feat: x", {"app/__init__.py": init_file("2.3.2"),
+                                     "app/a.py": "def a():\n    # why\n    return 1  # keeps one\n"},
+                         body=CLAUDE_TRAILER)
+        expected = {"version": '"feat: x" changes the version in app/__init__.py 2.3.1 -> 2.3.2',
+                    "comments": 'app/a.py:2: new comment "# why"',
+                    "attribution": f'"feat: x" carries "{CLAUDE_TRAILER}"'}
+        for check, needle in expected.items():
+            with self.subTest(check=check):
+                result = self.run_cli(check)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn(needle, result.stdout)
+
+
 class TestAttributionWiring(unittest.TestCase):
     STEP = 'devflow_checks.py attribution --base "$BASE" --head "$HEAD_SHA"'
 

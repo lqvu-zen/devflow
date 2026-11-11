@@ -712,6 +712,26 @@ class TestMain(unittest.TestCase):
         self.assertEqual(result.returncode, 1)
         self.assertEqual(result.stdout, f"No .claude/devflow.json in {self.project}: run /devflow:setup first.\n")
 
+    def test_reports_with_a_config_that_has_a_byte_order_mark(self):
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps({"name": "Notes", "models": {"designer": "Sonnet, medium"}}).encode("utf-8"))
+        result = self.run_hook()
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("Notes session start"))
+        self.assertIn("\nModels: board moves designer to sonnet, medium. Full view: python ", result.stdout)
+
+    def test_next_step_flag_reads_a_config_that_has_a_byte_order_mark(self):
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps({"name": "tally"}).encode("utf-8"))
+        (self.project / "docs" / "plans").mkdir(parents=True)
+        (self.project / "docs" / "STATUS.md").write_text(TWO_STATUS, encoding="utf-8")
+        (self.project / CURRENT_PATH).write_text(with_states(CURRENT, {1: "done: fixed"}), encoding="utf-8")
+        result = self.run_next_step()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -595,6 +595,12 @@ class TestReleaseStamp(unittest.TestCase):
         self.stamp(head=self.head.upper(), sha256sums=self.digest().upper())
         self.assertAsks("gh release create v1")
 
+    def test_a_stamp_with_a_byte_order_mark_reads(self):
+        data = {"head": self.head, "sha256sums": self.digest(), "passed": 29}
+        (self.repo / "dist" / "release_check.passed").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps(data).encode("utf-8"))
+        self.assertAsks("gh release create v1")
+
     def test_a_matching_stamp_with_asks_turned_off_allows(self):
         self.stamp()
         config = {"guard": {**STAMPED["guard"], "ask_release": False}}
@@ -797,6 +803,23 @@ class TestGuardMain(unittest.TestCase):
         (self.project / ".claude" / "devflow.json").write_text("{ nope", encoding="utf-8")
         result = self.run_hook({"tool_name": "Bash", "tool_input": {"command": "ls"}})
         self.assertAsksNotChecked(result, "guard.py failed")
+
+    def test_a_config_with_a_byte_order_mark_gives_the_same_verdicts(self):
+        calls = [
+            {"tool_name": "Bash", "tool_input": {"command": "uv run ryos list"}},
+            {"tool_name": "Bash", "tool_input": {
+                "command": 'APPDATA="$S/a" LOCALAPPDATA="$S/l" uv run ryos list'}},
+            {"tool_name": "PowerShell", "tool_input": {"command": "gh release delete v1 -R lqvu-zen/RYOS"}},
+            {"tool_name": "Write", "tool_input": {
+                "file_path": r"C:\Users\Tester\AppData\Roaming\RYOS\settings.json", "content": "{}"}},
+        ]
+        plain = [self.run_hook(call) for call in calls]
+        (self.project / ".claude" / "devflow.json").write_bytes(
+            b"\xef\xbb\xbf" + json.dumps(RYOS, ensure_ascii=False).encode("utf-8"))
+        marked = [self.run_hook(call) for call in calls]
+        self.assertEqual([r.returncode for r in plain], [2, 0, 0, 2])
+        self.assertEqual([(r.returncode, r.stdout, r.stderr) for r in marked],
+                         [(r.returncode, r.stdout, r.stderr) for r in plain])
 
 
 @unittest.skipUnless(shutil.which("sh") and shutil.which("uv"), "needs sh and uv")

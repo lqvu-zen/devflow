@@ -26,6 +26,7 @@
 - Release: B4 now stops after a second release review that still has blockers, the same round limit and words as `add-feature` and `fix-bug`; before, the fix and re-review loop had no cap.
 - Skills: `manage-project`'s shared-rules list now cites `add-feature`'s "Stop rules" (they moved there and the list still named only the old heading); `add-feature` is tightened to leave over 1,500 characters below the size ceiling with every rule kept; and `tests/test_skills.py` now checks that a skill's citation of another skill's heading exists, that each shared rule sits under the heading `manage-project` cites, and that every skill file has CRLF endings.
 - Session review: `tools/session_extract.py` keeps each SessionStart hook's output as one `H` line, so the review's readers see the CI state a session started with, and `manage-project`'s review counts that line as the CI check on HEAD; before, the extract dropped it and the review reported about 12 false "no CI check first" findings.
+- Config: the guard, `tools/devflow_checks.py` and session start (and `--next-step`) read a `.claude/devflow.json` saved with a byte-order mark (Windows PowerShell 5's `Set-Content -Encoding UTF8` and `Out-File -Encoding utf8` write one), and the guard reads a release pass stamp with one; before, the guard asked "not checked" on every call, each CI check stopped with "Unexpected UTF-8 BOM" and session start printed nothing. Projects that copied `tools/devflow_checks.py` re-copy it.
 
 ## 0.2.2
 

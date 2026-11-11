@@ -1210,7 +1210,7 @@ def _stamp_refusal(what: str, words: list[str], rules: Rules, location: Location
         return (f"{lead}: this command runs outside the project, so {rules.name}'s stamp does "
                 "not apply to it; run it from the project folder.")
     try:
-        with open(os.path.join(rules.project_dir, stamp.path), encoding="utf-8") as handle:
+        with open(os.path.join(rules.project_dir, stamp.path), encoding="utf-8-sig") as handle:
             data = json.load(handle)
     except FileNotFoundError:
         return f"{lead}: there is no stamp at {stamp.path}. {run} (it writes the stamp), then publish."
@@ -1439,7 +1439,7 @@ def managed_changes(project_dir: str, paths: list[str]) -> list[str]:
 def load_config(project_dir: str) -> dict | None:
     path = os.path.join(project_dir or ".", ".claude", "devflow.json")
     try:
-        with open(path, encoding="utf-8") as handle:
+        with open(path, encoding="utf-8-sig") as handle:
             data = json.load(handle)
     except FileNotFoundError:
         return None
