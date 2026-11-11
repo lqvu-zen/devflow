@@ -15,7 +15,7 @@ The devflow skills and agents read this file for everything specific to this pro
 |---|---|
 | Plugin manifest and version | `.claude-plugin/plugin.json` |
 | Marketplace entry | `.claude-plugin/marketplace.json` |
-| Workflow skills | `skills/{setup,add-feature,fix-bug,release,manage-project}/SKILL.md` |
+| Workflow skills | `skills/{setup,add-feature,fix-bug,release,manage-project,next-step}/SKILL.md` |
 | UI review skill (standalone, Node) | `skills/review-ui/` (`vendor/` is third-party) |
 | Agents, with pinned model and effort | `agents/*.md` |
 | Hook registration | `hooks/hooks.json` |

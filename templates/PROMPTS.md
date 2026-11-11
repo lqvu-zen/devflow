@@ -32,7 +32,12 @@ for anything newer, and tell me where we are.
 
 **Coding: continue the plan** (one fresh tab per step):
 ```
-Read docs/STATUS.md to find the current plan, then continue with its next open step in Order that is not already in progress. Claim it first, and update the Status table when it's done.
+/devflow:next-step
+```
+
+The same in words, for a session where the skill doesn't fire:
+```
+Read docs/STATUS.md to find the current plan, then continue with its next open step in Order that is not already in progress. If no open step in the current plan can start (each is claimed by another tab, at an uncleared Gate, waiting on a human, or needs a step that isn't done), take the next plan's first open step in Order whose Needs are all done and whose Files line overlaps no step in progress, and say which and why. Claim it first, and update the Status table when it's done. Run it with the skill its Who does what row names (/devflow:add-feature or /devflow:fix-bug); never do a step by hand.
 ```
 
 **Coding: a second tab beside another** (the session-start hook lists what is in progress):

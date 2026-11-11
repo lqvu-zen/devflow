@@ -26,7 +26,7 @@ A coding session is usually working in the same folder, so other people's files 
 
 ## The prompt book
 
-`docs/PROMPTS.md` holds paste-ready prompts for every kind of session; `/devflow:setup` copies it from the plugin's `templates/PROMPTS.md`. You keep it: when a new kind of prompt proves useful, add it to the section it belongs in, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, and only to add or fix prompts. Its `continue the plan` prompt must stay the same as the one in the status file's Working practices.
+`docs/PROMPTS.md` holds paste-ready prompts for every kind of session; `/devflow:setup` copies it from the plugin's `templates/PROMPTS.md`. You keep it: when a new kind of prompt proves useful, add it to the section it belongs in, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, and only to add or fix prompts. Its `continue the plan` prompts (`/devflow:next-step` and the long form beside it) must stay the same as the ones in the status file's Working practices.
 
 ## Starting a session
 

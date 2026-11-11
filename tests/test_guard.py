@@ -390,6 +390,7 @@ SKILL_COMMANDS = [
     "cd D:/Projects/RYOS && git mv docs/plans/release-2.4.0.md docs/archive/release-2.4.0.md",
     "uv run --no-project python tools/devflow_checks.py version --base 5c76e95 --head HEAD",
     "python /home/u/.claude/plugins/devflow/tools/model_check.py --model \"designer: Opus, high\"",
+    "python /home/u/.claude/plugins/devflow/hooks/session_start.py --next-step",
 ]
 
 

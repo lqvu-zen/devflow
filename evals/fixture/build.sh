@@ -91,6 +91,42 @@ PY
   short="$(git rev-parse --short=7 HEAD)"
 }
 
+plan_edit() {
+  python3 - "$work/docs/plans/release-0.3.0.md" "$1" "$2" <<'PY'
+import sys
+
+path, old, new = sys.argv[1:4]
+text = open(path, encoding="utf-8").read()
+assert old in text, old
+text = text.replace(old, new, 1)
+open(path, "w", encoding="utf-8", newline="\n").write(text)
+PY
+  git add docs/plans/release-0.3.0.md
+  git commit -q -m "Plan: edit the 0.3.0 plan"
+  git push -q origin main
+  head_sha="$(git rev-parse HEAD)"
+  short="$(git rev-parse --short=7 HEAD)"
+}
+
+next_plan() {
+  cp "$fixture/next/release-0.4.0.md" "$work/docs/plans/release-0.4.0.md"
+  python3 - "$work/docs/STATUS.md" <<'PY'
+import sys
+
+path = sys.argv[1]
+text = open(path, encoding="utf-8").read()
+row = "| **0.3.0** (in progress) | median, JSON output, empty-list fix | `docs/plans/release-0.3.0.md` |\n"
+assert row in text
+text = text.replace(row, row + "| **0.4.0** (next) | mode, range, sum of squares | `docs/plans/release-0.4.0.md` |\n", 1)
+open(path, "w", encoding="utf-8", newline="\n").write(text)
+PY
+  git add docs/plans/release-0.4.0.md docs/STATUS.md
+  git commit -q -m "Add the 0.4.0 plan"
+  git push -q origin main
+  head_sha="$(git rev-parse HEAD)"
+  short="$(git rev-parse --short=7 HEAD)"
+}
+
 numbers_only_versions() {
   python3 - "$work/.claude/devflow.json" "$work/.claude/devflow.md" <<'PY'
 import json

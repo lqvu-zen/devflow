@@ -11,8 +11,11 @@ Kept by the project manager (`/devflow:manage-project`). **This file is the mast
 
 ## Working practices
 
-- **Coding sessions:** one fresh conversation per plan step, on Sonnet; the agents' models come from the board in `.claude/devflow.json` (the plugin's pins where it says `default`); `python <plugin>/tools/model_check.py --board` shows them. The prompt to continue, which names no plan file:
-  > Read docs/STATUS.md to find the current plan, then continue with its next open step in Order that is not already in progress. Claim it first, and update the Status table when it's done.
+- **Coding sessions:** one fresh conversation per plan step, on Sonnet; the agents' models come from the board in `.claude/devflow.json` (the plugin's pins where it says `default`); `python <plugin>/tools/model_check.py --board` shows them. The prompts to continue, which name no plan file:
+  > /devflow:next-step
+
+  The same in words, for a session where the skill doesn't fire:
+  > Read docs/STATUS.md to find the current plan, then continue with its next open step in Order that is not already in progress. If no open step in the current plan can start (each is claimed by another tab, at an uncleared Gate, waiting on a human, or needs a step that isn't done), take the next plan's first open step in Order whose Needs are all done and whose Files line overlaps no step in progress, and say which and why. Claim it first, and update the Status table when it's done. Run it with the skill its Who does what row names (/devflow:add-feature or /devflow:fix-bug); never do a step by hand.
 - **The project manager:** run `/devflow:manage-project` at the start of each working day, so this file catches up with the plans' Status tables and the git log.
 - **Prompts:** paste-ready prompts for every kind of session are in `docs/PROMPTS.md`.
 - **Status and plan edits** (`docs/plans/*.md`, `docs/STATUS.md`) may arrive uncommitted. Coding sessions commit them with their next change and never revert them.

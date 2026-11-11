@@ -5,7 +5,8 @@
     "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md", "skills/review-ui/references/core.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py"],
     "release": ["skills/release/", "skills/add-feature/SKILL.md", "agents/tester.md", "agents/reviewer.md", "tools/model_check.py"],
     "review-ui": ["skills/review-ui/"],
-    "manage-project": ["skills/manage-project/","agents/planner.md", "tools/model_check.py"]
+    "manage-project": ["skills/manage-project/","agents/planner.md", "tools/model_check.py"],
+    "next-step": ["skills/next-step/", "skills/add-feature/SKILL.md", "skills/fix-bug/SKILL.md"]
   },
   "near_misses": {
     "add-feature-4-near-miss": "fix-bug",
@@ -22,6 +23,9 @@
     "review-ui-6-near-miss": null,
     "manage-project-4-near-miss": "add-feature",
     "manage-project-5-near-miss": "fix-bug",
-    "manage-project-6-near-miss": "release"
+    "manage-project-6-near-miss": "release",
+    "next-step-4-near-miss": "add-feature",
+    "next-step-5-near-miss": "fix-bug",
+    "next-step-6-near-miss": "manage-project"
   }
 }
