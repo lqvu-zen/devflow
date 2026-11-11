@@ -43,6 +43,19 @@ CD_PLUGIN = re.compile(
 )
 DEV_FILE = re.compile(r"^test-.*\.md$|creation[-_ ]?log", re.IGNORECASE)
 VENDOR = "vendor"
+FRONT_LINE = re.compile(r"([A-Za-z][A-Za-z0-9_-]*):(?: +(.*))?")
+SINGLE_QUOTED = re.compile(r"'(?:[^']|'')*'")
+DOUBLE_QUOTED = re.compile(
+    r'"(?:[^"\\]|\\(?:[0abtnvfre "/\\N_LP\t]|x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}))*"'
+)
+INDICATORS = ",[]{}#&*!|>%@`"
+SPACED_INDICATORS = "-?:"
+OLD_REVIEW_UI = (
+    "Invoke this skill for every request to review, critique or audit how a UI looks or works; "
+    "do not review a UI without it and do not read the UI files first. Triggers: \"review the UI\", "
+    "\"UX review\", \"is this page any good\", \"a11y audit\", \"contrast check\". "
+    "Read-only: it reports, it does not fix."
+)
 ANY_HEADING = re.compile(r"^#{1,6} (.+?)\s*$")
 SKILL_REF = r"`(skills/)?([a-z0-9]+(?:-[a-z0-9]+)*)(?:/SKILL\.md)?`"
 QUOTED = r"\"([^\"]+)\""
@@ -169,22 +182,67 @@ def _unquoted(value: str) -> str:
     return value
 
 
-def _front_matter(path: Path) -> dict[str, str] | None:
+def _front_matter_lines(path: Path) -> list[str] | None:
     lines = path.read_text(encoding="utf-8").splitlines()
     if not lines or lines[0] != "---":
         return None
+    for index, line in enumerate(lines[1:], start=1):
+        if line == "---":
+            return lines[1:index]
+    return None
+
+
+def _front_matter(path: Path) -> dict[str, str] | None:
+    lines = _front_matter_lines(path)
+    if lines is None:
+        return None
     fields: dict[str, str] = {}
     key = None
-    for line in lines[1:]:
-        if line == "---":
-            return {name: _unquoted(value) for name, value in fields.items()}
+    for line in lines:
         if line[:1].isspace() and key is not None:
             fields[key] = f"{fields[key]} {line.strip()}".strip()
         elif ":" in line and not line[:1].isspace():
             key, _, value = line.partition(":")
             key = key.strip()
             fields[key] = value.strip()
+    return {name: _unquoted(value) for name, value in fields.items()}
+
+
+def _value_problem(value: str) -> str | None:
+    if not value:
+        return None
+    if value[0] == "'":
+        if SINGLE_QUOTED.fullmatch(value):
+            return None
+        return "is single-quoted but does not close at the line's end (a ' inside is written '')"
+    if value[0] == '"':
+        if DOUBLE_QUOTED.fullmatch(value):
+            return None
+        return "is double-quoted but does not close at the line's end, or holds an escape YAML lacks"
+    spaced = value[0] in SPACED_INDICATORS and value[1:2] in ("", " ")
+    if value[0] in INDICATORS or spaced:
+        return f"starts with {value[0]!r}, a YAML indicator"
+    if ": " in value or value.endswith(":"):
+        return "holds ': ' or ends in ':' unquoted, so YAML fails to parse it"
+    if " #" in value:
+        return "holds ' #' unquoted, so YAML drops the rest as a comment"
     return None
+
+
+def _yaml_problems(lines: list[str]) -> list[str]:
+    problems = []
+    for number, line in enumerate(lines, start=2):
+        line = line.rstrip()
+        if not line.strip():
+            continue
+        match = FRONT_LINE.fullmatch(line)
+        if match is None:
+            problems.append(f"line {number} is not 'key: value' on one line")
+            continue
+        problem = _value_problem((match.group(2) or "").strip())
+        if problem:
+            problems.append(f"line {number}: {match.group(1)} {problem}")
+    return problems
 
 
 def _front_matter_errors(skills_dir: Path) -> list[str]:
@@ -195,6 +253,7 @@ def _front_matter_errors(skills_dir: Path) -> list[str]:
         if fields is None:
             errors.append(f"{skill}: no front matter")
             continue
+        errors.extend(f"{skill}: {p}" for p in _yaml_problems(_front_matter_lines(path)))
         name = fields.get("name", "")
         if name != skill:
             errors.append(f"{skill}: name is {name!r}, not the folder name")
@@ -414,6 +473,39 @@ class TestFrontMatter(unittest.TestCase):
                     "nodesc: description is 0 characters, not 200 to 1536",
                     "renamed: name is 'other', not the folder name",
                     "short: description is 199 characters, not 200 to 1536",
+                ]
+            ),
+        )
+
+    def test_front_matter_a_yaml_loader_rejects_is_named(self):
+        valid = "d" * 300
+        with tempfile.TemporaryDirectory() as temp:
+            skills = Path(temp)
+            _skill(skills, "old-review-ui", f"name: old-review-ui\r\ndescription: {OLD_REVIEW_UI}\r\n")
+            _skill(
+                skills,
+                "quoted-review-ui",
+                "name: quoted-review-ui\r\ndescription: '" + OLD_REVIEW_UI + " The project''s own.'\r\n",
+            )
+            _skill(skills, "apostrophe", f"name: apostrophe\r\ndescription: 'the project's {valid}'\r\n")
+            _skill(skills, "escape", f'name: escape\r\ndescription: "{valid} \\q"\r\n')
+            _skill(skills, "comment", f"name: comment\r\ndescription: {valid} #1 choice\r\n")
+            _skill(skills, "trailing", f"name: trailing\r\ndescription: {valid}:\r\n")
+            _skill(skills, "folded", f"name: folded\r\ndescription: >-\r\n  {valid}\r\n")
+            _skill(skills, "plain", f"name: plain\r\ndescription: -{valid}, [a] {{b}} c#d e:f\r\n")
+            _skill(skills, "double", f'name: double\r\ndescription: "{valid} \\"x\\": y"\r\n')
+            found = _front_matter_errors(skills)
+        self.assertEqual(
+            found,
+            sorted(
+                [
+                    "apostrophe: line 3: description is single-quoted but does not close at the line's end (a ' inside is written '')",
+                    "comment: line 3: description holds ' #' unquoted, so YAML drops the rest as a comment",
+                    "escape: line 3: description is double-quoted but does not close at the line's end, or holds an escape YAML lacks",
+                    "folded: line 3: description starts with '>', a YAML indicator",
+                    "folded: line 4 is not 'key: value' on one line",
+                    "old-review-ui: line 3: description holds ': ' or ends in ':' unquoted, so YAML fails to parse it",
+                    "trailing: line 3: description holds ': ' or ends in ':' unquoted, so YAML fails to parse it",
                 ]
             ),
         )

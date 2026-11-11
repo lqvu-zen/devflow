@@ -158,6 +158,7 @@ Recorded runs:
 | 2026-11-04 | behaviour, `add-feature` (9 cases, 1 run each, Sonnet judge), WSL; before 0.2.2 (the 7 older cases and the 2 UI cases) | 9 pass | $6.35 |
 | 2026-11-05 | behaviour, `release` (7 cases, Sonnet judge), WSL; step 4, numbers-only promotion | `release-promotes-numbers-only`: 2 of 2 pass on the fix, 0 of 2 on the old B2 (it never reached `--allow-empty`). The other 6 release cases pass 1 run each, except `waits-for-the-version`, whose judge failed 1 of 3 runs on the fix and 1 of 3 on the old skill (the case stops before B, so the change cannot reach it) | $2.81 |
 | 2026-11-09 | behaviour, the 2 new §5 cases (1 run each, Sonnet judge), WSL; step 9 | `fix-bug-ui-bug-reviewer-gets-motion` passes. `add-feature-new-ui-gets-build-and-motion` failed `floor-in-report` (3 of 3 judge votes: `add-feature` never told the orchestrator to carry the implementer's §5 floor into its report); after one line in step 7, 4 of 4 graders pass | $1.62 plus $2.24 before and $2.45 after the fix |
+| 2026-11-10 | trigger (31 cases, 3 runs each), Sonnet, WSL, Claude Code 2.1.308; step 39 | 23 of 31 pass. 0 of 3: `add-feature-1/2/3-fires` and `fix-bug-1-fires` (they pass on the default model, 1 run each: Sonnet answers without calling the skill) and `review-ui-1/2/3/7-fires` (they fail on the default model too: the skill's front matter did not parse, so it was not loaded; fixed in step 47). Every near miss passes, and all of `manage-project` and `release` | $5.10, plus $1.19 on default-model and Sonnet reruns |
 
 ## Where it came from
 
