@@ -404,10 +404,10 @@ def command_for(suite: str, glob: str, scaffold: bool) -> str:
     if suite == "behaviour":
         return (f"TMPDIR=$HOME/ev claude plugin eval . --tag behaviour{case} --runs 1 "
                 "--ablation none --scaffold --allow-tools Bash Write Edit --trust-plugin "
-                "--no-publish -j 3 --judge-model sonnet --max-cost-usd 25")
+                "--no-publish -j 1 --judge-model sonnet --max-cost-usd 25")
     extra = " --scaffold" if scaffold else ""
     return (f"claude plugin eval . --tag trigger{case} --ablation none --runs 1{extra} "
-            "--trust-plugin --no-publish -j 4")
+            "--trust-plugin --no-publish -j 1")
 
 
 def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case]) -> list[str]:

@@ -57,7 +57,7 @@ python -m unittest discover -s tests
 When a change edits a skill's `description`, also run that skill's trigger cases (cheap; one run each):
 
 ```bash
-claude plugin eval . --tag trigger --case "<skill>-*" --ablation none --runs 1 --trust-plugin --no-publish -j 4
+claude plugin eval . --tag trigger --case "trigger-<skill>-*" --ablation none --runs 1 --trust-plugin --no-publish -j 1
 ```
 
 Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_select.py select` lists the behaviour and trigger cases a change can reach, with the commands to run; after a committed pass, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores it. Run them only when the plan step says so; the details are in `README.md` under Skill evals. There is no lint or type check.
