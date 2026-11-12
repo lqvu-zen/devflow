@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -243,12 +244,14 @@ class TestModelsLine(unittest.TestCase):
         self.assertEqual(self.line({}), f"Models: the plugin's pins (no board in .claude/devflow.json). {VIEW}")
 
     def test_a_board_that_moves_nothing(self):
-        self.assertEqual(self.line({"models": {"designer": "default", "reviewer": "Opus, high"}}),
+        self.assertEqual(self.line({"models": {"designer": "default", "reviewer": "Opus, medium"}}),
                          f"Models: board, every role on its default. {VIEW}")
+        self.assertEqual(self.line({"models": {"reviewer": "Opus, high"}}),
+                         f"Models: board moves reviewer to opus, high. {VIEW}")
 
     def test_a_board_that_moves_a_role_and_hits_a_floor(self):
         line = self.line({"models": {"designer": "Sonnet, medium", "reviewer": "Sonnet, medium", "x": "Opus"}})
-        self.assertEqual(line, "Models: board moves designer to sonnet, medium; reviewer kept on opus, high "
+        self.assertEqual(line, "Models: board moves designer to sonnet, medium; reviewer kept on opus, medium "
                                f"(floor); 1 entry ignored. {VIEW}")
 
     def test_the_next_steps_model_line(self):
@@ -275,6 +278,14 @@ class TestModelsLine(unittest.TestCase):
         unreadable = MODEL_PLAN.replace("implementer: Opus, medium; the download is subtle", "implementer: Opus")
         self.assertEqual(self.line({"models": {}}, unreadable),
                          f"Models: step 31's Model line for an unreadable role is not followed. {VIEW}")
+
+    def test_the_session_model_warning(self):
+        for config, owner in (({}, "the orchestrator default"), ({"models": {}}, "the board's orchestrator")):
+            warning = f"This session runs on opus; {owner} is sonnet (/model switches it)."
+            line = session_start.models_line(session_start.Layout(config), None, session_id="claude-opus-4-7[1m]")
+            self.assertTrue(line.endswith(f"{warning} {VIEW}"), line)
+        self.assertEqual(session_start.models_line(session_start.Layout({}), None, session_id="claude-sonnet-4-6"),
+                         self.line({}))
 
     def test_a_broken_board_gives_the_error_line(self):
         self.assertIn("1 entry ignored", self.line({"models": ["not", "an", "object"]}))
@@ -659,10 +670,10 @@ class TestMain(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.project, ignore_errors=True)
 
-    def run_hook(self) -> subprocess.CompletedProcess:
+    def run_hook(self, input: str = "") -> subprocess.CompletedProcess:
         env = dict(os.environ)
         env["CLAUDE_PROJECT_DIR"] = str(self.project)
-        return subprocess.run([sys.executable, str(SESSION_PATH)], capture_output=True,
+        return subprocess.run([sys.executable, str(SESSION_PATH)], capture_output=True, input=input,
                               text=True, encoding="utf-8", env=env, timeout=60)
 
     def test_silent_without_a_config(self):
@@ -691,10 +702,53 @@ class TestMain(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("\nModels: board moves designer to sonnet, medium. Full view: python ", result.stdout)
 
+    def test_warns_when_the_session_model_differs(self):
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "Notes"}), encoding="utf-8")
+        warning = "This session runs on opus; the orchestrator default is sonnet (/model switches it)."
+        hook = json.dumps({"hook_event_name": "SessionStart", "source": "startup", "model": "claude-opus-4-7"})
+        result = self.run_hook(hook)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertIn(warning, result.stdout)
+        for text in ("not json", json.dumps({"model": 3}), ""):
+            result = self.run_hook(text)
+            self.assertEqual((result.returncode, result.stderr), (0, ""))
+            self.assertNotIn("This session runs on", result.stdout)
+
+    def test_an_open_stdin_pipe_does_not_stall_the_commands(self):
+        subprocess.run(["git", "init", "-q"], cwd=self.project, check=True, capture_output=True)
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", "commit", "-q", "--allow-empty", "-m", "x"],
+                       cwd=self.project, check=True, capture_output=True)
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "Notes"}), encoding="utf-8")
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(self.project)
+        child = subprocess.Popen([sys.executable, str(SESSION_PATH)], stdin=subprocess.PIPE,
+                                 stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+                                 encoding="utf-8", env=env)
+        try:
+            child.stdin.write(json.dumps({"hook_event_name": "SessionStart", "model": "claude-opus-4-7"}))
+            child.stdin.flush()
+            started = time.monotonic()
+            child.wait(timeout=30)
+            elapsed = time.monotonic() - started
+            out, err = child.stdout.read(), child.stderr.read()
+        finally:
+            if child.poll() is None:
+                child.kill()
+            child.stdin.close()
+            child.stdout.close()
+            child.stderr.close()
+        self.assertEqual((child.returncode, err), (0, ""))
+        self.assertLess(elapsed, 8)
+        self.assertIn("Branch: ", out)
+        self.assertNotIn("Branch: unknown", out)
+        self.assertIn("This session runs on opus;", out)
+
     def run_next_step(self) -> subprocess.CompletedProcess:
         env = dict(os.environ)
         env["CLAUDE_PROJECT_DIR"] = str(self.project)
-        return subprocess.run([sys.executable, str(SESSION_PATH), "--next-step"], capture_output=True,
+        return subprocess.run([sys.executable, str(SESSION_PATH), "--next-step"], capture_output=True, input="",
                               text=True, encoding="utf-8", env=env, timeout=60)
 
     def test_next_step_flag_prints_the_step(self):

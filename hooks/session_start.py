@@ -6,6 +6,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, NamedTuple, Optional
@@ -14,6 +15,7 @@ Runner = Callable[[list], Optional[str]]
 
 MAX_CHANGES = 15
 DEADLINE_SECONDS = 15.0
+STDIN_SECONDS = 1.0
 
 
 class Layout:
@@ -42,7 +44,7 @@ DEFAULT_LAYOUT = Layout()
 
 def run(argv: list, timeout: float = 5, cwd: str | None = None) -> str | None:
     try:
-        result = subprocess.run(argv, capture_output=True, text=True, encoding="utf-8",
+        result = subprocess.run(argv, capture_output=True, text=True, stdin=subprocess.DEVNULL, encoding="utf-8",
                                 errors="replace", timeout=timeout, cwd=cwd)
     except (OSError, subprocess.SubprocessError):
         return None
@@ -613,7 +615,47 @@ TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
 VIEW_PATH = TOOLS_DIR / "model_check.py"
 
 
-def models_line(layout: Layout, plan_md: str | None, step: int | None = None) -> str:
+def hook_input() -> dict:
+    stream = sys.stdin
+    try:
+        if stream is None or stream.isatty():
+            return {}
+        fd = stream.fileno()
+    except (OSError, ValueError, AttributeError):
+        return {}
+    chunks: list[bytes] = []
+
+    def drain() -> None:
+        try:
+            while True:
+                data = os.read(fd, 65536)
+                if not data:
+                    return
+                chunks.append(data)
+        except OSError:
+            return
+
+    reader = threading.Thread(target=drain, daemon=True)
+    reader.start()
+    reader.join(STDIN_SECONDS)
+    try:
+        data = json.loads(b"".join(list(chunks)).decode("utf-8-sig"))
+    except (ValueError, UnicodeDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def session_model_id(hook: Mapping[str, Any]) -> str | None:
+    model = hook.get("model")
+    if isinstance(model, str):
+        return model
+    if isinstance(model, dict) and isinstance(model.get("id"), str):
+        return model["id"]
+    return None
+
+
+def models_line(layout: Layout, plan_md: str | None, step: int | None = None,
+                session_id: str | None = None) -> str:
     try:
         if step is None and plan_md:
             step = next_open(step_order(plan_md), step_states(plan_md))
@@ -623,13 +665,15 @@ def models_line(layout: Layout, plan_md: str | None, step: int | None = None) ->
         config = {"models": layout.models} if layout.has_board else {}
         step_lines = model_check.step_model_lines(plan_md).get(step, []) if plan_md and step is not None else []
         pins = model_check.load_pins(model_check.PINS_DIR)
-        return model_check.board_summary(config, pins, step, step_lines, str(VIEW_PATH))
+        session = model_check.family(session_id) if session_id else None
+        return model_check.board_summary(config, pins, step, step_lines, str(VIEW_PATH), session)
     except Exception as error:
         return (f"Models: couldn't read the board ({type(error).__name__}: {error}). "
                 f"Full view: python {VIEW_PATH} --board")
 
 
-def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT) -> str:
+def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
+           session_id: str | None = None) -> str:
     state = upstream_state(run)
     _branch, upstream, ahead, _behind, head = state
     lines = [f"{layout.name} session start", branch_line(state)]
@@ -643,9 +687,9 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT) -> str:
     lines += plan_lines(plan, plan_md, layout, next_path, next_md)
     choice = _choice(plan, plan_md, next_path, next_md, layout)
     if choice is not None and choice.fallback:
-        lines.append(models_line(layout, next_md, choice.number))
+        lines.append(models_line(layout, next_md, choice.number, session_id))
     else:
-        lines.append(models_line(layout, plan_md))
+        lines.append(models_line(layout, plan_md, session_id=session_id))
     missing = profile_line(project)
     if missing:
         lines.append(missing)
@@ -716,8 +760,10 @@ def main(argv: list[str] | None = None) -> int:
         if args:
             text = "\n".join(next_step_lines(project, Layout(config)))
         else:
+            session_id = session_model_id(hook_input())
             deadline = time.monotonic() + DEADLINE_SECONDS
-            text = report(runner_until(deadline, str(project)), project, Layout(config))
+            text = report(runner_until(deadline, str(project)), project, Layout(config),
+                          session_id=session_id)
     except Exception as error:
         print(f"session_start.py failed: {type(error).__name__}: {error}", file=sys.stderr)
         return 1

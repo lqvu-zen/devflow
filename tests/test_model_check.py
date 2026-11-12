@@ -424,7 +424,7 @@ class TestBoard(BoardFixture):
             "orchestrator": ["opus", "-", "board"],
             "locator": ["haiku", "-", "pin"],
             "designer": ["sonnet", "medium", "board"],
-            "designer.diagnosis": ["opus", "high", "default"],
+            "designer.diagnosis": ["opus", "medium", "default"],
             "implementer": ["sonnet", "medium", "pin"],
             "implementer.escalate": ["opus", "high", "board"],
             "reviewer": ["opus", "high", "floor (board said sonnet, medium)"],
@@ -439,7 +439,7 @@ class TestBoard(BoardFixture):
     def test_the_pass_rule(self):
         table = board_table(self.board()[1])
         self.assertEqual(table["designer"][4], 'model: "sonnet", effort: "medium"')
-        self.assertEqual(table["designer.diagnosis"][4], 'model: "opus", effort: "high"')
+        self.assertEqual(table["designer.diagnosis"][4], "nothing")
         self.assertEqual(table["implementer.escalate"][4], 'model: "opus", effort: "high"')
         self.assertEqual(table["manage-project.readers"][4], 'model: "sonnet"')
         for key in ("locator", "implementer", "reviewer", "planner", "tester"):
@@ -484,8 +484,8 @@ class TestBoard(BoardFixture):
         code, output = self.board("--model", "designer: Sonnet, low")
         table = board_table(output)
         self.assertEqual(table["designer"][1:4], ["sonnet", "low", "Model line"])
-        self.assertEqual(table["designer.diagnosis"][1:4], ["opus", "high", "default"])
-        self.assertIn("for designer.diagnosis: fix-bug's diagnosis may not move below opus, high", output)
+        self.assertEqual(table["designer.diagnosis"][1:4], ["opus", "medium", "default"])
+        self.assertIn("for designer.diagnosis: fix-bug's diagnosis may not move below opus, medium", output)
         code, output = self.board("--model", "implementer: Opus, medium; x")
         table = board_table(output)
         self.assertEqual(table["implementer"][3], "Model line")
@@ -536,6 +536,19 @@ class TestBoard(BoardFixture):
         self.assertEqual(model_check.board_summary({"models": {"designer": "default"}}, pins, None, [], "v.py"),
                          "Models: board, every role on its default. Full view: python v.py --board")
 
+    def test_the_summary_warns_on_another_session_model(self):
+        pins = model_check.load_pins(self.agents)
+        warning = "This session runs on opus; the board's orchestrator is sonnet (/model switches it). "
+        board = {"models": {"designer": "default"}}
+        self.assertEqual(model_check.board_summary(board, pins, None, [], "v.py", "opus"),
+                         "Models: board, every role on its default. " + warning + "Full view: python v.py --board")
+        plain = model_check.board_summary(board, pins, None, [], "v.py")
+        for session in ("sonnet", None, "default"):
+            self.assertEqual(model_check.board_summary(board, pins, None, [], "v.py", session), plain)
+        moved = {"models": {"orchestrator": "Opus"}}
+        self.assertNotIn("This session runs on",
+                         model_check.board_summary(moved, pins, None, [], "v.py", "opus"))
+
 
 def make_board_session(folder: Path) -> Path:
     main = folder / "board.jsonl"
@@ -578,7 +591,7 @@ class TestCheckAgainstBoard(BoardFixture):
         self.assertEqual(rows(output)["implementer"][4:], ["sonnet, medium (pin)", "MISMATCH"])
         code, output = self.check("--escalated", "--diagnosis")
         self.assertEqual(code, 1)
-        self.assertEqual(rows(output)["designer"][4:], ["opus, high (default)", "MISMATCH"])
+        self.assertEqual(rows(output)["designer"][4:], ["opus, medium (default)", "MISMATCH"])
 
     def test_a_refused_model_line_still_exits_2(self):
         code, output = self.check("--model", "reviewer: Sonnet, high")
@@ -682,8 +695,8 @@ class TestRealPins(unittest.TestCase):
     def test_reads_the_real_pins(self):
         pins = model_check.load_pins(model_check.PINS_DIR)
         self.assertEqual((pins["designer"].model, pins["designer"].effort), ("opus", "medium"))
-        self.assertEqual((pins["reviewer"].model, pins["reviewer"].effort), ("opus", "high"))
-        self.assertEqual((pins["planner"].model, pins["planner"].effort), ("opus", "high"))
+        self.assertEqual((pins["reviewer"].model, pins["reviewer"].effort), ("opus", "medium"))
+        self.assertEqual((pins["planner"].model, pins["planner"].effort), ("opus", "medium"))
         self.assertEqual((pins["locator"].model, pins["locator"].effort), ("haiku", None))
 
     def test_the_shipped_boards_are_all_default_and_parse_clean(self):
@@ -700,6 +713,22 @@ class TestRealPins(unittest.TestCase):
                     if row.agent in pins and row.key == row.agent:
                         self.assertEqual(row.expect, pins[row.agent], row.key)
                         self.assertEqual(row.passes, "nothing", row.key)
+
+    def test_no_default_is_above_opus_medium(self):
+        pins = model_check.load_pins(model_check.PINS_DIR)
+        items = [(f"pin {role}", expect) for role, expect in pins.items()]
+        items += [(f"phase {key}", expect) for key, (_, expect) in model_check.PHASES.items()]
+        items += [(f"general {key}", expect) for key, expect in model_check.GENERAL.items()]
+        items.append(("diagnosis floor", model_check.DIAGNOSIS_FLOOR))
+        items += [(f"board default {key}", expect) for key, expect in model_check.board_defaults(pins).items()]
+        cap = model_check.EFFORTS.index("medium")
+        for name, expect in items:
+            with self.subTest(name):
+                self.assertIsNotNone(expect)
+                self.assertIn(expect.model, model_check.MODELS)
+                self.assertLessEqual(model_check.MODELS.index(expect.model), model_check.MODELS.index("opus"))
+                if expect.effort is not None:
+                    self.assertLessEqual(model_check.EFFORTS.index(expect.effort), cap)
 
 
 if __name__ == "__main__":

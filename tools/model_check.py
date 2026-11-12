@@ -41,11 +41,11 @@ class Expect(NamedTuple):
     source: str
 
 
-PHASES = {"designer.diagnosis": ("designer", Expect("opus", "high", "default")),
+PHASES = {"designer.diagnosis": ("designer", Expect("opus", "medium", "default")),
           "implementer.escalate": ("implementer", Expect("opus", "medium", "default"))}
 GENERAL = {"orchestrator": Expect("sonnet", None, "default"),
            "manage-project.readers": Expect("sonnet", None, "default")}
-DIAGNOSIS_FLOOR = Expect("opus", "high", "floor")
+DIAGNOSIS_FLOOR = Expect("opus", "medium", "floor")
 
 
 class Row(NamedTuple):
@@ -247,7 +247,7 @@ def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=()) -> t
         for key in _model_line_keys(role, keys):
             if key == "designer.diagnosis" and _below(expect, DIAGNOSIS_FLOOR):
                 notes.append(("not followed", f"{text!r} for designer.diagnosis: fix-bug's diagnosis may not "
-                                              f"move below opus, high"))
+                                              f"move below {shown(DIAGNOSIS_FLOOR)}"))
                 continue
             current[key] = expect
     rows = [Row(key, agent_of(key), current[key], "") for key in keys]
@@ -387,12 +387,25 @@ def format_board(label: str, rows: list[Row], notes: list[tuple[str, str]],
     return lines
 
 
+def orchestrator_note(rows: list[Row], session: str | None, has_board: bool = True) -> str | None:
+    if session not in MODELS:
+        return None
+    for row in rows:
+        if row.key == "orchestrator" and row.expect is not None and row.expect.model != session:
+            owner = "the board's orchestrator" if has_board else "the orchestrator default"
+            return f"This session runs on {session}; {owner} is {row.expect.model} (/model switches it)."
+    return None
+
+
 def board_summary(config: object, pins: dict[str, Expect], step: int | None, step_lines: list[str],
-                  view_path: str) -> str:
+                  view_path: str, session: str | None = None) -> str:
     tail = f"Full view: python {view_path} --board"
     rows, notes = board_rows(config, pins)
     defaults = board_defaults(pins)
     has_board = isinstance(config, dict) and BOARD_KEY in config
+    note = orchestrator_note(rows, session, has_board)
+    if note:
+        tail = f"{note} {tail}"
     said: list[str] = []
     moves = [f"{row.key} to {shown(row.expect)}" for row in rows
              if row.source == "board" and shown(row.expect) != shown(defaults.get(row.key))]

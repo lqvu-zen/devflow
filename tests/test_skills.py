@@ -751,6 +751,21 @@ def _high_designer_lines() -> list[str]:
     return found
 
 
+ABOVE_THE_CAP = re.compile(r"\bhigh effort\b|\bat high\b|\bopus, high\b|\(high\b", re.IGNORECASE)
+
+
+def _above_the_cap_lines() -> list[str]:
+    paths = sorted(SKILLS.glob("*/SKILL.md")) + sorted((ROOT / "agents").glob("*.md"))
+    paths += [ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / ".claude" / "devflow.md"]
+    paths += sorted((ROOT / "templates").glob("*.md")) + [ROOT / "docs" / "BEHAVIOUR.md"]
+    found = []
+    for path in paths:
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            if ABOVE_THE_CAP.search(line):
+                found.append(f"{path.relative_to(ROOT).as_posix()}:{number}")
+    return found
+
+
 class TestModelRules(unittest.TestCase):
     def test_model_rules_are_the_same_words(self):
         for lead_in in MODEL_RULES:
@@ -792,6 +807,9 @@ class TestModelRules(unittest.TestCase):
 
     def test_no_line_says_the_designer_runs_at_high_effort(self):
         self.assertEqual(_high_designer_lines(), [])
+
+    def test_no_line_gives_a_default_above_opus_medium(self):
+        self.assertEqual(_above_the_cap_lines(), [])
 
     def test_the_model_line_is_in_the_plan_template_and_the_project_manager(self):
         self.assertIn("**Model:**", (TEMPLATES / "plan.md").read_text(encoding="utf-8"))

@@ -42,7 +42,7 @@ Behaviour map: <IDs to add or update, and their surfaces>.
 **Files:** `<path/to/new/module>` (new), `<path/to/existing/module>`, `docs/BEHAVIOUR.md`, possibly `<path/to/config>`.
 **Needs** <step numbers>.
 **Escalate:** <only for an area Escalate names>.
-**Model:** <optional; one line per role, as `designer: Sonnet, medium; a one-line wording fix`. Any role may move up; only the designer, implementer and tester may move down, and never a fix-bug diagnosis below Opus, high. Overrides the board and Escalate for this step>.
+**Model:** <optional; one line per role, as `designer: Sonnet, medium; a one-line wording fix`. Any role may move up; only the designer, implementer and tester may move down, and never a fix-bug diagnosis below Opus, medium. Overrides the board and Escalate for this step>.
 **Gate:** <only when the maintainer must do or decide something first>.
 **Done when** <what a test proves>; <every surface>; the new map entries with their tests.
 **Tried:** <optional; written by a coding session that stopped. One clause per approach: what it was and why it failed (output: <path>); a later stop adds to the end>.

@@ -39,13 +39,13 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 | 3. Design | `devflow:designer` | Opus, medium effort | Hardest reasoning: architecture fit, edge cases, the smallest correct change. |
 | 4. Implement / test / fix | `devflow:implementer` | Sonnet (Opus, medium effort, when escalated) | Strong coder; fast and economical across the many tool calls in the fix loop. |
 | 4b. Verify | orchestrator (you) | session model | Re-runs tests and walks the checklist; the real gate is the step-5 review. |
-| 5. Review | `devflow:reviewer` | Opus, high effort | Fresh eyes: catches correctness and architecture-rule bugs the implementer missed. |
+| 5. Review | `devflow:reviewer` | Opus, medium effort | Fresh eyes: catches correctness and architecture-rule bugs the implementer missed. |
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Light summarization. |
 
 **The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up from this skill's base directory) prints each role's model and effort, where each comes from, and what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing where it shows nothing), and report each line it marks `floor` or `ignored`. Run it before step 2. **Run this skill from the session model the board's `orchestrator` row names.** An area **Escalate** names takes the `implementer.escalate` row; `fix-bug`'s diagnosis takes `designer.diagnosis`.
 
-**A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Give each to the board command as `--model "<line>"`; for that step it goes over the board and **Escalate** for that role's rows. A line the command refuses (the locator, reviewer or planner below its pin, `fix-bug`'s diagnosis below Opus, high) is not followed: say so in the report.
+**A step's Model line.** A plan step may carry `**Model:** <role>: <Model>, <effort>; <why>`, one role per line. Give each to the board command as `--model "<line>"`; for that step it goes over the board and **Escalate** for that role's rows. A line the command refuses (the locator, reviewer or planner below its pin, `fix-bug`'s diagnosis below Opus, medium) is not followed: say so in the report.
 
 **A design's parts.** When the approved design lists **Parts**, run step 4 once per part, in order: a fresh implementer call with that part's `model` and `effort`, over the board, **Escalate** and an implementer Model line, described `<task>, part N of M`, its brief naming `part N of M` and adding the part and the earlier parts' reports, then step 4's checks for that part. The stop rules hold per part: a part still red stops the step on its model. One review follows the last part. For the model check, give one `--part "<line>"` per part, in order, in place of an implementer `--model`.
 

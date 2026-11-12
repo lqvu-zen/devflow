@@ -7,8 +7,8 @@ Paste-ready prompts for running <Project> with the devflow team. Replace anythin
 | Tab | Model and effort | For |
 |---|---|---|
 | Project manager | Sonnet | `/devflow:manage-project`: status, issues, decisions, plan steps |
-| Coding | Sonnet (high effort for the release test phase and releases) | one plan step per fresh tab |
-| Planning | Opus, high effort | a whole release plan, a big design question |
+| Coding | Sonnet | one plan step per fresh tab |
+| Planning | Opus, medium effort | a whole release plan, a big design question |
 
 Open a new tab for each session. Switch the model from the model picker under the prompt box.
 
@@ -90,7 +90,7 @@ Decision: {decision}. Log it, update the plans it affects, and give me the
 prompt for the coding session.
 ```
 
-**Turn a brief into a plan** (planning tab on Opus at high effort, or the project manager calling `devflow:planner`):
+**Turn a brief into a plan** (planning tab on Opus at medium effort, or the project manager calling `devflow:planner`):
 ```
 Turn {docs/plans/release-X.Y.Z-brief.md} into docs/plans/release-{X.Y.Z}.md, in
 the format of {the latest plan in docs/archive/, or templates/plan.md}. Check every
@@ -149,7 +149,7 @@ Don't change code.
 
 ## 4. Testing
 
-**Tester agent on a release candidate** (coding tab, high effort):
+**Tester agent on a release candidate** (coding tab):
 ```
 Run devflow:tester on the {vX.Y.Z-rcN} artifacts, following Try it in
 .claude/devflow.md: every change since {last tag}, each relevant download.
@@ -165,7 +165,7 @@ promotion.
 
 ---
 
-## 5. Releasing (coding tab, high effort)
+## 5. Releasing (coding tab)
 
 **Start a release candidate:**
 ```
