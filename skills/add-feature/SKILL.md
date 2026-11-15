@@ -5,7 +5,7 @@ description: 'Add or improve a feature the devflow way, end to end: understand, 
 
 # Adding or improving a feature
 
-A change that ignores the project's architecture rules, its data and migration rules, or its dependency direction can look correct and still break the running product or a user's data. So this workflow front-loads understanding and ends with real verification, the product working and the tests passing, before anything is committed.
+A change that ignores the project's architecture rules, its data and migration rules, or its dependency direction can look correct and still break the running product or a user's data. So this workflow front-loads understanding and ends with real verification, before anything is committed.
 
 Work through the phases in order. Don't skip the test or review phase to save time; a feature that isn't verified isn't done.
 
@@ -28,7 +28,7 @@ Everything specific to this project is in **`.claude/devflow.md`**. Read it firs
 
 If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setup` first.
 
-**You are the orchestrator.** You own the conversation with the user, the delegation below, the verification of everything you delegate, and the commit decision. You do **not** design the feature, write the implementation, run the tests, or review the final diff yourself. Each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Your own job is steps 1 and 2 (gather context), then spawning, verifying and committing. Keep this separation even for small features.
+**You are the orchestrator.** You own the conversation with the user, the delegation below, the verification of everything you delegate, and the commit decision. You do **not** design the feature, write the implementation, run the tests, or review the final diff yourself. Each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Keep this separation even for small features.
 
 ## Who does each phase
 
@@ -38,10 +38,10 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 | 2. Locate code | `devflow:locator` | Haiku | Cheap, fast search; returns the code excerpts the design brief needs. |
 | 3. Design | `devflow:designer` | Opus, medium effort | Hardest reasoning: architecture fit, edge cases, the smallest correct change. |
 | 4. Implement / test / fix | `devflow:implementer` | Sonnet (Opus, medium effort, when escalated) | Strong coder; fast and economical across the many tool calls in the fix loop. |
-| 4b. Verify | orchestrator (you) | session model | Re-runs tests and walks the checklist; the real gate is the step-5 review. |
+| 4b. Verify | orchestrator (you) | session model | Re-runs tests and walks the checklist. |
 | 5. Review | `devflow:reviewer` | Opus, medium effort | Fresh eyes: catches correctness and architecture-rule bugs the implementer missed. |
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
-| 7. Report | orchestrator (you) | session model | Light summarization. |
+| 7. Report | orchestrator (you) | session model | Summary. |
 
 **The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up from this skill's base directory) prints each role's model and effort, where each comes from, and what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing where it shows nothing), and report each line it marks `floor` or `ignored`. Run it before step 2. **Run this skill from the session model the board's `orchestrator` row names.** An area **Escalate** names takes the `implementer.escalate` row; `fix-bug`'s diagnosis takes `designer.diagnosis`.
 
@@ -72,8 +72,6 @@ A change touches a UI surface when it edits one that **Design system** lists und
 - **Designer (step 3):** the whole **Design system** section and the whole design-system file, verbatim, and the path of the core checklist (`skills/review-ui/references/core.md` in the plugin, beside this skill's folder; pass it as an absolute path), and: *"UI change. Add the UI section from your instructions: tokens, every state, every size and layout, every input, worst-case data, intake, motion, accessibility, and the states to capture."* When the change adds new UI rather than editing existing UI, also pass the absolute paths of `build.md` and `motion.md` (same folder as `core.md`) and add: *"New UI. Read build.md and motion.md and follow them."*
 - **Implementer (step 4):** the plan's UI section, the **Design system** section and the design-system file, verbatim, and: *"Use the design system's tokens; no hard-coded colour, size, spacing, radius or duration that a token covers. Handle every state the UI section lists. Follow See it working to take a screenshot of each state under 'states to capture', and report any you could not reach, with the reason. Keep screenshots in your scratchpad, never in the repo."* When the change adds new UI, also pass the absolute path of `build.md` (same folder as `core.md`) and add: *"New UI. Before you report, check the finished UI against build.md §5."*
 - **Reviewer (step 5):** the plan's UI section, the **Design system** section, the design-system file, and the path of the core checklist (`skills/review-ui/references/core.md` in the plugin, beside this skill's folder; pass it as an absolute path), and: *"UI change. Check the diff against the design system and the core checklist as your instructions say."* Also pass the absolute path of `motion.md` (same folder as `core.md`) and add: *"When the diff moves something, apply motion.md §5 as your instructions say."*
-
-The states the implementer could not reach go in the report to the user as "needs a human".
 
 ## Before you start, and where you stop
 
@@ -117,7 +115,7 @@ Agent({ description: "Design <feature>", subagent_type: "devflow:designer", prom
 
 The brief must be self-contained; the designer can't see this conversation. Start it with **"Feature mode."** and paste, verbatim: the user's request (one paragraph); the **Where things live** table and the whole **Architecture rules** section; the excerpts, map rows and "already exists" findings from step 2; and: *"Design the smallest correct implementation. Do NOT write code; produce only a plan with the sections in your instructions. If something is ambiguous, list it as a question for the maintainer instead of guessing."*
 
-Present the plan to the user and proceed once they're on board (a "go ahead" with no comment counts as approval). Use a task list so each concrete change is visible during implementation.
+Present the plan to the user and proceed once they're on board (a "go ahead" with no comment counts as approval). For a UI change, name the states and inputs its UI section lists. Use a task list so each concrete change is visible during implementation.
 
 ### 4. Implement, test and fix with a Sonnet agent
 
@@ -160,4 +158,4 @@ If this was a plan step, set its Status row to `done`, with the commit hash and 
 
 ### 7. Report back
 
-Tell the user, briefly: what was added and where it shows, which files changed, the commit hash, whether CI on it went green, any `**Gate:**` line that still waits for the maintainer and what they have to do, the "needs a human" items, and any known limitation or follow-up worth doing next. For new UI, list the implementer's §5 floor items with their marks (met, not met, not checked).
+Tell the user, briefly: what was added and where it shows, which files changed, the commit hash, whether CI on it went green, any `**Gate:**` line that still waits for the maintainer and what they have to do, the "needs a human" items (unreached UI states too), and any known limitation or follow-up worth doing next. For new UI, end with the implementer's **UI floor**, one line per build.md §5 item (contrast, text measure, states, target size, tokens, worst-case data, motion) marked met, not met or not checked (an item it left out is not checked).

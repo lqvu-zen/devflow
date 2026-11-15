@@ -884,5 +884,32 @@ class TestSetupChecksUv(unittest.TestCase):
                 self.assertIn(words, paragraph)
 
 
+BUILD = ROOT / "skills" / "review-ui" / "references" / "build.md"
+PRESENT_UI = "For a UI change, name the states and inputs its UI section lists."
+FLOOR_ITEMS = ("contrast", "text measure", "states", "target size", "tokens", "worst-case data", "motion")
+FLOOR_MARKS = "met, not met or not checked"
+
+
+def _floor_bullets() -> list[str]:
+    return [line for line in _section(BUILD, "## 5. The floor, before reporting done").splitlines() if line.startswith("- ")]
+
+
+class TestUiReport(unittest.TestCase):
+    def test_the_presented_design_names_its_states_and_inputs(self):
+        self.assertIn(PRESENT_UI, _paragraph(ADD_FEATURE, "Present the plan to the user"))
+
+    def test_the_report_lists_every_floor_item_with_its_mark(self):
+        report = _subsection(ADD_FEATURE, "### 7.")
+        self.assertIn("**UI floor**", report)
+        report = report.split("**UI floor**", 1)[1]
+        self.assertIn(FLOOR_MARKS, report)
+        for item in FLOOR_ITEMS:
+            with self.subTest(item):
+                self.assertRegex(report, rf"\b{re.escape(item)}\b")
+
+    def test_the_floor_items_match_build_md(self):
+        self.assertEqual(len(_floor_bullets()), len(FLOOR_ITEMS))
+
+
 if __name__ == "__main__":
     unittest.main()
