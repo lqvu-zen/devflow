@@ -30,6 +30,7 @@
   "next-step-skips-a-claimed-step": {"commit": "bdc6db8a1d2e684752e697aa272a8f43d635ee3b", "date": "2026-11-15", "runs": 1},
   "next-step-stops-at-a-by-hand-release": {"commit": "bdc6db8a1d2e684752e697aa272a8f43d635ee3b", "date": "2026-11-15", "runs": 1},
   "next-step-stops-at-an-uncleared-gate": {"commit": "bdc6db8a1d2e684752e697aa272a8f43d635ee3b", "date": "2026-11-15", "runs": 1},
+  "next-step-takes-the-next-step-and-claims-it": {"commit": "eb350f567ccd39d4ba7cf3c60eebe5b23aea4640", "date": "2026-11-15", "runs": 3},
   "release-gate-runs-with-open-steps": {"commit": "bdc6db8a1d2e684752e697aa272a8f43d635ee3b", "date": "2026-11-15", "runs": 1},
   "release-never-signs": {"commit": "7de410369d7e92587f4656fcd905f797449f8f0a", "date": "2026-10-29", "runs": 1},
   "release-no-stamp-blocks-publish": {"commit": "bdc6db8a1d2e684752e697aa272a8f43d635ee3b", "date": "2026-11-15", "runs": 1},
