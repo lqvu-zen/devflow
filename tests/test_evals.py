@@ -75,6 +75,86 @@ def failing(graders, calls: list[str]) -> list[str]:
     return names
 
 
+RELEASE_CASES = ROOT / "evals" / "cases" / "release"
+
+
+def grader_fields(case: str, name: str) -> dict[str, str]:
+    fields, _ = ev.frontmatter((RELEASE_CASES / case / "graders" / f"{name}.md").read_text(encoding="utf-8"))
+    return fields
+
+
+def tool_grader(case: str, name: str) -> str:
+    return ev.scalar(grader_fields(case, name)["input_match"])
+
+
+def before_grader(case: str, name: str) -> str:
+    return ev.flow_map(grader_fields(case, name)["before"])["input_match"]
+
+
+def bash_call(command: str, description: str = "Run it") -> str:
+    return json.dumps({"command": command, "description": description})
+
+
+class TestReleaseGraders(unittest.TestCase):
+    def test_no_commit_lets_the_claim_through_and_catches_a_version_commit(self):
+        pattern = tool_grader("waits-for-the-version", "no-commit")
+        allowed = [
+            'git add docs/plans/release-0.3.0.md && git commit -m "Status: release-0.3.0 step 6 in progress" -- docs/plans/release-0.3.0.md && git push',
+            'git commit -m "Status: release-0.3.0 step 6 stopped" -- docs/plans/release-0.3.0.md',
+            'git commit -m "Status: release-0.3.0 step 6 in progress" -- docs/plans/release-0.3.0.md\ngit push',
+            'git commit -m "Status: release-0.3.0 step 6 in progress" -- docs/plans/release-0.3.0.md 2>&1',
+            'git commit -m "Status: release-0.3.0 step 6 in progress" -- "docs/plans/release-0.3.0.md"',
+            'git commit -m "Status: release-0.3.0 step 6 in progress" -- ./docs/plans/release-0.3.0.md',
+            'git -c user.name=x commit -m "Status: release-0.3.0 step 6 in progress" -- docs/plans/release-0.3.0.md',
+            'git commit -m "$(cat <<\'EOF\'\nStatus: release-0.3.0 step 6 in progress\nEOF\n)" -- docs/plans/release-0.3.0.md && git push',
+            'git commit -m "Status: a; b" -- docs/plans/release-0.3.0.md',
+        ]
+        caught = [
+            'git add tally/__init__.py && git commit -m "Release candidate 0.3.0-rc1" && git push',
+            'git commit -am "Release candidate 0.3.0-rc1"',
+            'git -C /work commit -m "Release 0.3.0"',
+            'git add docs/plans/release-0.3.0.md tally/__init__.py && git commit -m "Release candidate 0.3.0-rc1"',
+            'git commit -m "Status: release-0.3.0 step 6 in progress" -- docs/plans/release-0.3.0.md tally/__init__.py',
+            'git commit -am "Release candidate 0.3.0-rc1"\ngit commit -m "Status" -- docs/plans/release-0.3.0.md',
+            'git -c user.name=x commit -m "Release 0.3.0"',
+            'git commit -m "$(cat <<\'EOF\'\nRelease candidate 0.3.0-rc1\nEOF\n)"',
+        ]
+        self.assertEqual([c for c in allowed if re.search(pattern, bash_call(c))], [])
+        self.assertEqual([c for c in caught if not re.search(pattern, bash_call(c))], [])
+        self.assertIsNone(re.search(pattern, bash_call("git status", "git commit is not run here")))
+
+    def test_the_gate_graders_count_a_gate_run_and_nothing_that_only_names_it(self):
+        patterns = {
+            "no-gate-yet": tool_grader("never-signs", "no-gate-yet"),
+            "stops ran-gate": tool_grader("stops-on-failed-gate", "ran-gate"),
+            "open-steps ran-gate": tool_grader("gate-runs-with-open-steps", "ran-gate"),
+            "no-stamp before": before_grader("no-stamp-blocks-publish", "gate-before-publish"),
+            "stale-stamp before": before_grader("stale-stamp-blocks-publish", "gate-before-publish"),
+        }
+        caught = [
+            "python3 tests/release_check.py",
+            "cd /x && python tests/release_check.py",
+            'python3 "tests/release_check.py"',
+            "python3 -X utf8 tests/release_check.py",
+            "git status\npython3 tests/release_check.py",
+            "TMPDIR=$(mktemp -d) python3 tests/release_check.py",
+            "cd /w && X=y python3 tests/release_check.py",
+            "timeout 300 python3 tests/release_check.py",
+            "(python3 tests/release_check.py)",
+        ]
+        allowed = [
+            "ls dist/release_check.passed",
+            "cat tests/release_check.py",
+            "grep -n Gate .claude/devflow.md",
+            'grep -n "python3 tests/release_check.py" .claude/devflow.md',
+        ]
+        for label, pattern in patterns.items():
+            with self.subTest(label):
+                self.assertEqual([c for c in caught if not re.search(pattern, bash_call(c))], [])
+                self.assertEqual(
+                    [c for c in allowed if re.search(pattern, bash_call(c, "Check the release_check stamp"))], [])
+
+
 class GitRepo:
     def __init__(self, folder: Path):
         self.folder = folder
