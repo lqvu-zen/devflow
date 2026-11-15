@@ -29,6 +29,52 @@ ev = _load("eval_select", SELECT_PATH)
 FAKE = "0" * 40
 
 
+MODEL_CHECK_PATH = ROOT / "tools" / "model_check.py"
+PARTS_CASE = ROOT / "evals" / "cases" / "add-feature" / "parts-run-in-order"
+FIXTURE_CONFIG = ROOT / "evals" / "fixture" / "tree" / "claude" / "devflow.json"
+
+
+def board_passes(parts: list[str]) -> dict[str, str]:
+    with tempfile.TemporaryDirectory() as project:
+        command = [sys.executable, str(MODEL_CHECK_PATH), "--board", project, "--config", str(FIXTURE_CONFIG)]
+        for part in parts:
+            command += ["--part", part]
+        output = subprocess.run(command, capture_output=True, text=True, encoding="utf-8", check=True).stdout
+    found = {}
+    for line in output.splitlines():
+        cells = [cell.strip() for cell in line.split("|")]
+        if len(cells) == 5 and cells[0].startswith("implementer part "):
+            found[cells[0].removeprefix("implementer ")] = cells[4]
+    return found
+
+
+def part_call(label: str, passes: str) -> str:
+    call = {"description": f"Implement median, {label}", "subagent_type": "devflow:implementer"}
+    if passes != "nothing":
+        call.update(re.findall(r'(\w+): "([^"]+)"', passes))
+    call["prompt"] = f"{label.capitalize()}. Do only this part."
+    return json.dumps(call, separators=(",", ":"))
+
+
+def agent_graders(case: Path) -> list[tuple[str, str, int, int | None]]:
+    found = []
+    for path in sorted((case / "graders").glob("*.md")):
+        fields, _ = ev.frontmatter(path.read_text(encoding="utf-8"))
+        if fields.get("type") == "tool_used" and fields.get("tool") == "Agent":
+            limit = ev.integer(fields["max"]) if "max" in fields else None
+            found.append((path.stem, ev.scalar(fields["input_match"]), ev.integer(fields.get("min", "1")), limit))
+    return found
+
+
+def failing(graders, calls: list[str]) -> list[str]:
+    names = []
+    for name, pattern, low, high in graders:
+        count = sum(1 for call in calls if re.search(pattern, call))
+        if count < low or (high is not None and count > high):
+            names.append(f"{name}: {count} calls")
+    return names
+
+
 class GitRepo:
     def __init__(self, folder: Path):
         self.folder = folder
@@ -604,6 +650,37 @@ class TestEvalFiles(unittest.TestCase):
         passes = json.loads(raw)
         self.assertEqual(len(passes) + 2, len(raw.decode("utf-8").splitlines()))
         self.assertEqual(sorted(passes), list(passes))
+
+
+class TestPartsCaseGraders(unittest.TestCase):
+    def setUp(self):
+        scaffold = (PARTS_CASE / "scaffold.sh").read_text(encoding="utf-8")
+        self.parts = re.findall(r"`(implementer: [^`]+)`", scaffold)
+        self.passes = board_passes(self.parts)
+        self.graders = agent_graders(PARTS_CASE)
+
+    def test_the_board_passes_nothing_for_a_part_equal_to_the_pin(self):
+        self.assertEqual(len(self.parts), 3)
+        self.assertEqual(self.passes, {"part 1 of 3": "nothing", "part 2 of 3": 'model: "opus", effort: "medium"',
+                                       "part 3 of 3": "nothing"})
+
+    def test_the_calls_the_board_prints_pass_every_agent_grader(self):
+        calls = [part_call(label, passes) for label, passes in self.passes.items()]
+        self.assertEqual([], failing(self.graders, calls))
+
+    def test_each_part_has_a_grader_that_needs_its_call(self):
+        for label in self.passes:
+            with self.subTest(label):
+                self.assertTrue(any(label in pattern and low >= 1 for _, pattern, low, _ in self.graders))
+
+    def test_an_override_on_a_part_equal_to_the_pin_fails_a_grader(self):
+        for label, passes in self.passes.items():
+            if passes != "nothing":
+                continue
+            with self.subTest(label):
+                calls = [part_call(other, 'model: "sonnet", effort: "medium"' if other == label else value)
+                         for other, value in self.passes.items()]
+                self.assertNotEqual([], failing(self.graders, calls))
 
 
 if __name__ == "__main__":

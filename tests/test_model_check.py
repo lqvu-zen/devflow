@@ -436,6 +436,11 @@ class TestBoard(BoardFixture):
             self.assertEqual(table[key][1:4], cells, key)
         self.assertIn(f'model board: {(self.project / ".claude" / "devflow.json").resolve()} "models"', output)
 
+    def test_a_part_equal_to_the_pin_passes_nothing(self):
+        table = board_table(self.board("--part", "implementer: Sonnet, medium; a", "--part", "implementer: Opus, medium; b")[1])
+        self.assertEqual(table["implementer part 1 of 2"][1:5], ["sonnet", "medium", "part 1 of 2", "nothing"])
+        self.assertEqual(table["implementer part 2 of 2"][4], 'model: "opus", effort: "medium"')
+
     def test_the_pass_rule(self):
         table = board_table(self.board()[1])
         self.assertEqual(table["designer"][4], 'model: "sonnet", effort: "medium"')
