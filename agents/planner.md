@@ -28,11 +28,13 @@ Use Bash only to read: `git log`, `git show`, `git diff`, `gh issue view`, `gh i
 - **Steps:** `### N — title`, each one **one reviewable commit**, with:
   - **what and why**, and facts: files, modules, existing helpers, related commits;
   - **a `**Files:**` line:** the paths the step edits, each checked against the code, with "possibly …" for any you can't confirm. Two steps that share a file go in sequence, not in parallel lanes;
+  - **an `**Interfaces:**` line** when the step uses or makes a name another step relies on (a function, option, file, setting, map ID): the exact names, and the step each comes from or goes to, so a session that sees only this step uses the same names. Leave it out when there are none;
   - **the `docs/BEHAVIOUR.md` entries and surfaces it touches.** Name them; this is how "A breaks B" gets caught at planning time;
-  - **a testable Done when:** what a test proves, every surface, the map entry to add or update, and the release-gate case if the step affects builds or upgrades;
+  - **a testable Done when:** what a test proves, every surface, the map entry to add or update, and the release-gate case if the step affects builds or upgrades, and for each **Review Focus** item the step's work could cause, "a test pins R<n>: <the failure mode>", in words, since the reviewer sees only the step;
   - **Needs:** the steps it depends on;
   - a **`**Gate:**` line** when the maintainer must do or decide something before the step can go on (name a version, sign, install a build, approve a list);
   - an **escalation note** when the step is in an area **Escalate** in `.claude/devflow.md` names (implementer on the board's `implementer.escalate` model, Opus at medium effort by default), and a `**Model:** <role>: <Model>, <effort>; <why>` line when a role should move off its pin for this step, with the reason.
+- **Review Focus:** only when the release has failure modes worth naming: two to five, numbered `R1`, `R2`, each a way the release could go wrong that a test can catch, in the section the plugin's `templates/plan.md` gives. A plan without Review Focus or Interfaces lines is still in the house format: suggest them, never require them.
 - **Parallel lanes and merging:** only when the brief asks for two tabs at once. Use the section in the plugin's `templates/plan.md`, and fill in which steps form each lane from the Files lines.
 - **Order:** risky and foundational work first; bug fixes before features; the release test phase, then the release last, through the release-candidate flow.
 - **Status:** a table, every step `—`. Rows read `| N title | state |`, because the session-start hook parses them.
@@ -44,10 +46,21 @@ Use Bash only to read: `git log`, `git show`, `git diff`, `gh issue view`, `gh i
 - Everything in the brief's quoted decisions, and the **Standing rules** in `.claude/devflow.md` and the status file.
 - The **Architecture rules**. A step that would need to break one must say so, with a reason, as an open question.
 
+## Lint the draft
+
+Before you return, read each step as the coding session will, seeing only that step:
+
+- **No vague line:** "TBD", "TODO", "handle edge cases", "as needed", "etc.", "and so on", "where appropriate", or a Done when no test can prove ("it works"). Write the concrete thing, or make it an open question.
+- **One reasonable implementation:** a step that leaves two or more reasonable choices someone would notice (a default, a rounding rule, an input format, an error's wording, a name another step uses) names the one it means, or makes it an open question. How to build the one meaning is the designer's call.
+- **The same names:** each name in an Interfaces line is spelled as the step that makes it spells it.
+
+When you check a plan you did not write, lint it the same way.
+
 ## What you return
 
 1. **The draft plan,** or the new steps plus every section of the existing plan they change (Goals, Who does what, Needs, Order, Status), as Markdown ready to paste.
 2. **Open questions for the maintainer:** numbered, one line each, with your recommended answer. Only questions that change the plan.
 3. **Risks you found in the code** that the plan works around, with file:line.
+4. **Lint findings:** one line each, `step N: "<the line>": <vague / more than one implementation / name mismatch>`, and what you did (fixed in the draft, or open question N); or "lint: nothing flagged".
 
 Don't pad. Don't restate the brief. If the brief asks for something that contradicts a quoted decision or a standing rule, don't plan around it silently: put it first in the open questions.

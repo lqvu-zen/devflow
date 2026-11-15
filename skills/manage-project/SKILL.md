@@ -71,8 +71,8 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
 
 1. **A new number** (never renumber existing steps), a heading `### N — <short title>`, and an italic line saying where it came from: `_Added YYYY-MM-DD from issue #N / the maintainer's decision / user feedback._`
 2. **What and why,** with facts the team needs: files and modules if you know them, related `docs/BEHAVIOUR.md` entries and their surfaces, earlier commits. Don't prescribe the design; that's the designer's job.
-3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence.
-4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated.
+3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence. When the step uses or makes a name another step relies on (a function, option, file, setting or map ID), add an `**Interfaces:**` line with the exact names and the step each comes from or goes to.
+4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated; when the plan has a **Review Focus** section, "a test pins R<n>: <the failure mode>" for each item the step's work could cause.
 5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation (the board's `implementer.escalate` model) for any area **Escalate** names. To move a role off the board for this step, propose a `**Model:** <role>: <Model>, <effort>; <why>` line, one role per line, with the reason: any role may move up; only the designer, implementer and tester may move down, and never `fix-bug`'s diagnosis below Opus, medium; it overrides **Escalate** for that step.
 6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on.
 7. **The plan's other sections updated to match:**
@@ -108,7 +108,17 @@ Agent({ description: "Plan <what>", subagent_type: "devflow:planner", prompt: <b
 
 The brief includes: the goal in the maintainer's words; the source document (path); the **Standing rules**; the relevant decision-log entries, verbatim; and what to return: a draft plan in the house format, plus **open questions for the maintainer**.
 
-The agent returns a draft and does not write files. **Bring its open questions to the maintainer,** apply their answers, then write the plan file yourself and log the decisions.
+The agent returns a draft, with its lint findings, and does not write files.
+
+**A cold read, once.** Before the maintainer accepts a draft the planner returned (a plan, new steps, or a plan it checked), give the draft to one fresh `general-purpose` agent with the `model` and `effort` the board command prints for the planner, even where its `pass` column shows nothing, because a `general-purpose` agent has no pin:
+
+```
+Agent({ description: "Cold read <plan>", subagent_type: "general-purpose", model: <the planner's>, effort: <the planner's>, prompt: <brief> })
+```
+
+The brief gives the draft, verbatim, and says: *"You will build this plan, one step per fresh session that sees only its own step. Read the draft and the code it names; edit nothing. Return only the questions where a wrong guess would change what gets built or break another step, most costly first, one line each with its step number; or exactly 'nothing important left'."* Sort each question into **answered** (the draft or the code already answers it: say where), **minor** (any reasonable guess will do: leave it to the designer) or **the maintainer's**. One round: no second cold read after the answers.
+
+**Bring the open questions to the maintainer:** the planner's, its lint findings, and the cold read's maintainer's questions, ranked as it ranked them. Never answer one yourself. Apply the maintainer's answers, then write the plan file yourself and log the decisions.
 
 If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for the planner, and paste the plugin's `agents/planner.md` at the top of the brief.
 

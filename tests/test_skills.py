@@ -884,6 +884,42 @@ class TestSetupChecksUv(unittest.TestCase):
                 self.assertIn(words, paragraph)
 
 
+class TestPlanFormat(unittest.TestCase):
+    def test_the_template_makes_interfaces_and_review_focus_optional(self):
+        text = (TEMPLATES / "plan.md").read_text(encoding="utf-8")
+        for words in ("**Interfaces:** <optional", "## Review Focus", "_Optional; leave it out"):
+            with self.subTest(words=words):
+                self.assertIn(words, text)
+
+    def test_the_planner_lints_and_returns_its_findings(self):
+        planner = ROOT / "agents" / "planner.md"
+        lint = _section(planner, "## Lint the draft")
+        for words in ("TBD", "handle edge cases", "two or more reasonable choices"):
+            with self.subTest(words=words):
+                self.assertIn(words, lint)
+        self.assertIn("**Lint findings:**", _section(planner, "## What you return"))
+        self.assertIn("suggest them, never require them", planner.read_text(encoding="utf-8"))
+
+    def test_the_project_manager_runs_one_cold_read(self):
+        section = _section(MANAGE_PROJECT, "## When to call the planner agent")
+        for words in (
+            "nothing important left",
+            "One round: no second cold read",
+            "Never answer one yourself",
+            "**answered**",
+            "**minor**",
+            "**the maintainer's**",
+            "the `model` and `effort` the board command prints for the planner",
+        ):
+            with self.subTest(words=words):
+                self.assertIn(words, section)
+
+    def test_a_new_step_gets_interfaces_and_review_focus(self):
+        section = _section(MANAGE_PROJECT, "## Adding a plan step")
+        self.assertIn("**Interfaces:**", section)
+        self.assertIn("a test pins R<n>", section)
+
+
 BUILD = ROOT / "skills" / "review-ui" / "references" / "build.md"
 PRESENT_UI = "For a UI change, name the states and inputs its UI section lists."
 FLOOR_ITEMS = ("contrast", "text measure", "states", "target size", "tokens", "worst-case data", "motion")

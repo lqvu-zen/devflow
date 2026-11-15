@@ -21,6 +21,12 @@ _Created <YYYY-MM-DD> by the project manager from <the brief / the maintainer's 
 | 2 <title> | coding session | `/devflow:add-feature` |
 | 3 Release X.Y.Z | coding session + maintainer | `/devflow:release`; the maintainer names the version |
 
+## Review Focus
+
+_Optional; leave it out when nothing needs naming. Two to five ways this release could go wrong that a test can catch. A step whose work could cause one names it in its Done when, in its own words, so the reviewer checks it._
+
+- **R1** <what goes wrong, for whom, and where>.
+
 ## Steps
 
 ### 1 — <Fix #NN: short title>
@@ -40,11 +46,12 @@ Behaviour map: <IDs and their surfaces>.
 Behaviour map: <IDs to add or update, and their surfaces>.
 
 **Files:** `<path/to/new/module>` (new), `<path/to/existing/module>`, `docs/BEHAVIOUR.md`, possibly `<path/to/config>`.
+**Interfaces:** <optional; the exact names the step uses from other steps and makes for them, as `consumes core.median(items) from step 1; produces --precision N for step 3`>.
 **Needs** <step numbers>.
 **Escalate:** <only for an area Escalate names>.
 **Model:** <optional; one line per role, as `designer: Sonnet, medium; a one-line wording fix`. Any role may move up; only the designer, implementer and tester may move down, and never a fix-bug diagnosis below Opus, medium. Overrides the board and Escalate for this step>.
 **Gate:** <only when the maintainer must do or decide something first>.
-**Done when** <what a test proves>; <every surface>; the new map entries with their tests.
+**Done when** <what a test proves>; <every surface>; the new map entries with their tests; <for each Review Focus item the step could cause, "a test pins R1: <the failure mode>">.
 **Tried:** <optional; written by a coding session that stopped. One clause per approach: what it was and why it failed (output: <path>); a later stop adds to the end>.
 
 ### 3 — Release X.Y.Z

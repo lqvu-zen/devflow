@@ -77,6 +77,20 @@ See also docs/plans/release-2.5.0.md.
 
 
 class TestPlanReading(unittest.TestCase):
+    def test_the_template_reads_with_its_optional_sections(self):
+        template = (ROOT / "templates" / "plan.md").read_text(encoding="utf-8")
+        self.assertEqual(session_start.step_order(template), [1, 2, 3])
+        self.assertEqual(set(session_start.step_states(template)), {1, 2, 3})
+        sections = session_start.step_sections(template)
+        self.assertEqual(set(sections), {1, 2, 3})
+        self.assertTrue(session_start.step_field(sections[2], "Interfaces").startswith("<optional"))
+        self.assertEqual(session_start.step_field(sections[2], "Needs"), "<step numbers>.")
+        old = (ROOT / "evals" / "fixture" / "tree" / "docs" / "plans" / "release-0.3.0.md").read_text(encoding="utf-8")
+        self.assertNotIn("Interfaces", old)
+        self.assertNotIn("Review Focus", old)
+        self.assertEqual(set(session_start.step_states(old)), set(range(1, 7)))
+        self.assertIsNotNone(session_start.step_field(session_start.step_sections(old)[4], "Gate"))
+
     def test_order_from_the_plan(self):
         self.assertEqual(session_start.step_order(PLAN), [1, 2, 3, 31, 32, 33, 4, 6, 5, 7, 12, 13])
 
