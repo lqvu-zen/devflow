@@ -43,7 +43,7 @@ Do this first, before answering anything else:
    ```
    Then read the **Status table** of the current release plan.
 3. **Update the status file** with what landed (commit hashes, one line each, in plain words), new or closed issues, and step states.
-4. **Tell the maintainer in a few lines:** what landed, what's waiting on them, and the next step. Name it, and give the prompt for the coding session if one is needed.
+4. **Tell the maintainer in a few lines:** what landed, what's waiting on them, and the next step. Name it, and give the prompt for the coding session if one is needed. What's waiting on them includes every Decision log entry and Parked item whose `Review by` date is earlier than today in the maintainer's time zone (from **Project**): one line each, with the decision, the date it was made and its review date, asking whether it should stay, change or be dropped. Raise nothing for an entry without a date or one not yet due, and edit no plan for it until the maintainer answers.
 
 ## Triage of new GitHub issues
 
@@ -62,6 +62,8 @@ Ask before adding anything to a plan. Then add it the way "Adding a plan step" b
 Every decision the maintainer makes goes into the status file's **Decision log**, newest first, as one entry: `YYYY-MM-DD HH:MM` (the maintainer's time zone, from **Project**), the decision in bold, then the reason or the consequence in a few words. If the decision changes a plan, update the plan in the same session.
 
 Things that are decisions: what goes in which release, dropping or parking an idea, naming, defaults, a process change, and "do it the better way" (record which way that was).
+
+An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date and let the maintainer decide it. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise. An entry without a date needs nothing.
 
 ## Adding a plan step
 

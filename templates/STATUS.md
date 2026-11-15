@@ -41,9 +41,10 @@ Kept by the project manager (`/devflow:manage-project`). **This file is the mast
 
 ## Parked and dropped
 
-- **Parked:** <ideas kept for later>
+- **Parked:** <idea kept for later>. Review by <YYYY-MM-DD> (optional)
 - **Dropped:** <ideas not coming back unless the maintainer says so>
 
 ## Decision log
 
+- <YYYY-MM-DD HH:MM>: **<a decision made for now>.** <the reason>. Review by <YYYY-MM-DD> (optional)
 - <YYYY-MM-DD HH:MM>: **Adopted devflow.** <one line on why>
