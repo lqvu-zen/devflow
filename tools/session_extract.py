@@ -26,6 +26,7 @@ class Extract(NamedTuple):
     first: str
     last: str
     lines: tuple[str, ...]
+    sources: tuple[int, ...] = ()
 
 
 def folder_names(project: str) -> list[str]:
@@ -124,24 +125,30 @@ def hook_line(record: dict) -> str | None:
     return f"H: {event}: {text}" if text else None
 
 
-def read_records(path: Path) -> Iterator[dict]:
+def numbered_records(path: Path) -> Iterator[tuple[int, dict]]:
     with path.open(encoding="utf-8", errors="replace") as handle:
-        for raw in handle:
+        for number, raw in enumerate(handle, start=1):
             try:
                 record = json.loads(raw)
             except ValueError:
                 continue
             if isinstance(record, dict):
-                yield record
+                yield number, record
+
+
+def read_records(path: Path) -> Iterator[dict]:
+    for _, record in numbered_records(path):
+        yield record
 
 
 def extract_session(path: Path) -> Extract | None:
     lines: list[str] = []
+    sources: list[int] = []
     branches: list[str] = []
     stamps: list[str] = []
     session_id = path.stem
     has_turns = False
-    for record in read_records(path):
+    for number, record in numbered_records(path):
         sidechain = bool(record.get("isSidechain"))
         if record.get("type") == "attachment":
             hook = hook_line(record)
@@ -158,6 +165,7 @@ def extract_session(path: Path) -> Extract | None:
             continue
         prefix = "[sub] " if sidechain else ""
         lines.extend(prefix + line for line in found)
+        sources.extend(number for _ in found)
         if isinstance(record.get("timestamp"), str):
             stamps.append(record["timestamp"])
         branch = record.get("gitBranch")
@@ -168,19 +176,27 @@ def extract_session(path: Path) -> Extract | None:
     if not has_turns:
         return None
     return Extract(session_id, tuple(branches), min(stamps, default=""), max(stamps, default=""),
-                   tuple(lines))
+                   tuple(lines), tuple(sources))
 
 
-def render(extract: Extract) -> str:
+def numbered_line(line: str, number: int) -> str:
+    return f"L{number} {line}"
+
+
+def render(extract: Extract, source: Path | None = None) -> str:
+    legend = "lines: U user, A assistant, T tool call, R tool result (R! an error), H hook output, [sub] a subagent"
     header = [f"session: {extract.session_id}",
               f"branch: {', '.join(extract.branches) or 'unknown'}",
-              f"time: {extract.first} to {extract.last}",
-              "lines: U user, A assistant, T tool call, R tool result (R! an error), H hook output, [sub] a subagent",
-              ""]
-    return "\n".join(header + list(extract.lines)) + "\n"
+              f"time: {extract.first} to {extract.last}"]
+    body = list(extract.lines)
+    if source is not None:
+        header.append(f"source: {source.resolve()}")
+        legend += "; L<n> its line in the source file"
+        body = [numbered_line(line, number) for line, number in zip(extract.lines, extract.sources)]
+    return "\n".join(header + [legend, ""] + body) + "\n"
 
 
-def write_extracts(files: list[Path], out: Path) -> list[tuple[Path, int]]:
+def write_extracts(files: list[Path], out: Path, numbered: bool = False) -> list[tuple[Path, int]]:
     out.mkdir(parents=True, exist_ok=True)
     written = []
     for path in files:
@@ -188,7 +204,7 @@ def write_extracts(files: list[Path], out: Path) -> list[tuple[Path, int]]:
         if extract is None:
             continue
         target = out / f"{path.stem}.txt"
-        target.write_text(render(extract), encoding="utf-8", newline="\n")
+        target.write_text(render(extract, path if numbered else None), encoding="utf-8", newline="\n")
         written.append((target, target.stat().st_size))
     return written
 
@@ -199,6 +215,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--count", type=int, default=15)
     parser.add_argument("--out", required=True)
     parser.add_argument("--exclude", default="", help="session id to leave out (the current one)")
+    parser.add_argument("--session", default="", help="extract only this session id")
+    parser.add_argument("--line-numbers", action="store_true",
+                        help="start each line with L<n>, its line in the source file")
     parser.add_argument("--projects-root", default=str(Path.home() / ".claude" / "projects"))
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
@@ -207,7 +226,15 @@ def main(argv: list[str] | None = None) -> int:
     if folder is None:
         print(f"session_extract: no sessions folder for {args.source}")
         return 1
-    written = write_extracts(recent_sessions(folder, args.count, args.exclude), Path(args.out))
+    if args.session:
+        chosen = folder / f"{args.session}.jsonl"
+        if not chosen.is_file():
+            print(f"session_extract: no session {args.session} in {folder}")
+            return 1
+        files = [chosen]
+    else:
+        files = recent_sessions(folder, args.count, args.exclude)
+    written = write_extracts(files, Path(args.out), args.line_numbers)
     for target, size in written:
         print(f"{target}  {size} bytes")
     print(f"wrote {len(written)} files from {folder}")

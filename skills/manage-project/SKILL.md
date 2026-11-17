@@ -153,6 +153,15 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
 
 Finish with the paste-ready prompt for the first approved step.
 
+## Diagnosing one session
+
+When the maintainer asks why one session went wrong. Read-only: no edits, and no fix advice.
+
+1. **Intake:** what went wrong, and which session. Ask only for what is missing. Given a time or branch instead of an id, run the review's extract and match the headers.
+2. **Extract it:** `python <plugin>/tools/session_extract.py <project path> --session <id> --line-numbers --out <scratchpad>/diagnose`. Each line starts `L<n>`, its line in the `.jsonl` the `source:` line names. If there is no such session, say so and stop. Run `model_check.py` on that `.jsonl`.
+3. **One reader per dimension,** in parallel, briefed as in the review's step 2, plus the complaint: when each skill fired and any of its steps skipped; plan adherence (drift after a compaction, a stop or a changed plan); repeated work; cost and time (each `.jsonl` line has its timestamp and usage). Each finding is `<.jsonl path>:<n>`, what happened, and a confidence: high, medium or low. No citation, no finding.
+4. **Report** the findings by dimension, the likeliest cause first.
+
 ## Standing rules
 
 The **Standing rules** section of `.claude/devflow.md` and the status file holds the project's rules from its decision log. Keep them unless the maintainer changes them. Every project starts with these:

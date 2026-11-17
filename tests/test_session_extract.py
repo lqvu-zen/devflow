@@ -280,5 +280,99 @@ class Selection(SessionCase):
         self.assertIn("no sessions folder", buffer.getvalue())
 
 
+class LineNumbers(SessionCase):
+    def numbered(self, records: list, raw_lines: list[str] | None = None) -> list[str]:
+        path = write_session(self.folder, "case", records, raw_lines)
+        text = extract.render(extract.extract_session(path), path)
+        return text.splitlines()
+
+    def test_numbers_are_source_lines(self):
+        path = self.folder / "case.jsonl"
+        path.write_text("\n".join([
+            json.dumps(record("user", "first")),
+            "{not json",
+            "",
+            json.dumps(record("assistant", [{"type": "text", "text": "one"},
+                                            {"type": "tool_use", "name": "Read",
+                                             "input": {"file_path": "f.md"}}])),
+        ]) + "\n", encoding="utf-8")
+        text = extract.render(extract.extract_session(path), path)
+        items = [line for line in text.splitlines() if line.startswith("L")]
+        self.assertEqual(items, ["L1 U: first", "L4 A: one", "L4 T: Read: f.md"])
+
+    def test_sidechain_number_comes_first(self):
+        lines = self.numbered([
+            record("user", "main"),
+            record("assistant", [{"type": "text", "text": "sub"}], isSidechain=True),
+        ])
+        self.assertIn("L2 [sub] A: sub", lines)
+
+    def test_hook_line_is_numbered(self):
+        lines = self.numbered([hook(), record("user", "hello")])
+        self.assertIn("L1 H: SessionStart: devflow session start", lines)
+        self.assertIn("L2 U: hello", lines)
+
+    def test_header_names_the_source_and_legend(self):
+        lines = self.numbered([record("user", "hello")])
+        self.assertEqual(lines[3], f"source: {(self.folder / 'case.jsonl').resolve()}")
+        self.assertTrue(lines[4].endswith(", [sub] a subagent; L<n> its line in the source file"))
+
+    def test_without_the_option_output_is_unchanged(self):
+        path = write_session(self.folder, "case", [record("user", "hi"),
+                                                   record("assistant", [{"type": "text", "text": "yo"}])])
+        expected = "\n".join([
+            "session: s1",
+            "branch: main",
+            "time: 2026-10-21T10:00:00.000Z to 2026-10-21T10:00:00.000Z",
+            "lines: U user, A assistant, T tool call, R tool result (R! an error), H hook output, [sub] a subagent",
+            "",
+            "U: hi",
+            "A: yo",
+        ]) + "\n"
+        self.assertEqual(extract.render(extract.extract_session(path)), expected)
+
+    def test_main_line_numbers_flag(self):
+        write_session(self.folder, "case", [record("user", "hi"),
+                                            record("assistant", [{"type": "text", "text": "yo"}])])
+        with redirect_stdout(StringIO()):
+            code = extract.main([str(self.folder), "--out", str(self.out), "--line-numbers"])
+        self.assertEqual(code, 0)
+        text = (self.out / "case.txt").read_text(encoding="utf-8")
+        items = text.splitlines()[text.splitlines().index("") + 1:]
+        self.assertEqual(items, ["L1 U: hi", "L2 A: yo"])
+        self.assertIn("source: ", text)
+
+
+class OneSession(SessionCase):
+    def make_sessions(self, names: list[str]) -> None:
+        for index, name in enumerate(names):
+            path = write_session(self.folder, name, [record("user", f"from {name}")])
+            os.utime(path, (1_000_000 + index, 1_000_000 + index))
+
+    def test_main_session_picks_one(self):
+        self.make_sessions(["old", "mid", "new"])
+        with redirect_stdout(StringIO()):
+            code = extract.main([str(self.folder), "--session", "old", "--count", "1",
+                                 "--out", str(self.out)])
+        self.assertEqual(code, 0)
+        self.assertEqual([p.name for p in self.out.iterdir()], ["old.txt"])
+
+    def test_session_wins_over_exclude(self):
+        self.make_sessions(["old", "new"])
+        with redirect_stdout(StringIO()):
+            code = extract.main([str(self.folder), "--session", "old", "--exclude", "old",
+                                 "--out", str(self.out)])
+        self.assertEqual(code, 0)
+        self.assertEqual([p.name for p in self.out.iterdir()], ["old.txt"])
+
+    def test_main_unknown_session(self):
+        self.make_sessions(["old"])
+        buffer = StringIO()
+        with redirect_stdout(buffer):
+            code = extract.main([str(self.folder), "--session", "nope", "--out", str(self.out)])
+        self.assertEqual(code, 1)
+        self.assertIn("no session nope in", buffer.getvalue())
+
+
 if __name__ == "__main__":
     unittest.main()
