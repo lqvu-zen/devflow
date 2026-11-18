@@ -950,6 +950,7 @@ class TestHookGate(unittest.TestCase):
         for name in ("uv", "git"):
             (self.bin / name).write_text(FAKE_TOOL.format(marker=self.marker.as_posix()), encoding="utf-8",
                                          newline="\n")
+            (self.bin / name).chmod(0o755)
         hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
         self.commands = [hooks["PreToolUse"][0]["hooks"][0]["command"],
                          hooks["SessionStart"][0]["hooks"][0]["command"]]
