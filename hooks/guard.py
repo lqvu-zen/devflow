@@ -8,7 +8,14 @@ import posixpath
 import re
 import subprocess
 import sys
+from pathlib import Path
 from typing import Any, Callable, Mapping, NamedTuple
+
+HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
+if HOOKS_DIR not in sys.path:
+    sys.path.insert(0, HOOKS_DIR)
+
+import devflow_store
 
 
 class Verdict(NamedTuple):
@@ -1436,18 +1443,6 @@ def managed_changes(project_dir: str, paths: list[str]) -> list[str]:
     return [line[3:].strip() for line in result.stdout.splitlines() if line.strip()]
 
 
-def load_config(project_dir: str) -> dict | None:
-    path = os.path.join(project_dir or ".", ".claude", "devflow.json")
-    try:
-        with open(path, encoding="utf-8-sig") as handle:
-            data = json.load(handle)
-    except FileNotFoundError:
-        return None
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} must hold a JSON object")
-    return data
-
-
 def main() -> int:
     for stream in (sys.stdout, sys.stderr):
         if hasattr(stream, "reconfigure"):
@@ -1455,11 +1450,16 @@ def main() -> int:
     try:
         data = json.loads(sys.stdin.buffer.read().decode("utf-8", errors="replace"))
         project = os.environ.get("CLAUDE_PROJECT_DIR") or data.get("cwd") or ""
-        config = load_config(project)
-        if config is None:
+        found = devflow_store.find(Path(project or "."))
+        if found is None:
             return 0
+        config = found.config
+        if found.store is None:
+            dirty = lambda: managed_changes(project, managed_files(config))
+        else:
+            dirty = lambda: []
         verdict = decide(data.get("tool_name", ""), data.get("tool_input") or {}, os.environ,
-                         lambda: managed_changes(project, managed_files(config)), config)
+                         dirty, config)
     except Exception as error:
         verdict = Verdict("ask", f"guard.py failed: {type(error).__name__}: {error} -- not checked")
     if verdict.kind == "deny":

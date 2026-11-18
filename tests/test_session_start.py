@@ -244,6 +244,13 @@ class TestGitAndCi(unittest.TestCase):
         clean = session_start.change_lines(lambda argv: "")
         self.assertTrue(clean[-1].startswith("Status and plan edits waiting: none."))
 
+    def test_local_only_drops_the_managed_line(self):
+        for out in (" M docs/STATUS.md\n?? x.txt", ""):
+            lines = session_start.change_lines(lambda argv: out, local=True)
+            self.assertFalse(any(line.startswith("Status and plan edits waiting") for line in lines))
+        self.assertEqual(session_start.change_lines(lambda argv: " M docs/STATUS.md", local=True),
+                         ["Uncommitted (1):", "   M docs/STATUS.md"])
+
 
 MODEL_PLAN = PLAN.replace("### 1 — Fix\n", "### 1 — Fix\n\n### 31 — Harness\n\n"
                                            "**Model:** implementer: Opus, medium; the download is subtle\n")
@@ -799,6 +806,125 @@ class TestMain(unittest.TestCase):
         result = self.run_next_step()
         self.assertEqual((result.returncode, result.stderr), (0, ""))
         self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n")
+
+    def run_in(self, project: Path, *args: str) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(project)
+        env["DEVFLOW_HOME"] = str(self.project / "home")
+        return subprocess.run([sys.executable, str(SESSION_PATH), *args], capture_output=True, input="",
+                              text=True, encoding="utf-8", env=env, timeout=60)
+
+    def tally_store(self) -> Path:
+        store = make_store(self.project / "home" / "projects" / "tally", {"name": "tally"})
+        (store / "docs" / "plans").mkdir(parents=True)
+        (store / "docs" / "STATUS.md").write_text(TWO_STATUS, encoding="utf-8")
+        (store / CURRENT_PATH).write_text(with_states(CURRENT, {1: "done: fixed"}), encoding="utf-8")
+        return store
+
+    def store_line(self, store: Path) -> str:
+        return (f"Store: local-only; devflow's files for this clone are in {store}, at their in-repo paths "
+                "(.claude/devflow.md, .claude/devflow.json, docs/BEHAVIOUR.md, docs/STATUS.md, docs/plans/).")
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_a_linked_worktree_reads_the_store(self):
+        main = self.project / "main"
+        main.mkdir()
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(git + ["init", "-q"], cwd=main, check=True, capture_output=True)
+        subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "x"], cwd=main, check=True, capture_output=True)
+        wt = self.project / "wt"
+        subprocess.run(git + ["worktree", "add", "-q", str(wt)], cwd=main, check=True, capture_output=True)
+        store = self.tally_store()
+        link(main / ".git", store)
+        result = self.run_in(wt)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        lines = result.stdout.splitlines()
+        self.assertEqual(lines[:2], ["tally session start", self.store_line(store)])
+        self.assertIn("Uncommitted: none.", lines)
+        self.assertIn("Next open step in Order: 2 Median", result.stdout)
+        self.assertNotIn("Status and plan edits waiting", result.stdout)
+        self.assertIn(f"Profile: .claude/devflow.md is missing from the store {store}", result.stdout)
+
+    def test_a_store_without_a_profile_names_the_store(self):
+        main = self.project / "main"
+        store = self.tally_store()
+        link(main / ".git", store)
+        wt = worktree(main, self.project / "wt")
+        result = self.run_in(wt)
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertIn(f"Profile: .claude/devflow.md is missing from the store {store}; the devflow skills "
+                      "need it. Run /devflow:setup to write it.", result.stdout)
+        (store / ".claude" / "devflow.md").write_text("# profile\n", encoding="utf-8")
+        self.assertNotIn("Profile:", self.run_in(wt).stdout)
+
+    def test_next_step_flag_reads_the_store(self):
+        main = self.project / "main"
+        link(main / ".git", self.tally_store())
+        result = self.run_in(worktree(main, self.project / "wt"), "--next-step")
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n")
+
+    def test_a_pointer_to_a_missing_store_says_so(self):
+        main = self.project / "main"
+        missing = self.project / "home" / "projects" / "gone"
+        link(main / ".git", missing)
+        summary = self.run_in(main)
+        self.assertEqual((summary.returncode, summary.stderr), (0, ""))
+        self.assertTrue(summary.stdout.startswith("Store: "))
+        self.assertIn(str(missing), summary.stdout)
+        self.assertTrue(summary.stdout.endswith("Run /devflow:setup to link this clone again.\n"))
+        flag = self.run_in(main, "--next-step")
+        self.assertEqual((flag.returncode, flag.stdout), (1, summary.stdout))
+
+
+def link(gitdir: Path, store: Path) -> Path:
+    gitdir.mkdir(parents=True, exist_ok=True)
+    pointer = gitdir / "devflow-store"
+    pointer.write_text(str(store) + "\n", encoding="utf-8")
+    return pointer
+
+
+def make_store(store: Path, config: dict | None) -> Path:
+    store.mkdir(parents=True, exist_ok=True)
+    if config is not None:
+        (store / ".claude").mkdir(exist_ok=True)
+        (store / ".claude" / "devflow.json").write_text(json.dumps(config), encoding="utf-8")
+    (store / "devflow-store.json").write_text(
+        json.dumps({"root_commit": "0" * 40, "origin": ""}), encoding="utf-8")
+    return store
+
+
+def worktree(main: Path, wt: Path) -> Path:
+    admin = main / ".git" / "worktrees" / wt.name
+    admin.mkdir(parents=True, exist_ok=True)
+    (admin / "commondir").write_text("../..\n", encoding="utf-8")
+    wt.mkdir(parents=True, exist_ok=True)
+    (wt / ".git").write_text(f"gitdir: {admin.as_posix()}\n", encoding="utf-8")
+    return wt
+
+
+@unittest.skipUnless(shutil.which("sh") and shutil.which("uv"), "needs sh and uv")
+class TestSessionHookCommand(unittest.TestCase):
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="devflow-session-hook-"))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))
+        self.command = hooks["hooks"]["SessionStart"][0]["hooks"][0]["command"]
+
+    def test_a_linked_worktree_prints_the_store_line(self):
+        main = self.base / "main"
+        store = make_store(self.base / "home" / "projects" / "tally", {"name": "tally"})
+        link(main / ".git", store)
+        wt = worktree(main, self.base / "wt")
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(wt)
+        env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
+        env["DEVFLOW_HOME"] = str(self.base / "home")
+        result = subprocess.run(["sh", "-c", self.command], input="", capture_output=True, text=True,
+                                encoding="utf-8", env=env, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(result.stdout.startswith("tally session start\n"))
+        self.assertIn(f"Store: local-only; devflow's files for this clone are in {store},", result.stdout)
 
 
 if __name__ == "__main__":

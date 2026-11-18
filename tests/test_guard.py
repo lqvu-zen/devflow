@@ -869,6 +869,203 @@ class TestGuardHookCommand(unittest.TestCase):
         result = self.run_command(ROOT, {"tool_name": "Bash", "tool_input": {"command": "ls"}})
         self.assertEqual((result.returncode, result.stdout), (0, ""))
 
+    def run_in(self, project: Path, payload: dict) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env["CLAUDE_PROJECT_DIR"] = str(project)
+        env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
+        env["DEVFLOW_HOME"] = str(self.base / "home")
+        return subprocess.run(["sh", "-c", self.command], input=json.dumps(payload),
+                              capture_output=True, text=True, encoding="utf-8", env=env,
+                              timeout=60)
+
+    def linked_main(self) -> Path:
+        main = self.base / "main"
+        (main / ".git").mkdir(parents=True)
+        link(main / ".git", make_store(self.base / "home" / "projects" / "ryos", RYOS))
+        return main
+
+    def test_a_linked_main_checkout_is_guarded(self):
+        result = self.run_in(self.linked_main(), {"tool_name": "Bash", "tool_input": {
+            "command": "uv run ryos list"}})
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("APPDATA", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_a_linked_worktree_is_guarded(self):
+        wt = worktree(self.linked_main(), self.base / "wt")
+        result = self.run_in(wt, {"tool_name": "Bash", "tool_input": {"command": "uv run ryos list"}})
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("APPDATA", result.stderr)
+        self.assertEqual(result.stdout, "")
+
+    def test_a_pointer_to_a_missing_store_asks(self):
+        main = self.base / "main"
+        missing = self.base / "home" / "projects" / "gone"
+        link(main / ".git", missing)
+        result = self.run_in(main, {"tool_name": "Bash", "tool_input": {"command": "ls"}})
+        self.assertEqual(result.returncode, 0)
+        output = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertEqual(output["permissionDecision"], "ask")
+        self.assertIn("not checked", output["permissionDecisionReason"])
+        self.assertIn(str(missing), output["permissionDecisionReason"])
+
+
+def link(gitdir: Path, store: Path) -> Path:
+    gitdir.mkdir(parents=True, exist_ok=True)
+    pointer = gitdir / "devflow-store"
+    pointer.write_text(str(store) + "\n", encoding="utf-8")
+    return pointer
+
+
+def make_store(store: Path, config: dict | None) -> Path:
+    store.mkdir(parents=True, exist_ok=True)
+    if config is not None:
+        (store / ".claude").mkdir(exist_ok=True)
+        (store / ".claude" / "devflow.json").write_text(json.dumps(config), encoding="utf-8")
+    (store / "devflow-store.json").write_text(
+        json.dumps({"root_commit": "0" * 40, "origin": ""}), encoding="utf-8")
+    return store
+
+
+def worktree(main: Path, wt: Path) -> Path:
+    admin = main / ".git" / "worktrees" / wt.name
+    admin.mkdir(parents=True, exist_ok=True)
+    (admin / "commondir").write_text("../..\n", encoding="utf-8")
+    wt.mkdir(parents=True, exist_ok=True)
+    (wt / ".git").write_text(f"gitdir: {admin.as_posix()}\n", encoding="utf-8")
+    return wt
+
+
+FAKE_TOOL = "#!/bin/sh\necho ran > '{marker}'\nexit 0\n"
+
+
+@unittest.skipUnless(shutil.which("sh"), "needs sh")
+class TestHookGate(unittest.TestCase):
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="devflow-gate-"))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.bin = self.base / "bin"
+        self.bin.mkdir()
+        self.marker = self.base / "launched"
+        for name in ("uv", "git"):
+            (self.bin / name).write_text(FAKE_TOOL.format(marker=self.marker.as_posix()), encoding="utf-8",
+                                         newline="\n")
+        hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        self.commands = [hooks["PreToolUse"][0]["hooks"][0]["command"],
+                         hooks["SessionStart"][0]["hooks"][0]["command"]]
+
+    def run_command(self, command: str, project: Path) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env["PATH"] = str(self.bin) + os.pathsep + env.get("PATH", "")
+        env["CLAUDE_PROJECT_DIR"] = str(project)
+        env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
+        env["DEVFLOW_HOME"] = str(self.base / "home")
+        return subprocess.run(["sh", "-c", command], input=json.dumps({"tool_name": "Bash", "tool_input": {
+            "command": "ls"}}), capture_output=True, text=True, encoding="utf-8", env=env, timeout=60)
+
+    def test_a_project_with_neither_is_left_alone_and_launches_nothing(self):
+        project = self.base / "plain"
+        (project / ".git").mkdir(parents=True)
+        for command in self.commands:
+            result = self.run_command(command, project)
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+            self.assertFalse(self.marker.exists())
+        linked = self.base / "linked"
+        link(linked / ".git", make_store(self.base / "home" / "projects" / "notes", NOTES))
+        for command in self.commands:
+            self.run_command(command, linked)
+            self.assertTrue(self.marker.exists())
+            self.marker.unlink()
+
+
+class TestLinkedStore(unittest.TestCase):
+    def setUp(self):
+        self.base = Path(tempfile.mkdtemp(prefix="devflow-linked-"))
+        self.addCleanup(shutil.rmtree, self.base, ignore_errors=True)
+        self.home = self.base / "home"
+
+    def run_hook(self, project: Path, payload: dict) -> subprocess.CompletedProcess:
+        env = dict(os.environ)
+        env.update(ENV)
+        env["CLAUDE_PROJECT_DIR"] = str(project)
+        env["DEVFLOW_HOME"] = str(self.home)
+        return subprocess.run([sys.executable, str(GUARD_PATH)], input=json.dumps(payload),
+                              capture_output=True, text=True, encoding="utf-8", env=env, timeout=30)
+
+    def in_repo(self, name: str, config: dict) -> Path:
+        project = self.base / name
+        (project / ".git").mkdir(parents=True)
+        (project / ".claude").mkdir()
+        (project / ".claude" / "devflow.json").write_text(json.dumps(config), encoding="utf-8")
+        return project
+
+    def linked(self, name: str, config: dict | None) -> Path:
+        project = self.base / name
+        (project / ".git").mkdir(parents=True)
+        link(project / ".git", make_store(self.home / "projects" / name, config))
+        return project
+
+    def test_the_ryos_config_gives_the_same_verdicts_in_repo_and_linked(self):
+        calls = [
+            {"tool_name": "Write", "tool_input": {
+                "file_path": r"C:\Users\Tester\AppData\Roaming\RYOS\settings.json", "content": "{}"}},
+            {"tool_name": "Bash", "tool_input": {"command": "uv run ryos list"}},
+            {"tool_name": "Bash", "tool_input": {
+                "command": 'APPDATA="$S/a" LOCALAPPDATA="$S/l" uv run ryos list'}},
+            {"tool_name": "PowerShell", "tool_input": {"command": "gh release delete v1 -R lqvu-zen/RYOS"}},
+            {"tool_name": "Read", "tool_input": {"file_path": "x.pem"}},
+            {"tool_name": "Bash", "tool_input": {"command": "cat ~/ryos-keys/release.key"}},
+        ]
+        main = self.linked("main", RYOS)
+        projects = [self.in_repo("inrepo", RYOS), main, worktree(main, self.base / "wt")]
+        results = [[self.run_hook(project, call) for call in calls] for project in projects]
+        verdicts = [[(r.returncode, r.stdout, r.stderr) for r in rows] for rows in results]
+        self.assertEqual([r.returncode for r in results[0]], [2, 2, 0, 0, 2, 2])
+        self.assertIn("real data", results[0][0].stderr)
+        self.assertIn('"ask"', results[0][3].stdout)
+        self.assertEqual(results[0][2].stdout, "")
+        self.assertEqual(verdicts[1], verdicts[0])
+        self.assertEqual(verdicts[2], verdicts[0])
+
+    def test_an_in_repo_config_wins_over_a_pointer(self):
+        project = self.in_repo("both", RYOS)
+        link(project / ".git", make_store(self.home / "projects" / "both", {"name": "lax"}))
+        result = self.run_hook(project, {"tool_name": "Bash", "tool_input": {"command": "uv run ryos list"}})
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("APPDATA", result.stderr)
+
+    def test_a_store_without_a_config_asks(self):
+        project = self.linked("empty", None)
+        result = self.run_hook(project, {"tool_name": "Bash", "tool_input": {"command": "ls"}})
+        self.assertEqual(result.returncode, 0)
+        output = json.loads(result.stdout)["hookSpecificOutput"]
+        self.assertEqual(output["permissionDecision"], "ask")
+        self.assertIn("has no .claude/devflow.json", output["permissionDecisionReason"])
+        self.assertIn("not checked", output["permissionDecisionReason"])
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_a_whole_tree_discard_runs_no_git_in_a_linked_project(self):
+        project = self.base / "clone"
+        (project / "docs").mkdir(parents=True)
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(git + ["init", "-q"], cwd=project, check=True, capture_output=True)
+        (project / "docs" / "STATUS.md").write_text("# Status\n", encoding="utf-8")
+        subprocess.run(git + ["add", "docs"], cwd=project, check=True, capture_output=True)
+        subprocess.run(git + ["commit", "-q", "-m", "x"], cwd=project, check=True, capture_output=True)
+        (project / "docs" / "STATUS.md").write_text("# Status\n\nedited\n", encoding="utf-8")
+        discard = {"tool_name": "Bash", "tool_input": {"command": "git checkout -- ."}}
+        (project / ".claude").mkdir()
+        (project / ".claude" / "devflow.json").write_text(json.dumps(RYOS), encoding="utf-8")
+        in_repo = self.run_hook(project, discard)
+        self.assertEqual(in_repo.returncode, 2)
+        self.assertIn("docs/STATUS.md", in_repo.stderr)
+        shutil.rmtree(project / ".claude")
+        link(project / ".git", make_store(self.home / "projects" / "clone", RYOS))
+        linked = self.run_hook(project, discard)
+        self.assertEqual((linked.returncode, linked.stdout, linked.stderr), (0, "", ""))
+        self.assertEqual(self.run_hook(project, {"tool_name": "Bash", "tool_input": {
+            "command": "git reset --hard"}}).returncode, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

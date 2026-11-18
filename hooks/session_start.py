@@ -11,6 +11,12 @@ import time
 from pathlib import Path
 from typing import Any, Callable, Mapping, NamedTuple, Optional
 
+HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
+if HOOKS_DIR not in sys.path:
+    sys.path.insert(0, HOOKS_DIR)
+
+import devflow_store
+
 Runner = Callable[[list], Optional[str]]
 
 MAX_CHANGES = 15
@@ -99,7 +105,7 @@ def _path_of(status_line: str) -> str:
     return path.strip('"')
 
 
-def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
+def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT, local: bool = False) -> list[str]:
     out = run(["git", "status", "--short"])
     if out is None:
         return ["Uncommitted: unknown (git status failed)"]
@@ -111,6 +117,8 @@ def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
         result += [f"  {line}" for line in lines[:MAX_CHANGES]]
         if len(lines) > MAX_CHANGES:
             result.append(f"  … and {len(lines) - MAX_CHANGES} more")
+    if local:
+        return result
     managed = [_path_of(line) for line in lines if layout.is_managed_path(_path_of(line))]
     if managed:
         result.append(f"Status and plan edits waiting: {', '.join(managed)}. Commit them with "
@@ -604,9 +612,12 @@ def _read(path: Path) -> str | None:
         return None
 
 
-def profile_line(project: Path) -> str | None:
+def profile_line(project: Path, store: Path | None = None) -> str | None:
     if (project / ".claude" / "devflow.md").is_file():
         return None
+    if store is not None:
+        return (f"Profile: .claude/devflow.md is missing from the store {store}; the devflow skills "
+                "need it. Run /devflow:setup to write it.")
     return ("Profile: .claude/devflow.md is missing; the devflow skills need it. "
             "Run /devflow:setup to write it.")
 
@@ -673,24 +684,30 @@ def models_line(layout: Layout, plan_md: str | None, step: int | None = None,
 
 
 def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
-           session_id: str | None = None) -> str:
+           session_id: str | None = None, store: Path | None = None) -> str:
+    files = store or project
     state = upstream_state(run)
     _branch, upstream, ahead, _behind, head = state
-    lines = [f"{layout.name} session start", branch_line(state)]
-    lines += change_lines(run, layout)
+    lines = [f"{layout.name} session start"]
+    if store is not None:
+        lines.append(f"Store: local-only; devflow's files for this clone are in {store}, at their "
+                     f"in-repo paths (.claude/devflow.md, .claude/devflow.json, docs/BEHAVIOUR.md, "
+                     f"{layout.status_file}, {layout.plans_dir}/).")
+    lines.append(branch_line(state))
+    lines += change_lines(run, layout, local=store is not None)
     lines.append(ci_line(run, head, upstream, ahead))
-    status_md = _read(project / layout.status_file)
+    status_md = _read(files / layout.status_file)
     plan = current_plan(status_md, layout) if status_md else None
-    plan_md = _read(project / plan) if plan else None
+    plan_md = _read(files / plan) if plan else None
     next_path = next_plan(status_md, plan, layout) if status_md and plan else None
-    next_md = _read(project / next_path) if next_path else None
+    next_md = _read(files / next_path) if next_path else None
     lines += plan_lines(plan, plan_md, layout, next_path, next_md)
     choice = _choice(plan, plan_md, next_path, next_md, layout)
     if choice is not None and choice.fallback:
         lines.append(models_line(layout, next_md, choice.number, session_id))
     else:
         lines.append(models_line(layout, plan_md, session_id=session_id))
-    missing = profile_line(project)
+    missing = profile_line(files, store)
     if missing:
         lines.append(missing)
     return "\n".join(lines)
@@ -728,17 +745,6 @@ def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]
     return lines
 
 
-def load_config(project: Path) -> dict | None:
-    path = project / ".claude" / "devflow.json"
-    try:
-        data = json.loads(path.read_text(encoding="utf-8-sig"))
-    except FileNotFoundError:
-        return None
-    if not isinstance(data, dict):
-        raise ValueError(f"{path} must hold a JSON object")
-    return data
-
-
 NEXT_STEP_FLAG = "--next-step"
 
 
@@ -751,19 +757,22 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     project = Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
     try:
-        config = load_config(project)
-        if config is None:
+        found = devflow_store.find(project)
+        if found is None:
             if args:
                 print(f"No .claude/devflow.json in {project}: run /devflow:setup first.")
                 return 1
             return 0
         if args:
-            text = "\n".join(next_step_lines(project, Layout(config)))
+            text = "\n".join(next_step_lines(found.root, Layout(found.config)))
         else:
             session_id = session_model_id(hook_input())
             deadline = time.monotonic() + DEADLINE_SECONDS
-            text = report(runner_until(deadline, str(project)), project, Layout(config),
-                          session_id=session_id)
+            text = report(runner_until(deadline, str(project)), project, Layout(found.config),
+                          session_id=session_id, store=found.store)
+    except devflow_store.StoreError as error:
+        print(f"Store: {error}. Run /devflow:setup to link this clone again.")
+        return 1 if args else 0
     except Exception as error:
         print(f"session_start.py failed: {type(error).__name__}: {error}", file=sys.stderr)
         return 1
