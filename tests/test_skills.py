@@ -716,6 +716,7 @@ OLD_ESCALATE_RULE = "except to escalate"
 DESIGNER_CALL = 'subagent_type: "devflow:designer"'
 DESIGNER = ROOT / "agents" / "designer.md"
 IMPLEMENTER = ROOT / "agents" / "implementer.md"
+PARTS_REPORT = "The final report lists each part with the model it ran on and its test result."
 
 
 def _paragraph(path: Path, lead_in: str) -> str:
@@ -823,6 +824,11 @@ class TestModelRules(unittest.TestCase):
         paragraph = _paragraph(ADD_FEATURE, "**A design's parts.**")
         self.assertIn("a part still red stops the step on its model", paragraph)
         self.assertIn("One review follows the last part", paragraph)
+
+    def test_the_final_report_lists_each_parts_model_and_test_result(self):
+        for path in (ADD_FEATURE, FIX_BUG):
+            with self.subTest(path.parent.name):
+                self.assertIn(PARTS_REPORT, _paragraph(path, "**A design's parts.**"))
 
     def test_the_designer_lists_parts_and_the_implementer_takes_one(self):
         for heading in ("## Feature mode: design", "## Bug mode: diagnose"):
