@@ -164,6 +164,7 @@ Recorded runs:
 | 2026-11-15 | trigger, `review-ui-1/2/3/7-fires` (3 runs each), Sonnet, WSL, Claude Code 2.1.308; step 4 of the gate, step 47's reruns | 12 of 12 pass (3 of 3 each) | $2.10, plus $0.09 on a run the session limit cut |
 | 2026-11-15 | model check and cost split of `add-feature-board-moves-one-agent` (1 run, `--keep-temp`, WSL) | 0 mismatches against the run project's board (designer Sonnet, implementer Sonnet, reviewer Opus); against the repo's own board the designer shows a mismatch, because the case moves it to Sonnet. The cost split: main 69.1%, reviewer 14.7%, implementer 10.1%, designer 6.1%. No case in the gate passes an implementer `model: "opus"`, so step 43's Sonnet-for-Opus mismatch is not re-measured | $0.77 |
 | 2026-11-15 | behaviour, `next-step-takes-the-next-step-and-claims-it` (3 runs, Sonnet judge, `--keep-temp`), default model, WSL, Claude Code 2.1.308; step 51, on `eb350f5` | 3 of 3 pass, `row-in-progress` included (each run wrote `\| 2 Median \| in progress (2026-10-22 10:00) \|`). The failed run of 11-15 (`2026-11-15T03-44-43-776Z`, 0.83) cannot be explained: its workspace was deleted without `--keep-temp`, so no trace is left; grader and skill unchanged | $1.35 |
+| 2026-11-18 | trigger (37 cases, 1 run each), default model, WSL, Claude Code 2.1.308; step 12 release gate for 0.3.0, on `d9c1207` | 37 pass, including all of `manage-project`, `next-step` and `review-ui` | $5.93 |
 
 ## Where it came from
 
