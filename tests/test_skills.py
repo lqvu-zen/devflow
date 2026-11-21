@@ -934,6 +934,14 @@ class TestSessionDiagnosis(unittest.TestCase):
                 self.assertIn(words, section)
         self.assertNotIn("`<.jsonl path>:<n>`", section)
 
+    def test_each_reader_call_names_the_general_purpose_agent_and_the_readers_row(self):
+        section = _section(MANAGE_PROJECT, "## Diagnosing one session")
+        self.assertIn('Agent({ subagent_type: "general-purpose", <the readers row\'s pass>', section)
+
+    def test_citations_carry_the_whole_session_id(self):
+        section = _section(MANAGE_PROJECT, "## Diagnosing one session")
+        self.assertIn("never a bare `:<n>`, with the whole session id", section)
+
 
 BUILD = ROOT / "skills" / "review-ui" / "references" / "build.md"
 PRESENT_UI = "For a UI change, name the states and inputs its UI section lists."

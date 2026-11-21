@@ -124,9 +124,9 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
 
 ## Process escapes: review recent sessions
 
-`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke, but nothing looks for those breaks; they turn up by luck. This review reads recent sessions and finds them. It only reports: you propose lines for § Harness escapes and the maintainer decides.
+`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke. This review reads recent sessions and finds them. It only reports: you propose lines for § Harness escapes and the maintainer decides.
 
-**When:** on request ("review the sessions", "what rules are the agents breaking?"). Suggest it after a release, or every couple of weeks of active work, once per period.
+**When:** on request ("review the sessions", "what rules are the agents breaking?"). Suggest it after a release or every couple of weeks, once per period.
 
 1. **Extract the sessions** to your scratchpad, never into the repo, with the plugin's `tools/session_extract.py` (in `tools/`, two folders up from this skill's base directory):
    ```bash
@@ -157,9 +157,9 @@ Finish with the paste-ready prompt for the first approved step.
 
 When the maintainer asks why one session went wrong. Read-only: no edits, and no fix advice.
 
-1. **Intake:** what went wrong, and which session. Ask only for what is missing. Given a time or branch instead of an id, run the review's extract and match the headers.
+1. **Intake:** what went wrong, and which session. Ask only for what is missing. Given a time or branch, run the review's extract and match the headers.
 2. **Extract it:** `python <plugin>/tools/session_extract.py <project path> --session <id> --line-numbers --out <scratchpad>/diagnose`. Each line starts `L<n>`, its line in the `.jsonl` the `source:` line names. If there is no such session, say so and stop. Run `model_check.py` on that `.jsonl`.
-3. **One reader per dimension,** in parallel, however short the transcript: never read it yourself. Brief each as in the review's step 2, plus the complaint: when each skill fired and any of its steps skipped; plan adherence (drift after a compaction, a stop or a changed plan); repeated work; cost and time (each `.jsonl` line has its timestamp and usage). Each finding is `<session id>.jsonl:<n>`, never a bare `:<n>`, what happened, and a confidence: high, medium or low. No citation, no finding.
+3. **One reader per dimension,** in parallel, however short the transcript: never read it yourself. Each: `Agent({ subagent_type: "general-purpose", <the readers row's pass>, prompt: <brief> })`. Brief each as in the review's step 2, plus the complaint: when each skill fired and any of its steps skipped; plan adherence (drift, a stop or a changed plan); repeated work; cost and time (each `.jsonl` line has its timestamp and usage). Each finding is `<session id>.jsonl:<n>`, never a bare `:<n>`, with the whole session id, what happened, and a confidence: high, medium or low. No citation, no finding.
 4. **Report** the findings by dimension, the likeliest cause first.
 
 ## Standing rules
