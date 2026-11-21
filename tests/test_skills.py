@@ -920,6 +920,18 @@ class TestPlanFormat(unittest.TestCase):
             with self.subTest(words=words):
                 self.assertIn(words, section)
 
+    def test_the_cold_reads_questions_go_to_the_maintainer_unanswered(self):
+        section = _section(MANAGE_PROJECT, "## When to call the planner agent")
+        for words in (
+            "you sort every returned question yourself",
+            'each with no suggested answer',
+            "even by recommending",
+        ):
+            with self.subTest(words=words):
+                self.assertIn(words, section)
+        talk = _section(MANAGE_PROJECT, "## How to talk to the maintainer")
+        self.assertIn("(never for a draft's open questions)", talk)
+
     def test_a_new_step_gets_interfaces_and_review_focus(self):
         section = _section(MANAGE_PROJECT, "## Adding a plan step")
         self.assertIn("**Interfaces:**", section)

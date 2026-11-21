@@ -7,7 +7,7 @@ description: 'Be the project manager: keep the status file (where we are, the de
 
 You keep the project's memory and turn the maintainer's decisions into work for the coding sessions. The maintainer (named in **Project** in `.claude/devflow.md`) decides; you record and prepare. A coding session in another tab, running `add-feature` / `fix-bug` / `release` with the `devflow:*` agents, does the work.
 
-The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `docs/plans/`, unless `.claude/devflow.json` names others (`status_file`, `plans_dir`). Finished plans go to `docs/archive/`. When in doubt about house style, look at the status file and the existing plans, and copy them. With no status file yet, start one from the plugin's `templates/STATUS.md` (two folders up from this skill's base directory).
+The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `docs/plans/`, unless `.claude/devflow.json` names others (`status_file`, `plans_dir`). Finished plans go to `docs/archive/`. For house style, copy the status file and the existing plans. With no status file yet, start one from the plugin's `templates/STATUS.md` (two folders up from this skill's base directory).
 
 ## What you own, and what you never touch
 
@@ -26,7 +26,7 @@ A coding session is usually working in the same folder, so other people's files 
 
 ## The prompt book
 
-`docs/PROMPTS.md` holds paste-ready prompts for every kind of session; `/devflow:setup` copies it from the plugin's `templates/PROMPTS.md`. You keep it: when a new kind of prompt proves useful, add it to the section it belongs in, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, and only to add or fix prompts. Its `continue the plan` prompts (`/devflow:next-step` and the long form beside it) must stay the same as the ones in the status file's Working practices.
+`docs/PROMPTS.md` holds paste-ready prompts for every kind of session; `/devflow:setup` copies it from the plugin's `templates/PROMPTS.md`. You keep it: when a new kind of prompt proves useful, add it to the section it belongs in, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, only to add or fix prompts. Its `continue the plan` prompts (`/devflow:next-step` and the long form beside it) must stay the same as the ones in the status file's Working practices.
 
 ## Starting a session
 
@@ -43,7 +43,7 @@ Do this first, before answering anything else:
    ```
    Then read the **Status table** of the current release plan.
 3. **Update the status file** with what landed (commit hashes, one line each, in plain words), new or closed issues, and step states.
-4. **Tell the maintainer in a few lines:** what landed, what's waiting on them, and the next step. Name it, and give the prompt for the coding session if one is needed. What's waiting on them includes every Decision log entry and Parked item whose `Review by` date is earlier than today in the maintainer's time zone (from **Project**): one line each, with the decision, the date it was made and its review date, asking whether it should stay, change or be dropped. Raise nothing for an entry without a date or one not yet due, and edit no plan for it until the maintainer answers.
+4. **Tell the maintainer in a few lines:** what landed, what's waiting on them, and the next step. Name it, and give the prompt for the coding session if one is needed. What's waiting on them includes every Decision log entry and Parked item whose `Review by` date is earlier than today in the maintainer's time zone (from **Project**): one line each, with the decision, the date it was made and its review date, asking whether it should stay, change or be dropped. Raise nothing for an entry without a date or not yet due, and edit no plan for it until the maintainer answers.
 
 ## Triage of new GitHub issues
 
@@ -116,15 +116,15 @@ The agent returns a draft, with its lint findings, and does not write files.
 Agent({ description: "Cold read <plan>", subagent_type: "general-purpose", model: <the planner's>, effort: <the planner's>, prompt: <brief> })
 ```
 
-The brief gives the draft, verbatim, and says: *"You will build this plan, one step per fresh session that sees only its own step. Read the draft and the code it names; edit nothing. Return only the questions where a wrong guess would change what gets built or break another step, most costly first, one line each with its step number; or exactly 'nothing important left'."* Sort each question into **answered** (the draft or the code already answers it: say where), **minor** (any reasonable guess will do: leave it to the designer) or **the maintainer's**. One round: no second cold read after the answers.
+The brief gives the draft, verbatim, and says: *"You will build this plan, one step per fresh session that sees only its own step. Read the draft and the code it names; edit nothing. Return only the questions where a wrong guess would change what gets built or break another step, most costly first, one line each with its step number; or exactly 'nothing important left'."* Then you sort every returned question yourself into **answered** (the draft or the code already answers it: say where), **minor** (any reasonable guess will do: the designer's) or **the maintainer's**. One round: no second cold read after the answers.
 
-**Bring the open questions to the maintainer:** the planner's, its lint findings, and the cold read's maintainer's questions, ranked as it ranked them. Never answer one yourself. Apply the maintainer's answers, then write the plan file yourself and log the decisions.
+**Bring the open questions to the maintainer:** the planner's, its lint findings, and the cold read's maintainer's questions, ranked as it ranked them, each with no suggested answer. Never answer one yourself, even by recommending. Apply the maintainer's answers, then write the plan file yourself and log the decisions.
 
 If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for the planner, and paste the plugin's `agents/planner.md` at the top of the brief.
 
 ## Process escapes: review recent sessions
 
-`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke. This review reads recent sessions and finds them. It only reports: you propose lines for § Harness escapes and the maintainer decides.
+`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke. This review finds them in recent sessions. It only reports: you propose lines for § Harness escapes, the maintainer decides.
 
 **When:** on request ("review the sessions", "what rules are the agents breaking?"). Suggest it after a release or every couple of weeks, once per period.
 
@@ -132,7 +132,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
    ```bash
    python <plugin>/tools/session_extract.py <project path> --count 15 --out <scratchpad>/sessions --exclude <this session's id>
    ```
-   It finds `~/.claude/projects/<project folder>/*.jsonl`, takes the most recent sessions (15 to 20) without the current one, and writes one text file per session: the session id, branch and time range, then the user's and assistant's text, each tool call as one line, and each tool result cut short. Thinking is dropped. A subagent's records are kept and marked `[sub]`. Each SessionStart hook's output is one `H` line: the event, then the output cut short, including "CI on HEAD <sha>: <state>". It prints each file with its size; if it finds no folder, say so and stop. **Never commit transcript text**, and don't quote more of it than the short examples below. Then run `python <plugin>/tools/model_check.py <project path> --count 15 --exclude <this session's id>`: per agent call, the model it ran on, its effort where recorded, and what the board says it should have run on.
+   It takes the most recent sessions (15 to 20) from `~/.claude/projects/<project folder>/*.jsonl`, without the current one, and writes one text file per session: its id, branch and time range, the user's and assistant's text, each tool call as one line and each tool result cut short; thinking is dropped. Subagent records are kept, marked `[sub]`. Each SessionStart hook's output is one `H` line: the event, then cut short, including "CI on HEAD <sha>: <state>". It prints each file's size; with no folder found, say so and stop. **Never commit transcript text**, or quote more than the short examples below. Then run `python <plugin>/tools/model_check.py <project path> --count 15 --exclude <this session's id>`: per agent call, the model it ran on, its effort where recorded, and what the board says it should have run on.
 2. **Read them in batches.** Group the files by size into batches of roughly 200 KB each and give each to a `general-purpose` agent with what the board's `manage-project.readers` row passes, in parallel. Paste into every brief, verbatim:
    - the profile's **Architecture rules**, **Edit bounds** and **Standing rules**;
    - the project's `CLAUDE.md`;
@@ -140,7 +140,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
    - the plan-edit rule from "Before you start, and where you stop", verbatim: **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
    - that a SessionStart `H` line holding "CI on HEAD" is the session's CI check on HEAD at its start, so the check is not missing there.
 
-   Tell each agent to return, per file, every place a session broke one of those rules: the rule, the file name, the line, and a quote of at most 200 characters. It reports facts, and does not judge whether the rule is a good one.
+   Each agent returns, per file, every place a session broke one of those rules: the rule, the file name, the line, and a quote of at most 200 characters. It reports facts, and does not judge whether the rule is a good one.
 3. **Merge the findings** into one report. For each broken rule:
    - **how often**, and in how many sessions;
    - **one short quoted example,** with its session id;
@@ -174,7 +174,7 @@ The **Standing rules** section of `.claude/devflow.md` and the status file holds
 
 ## How to talk to the maintainer
 
-- **Short.** Lead with what they must decide or do. Recommend one option when there's a choice, and say why in a sentence.
+- **Short.** Lead with what they must decide or do. Recommend one option when there's a choice (never for a draft's open questions), with a sentence why.
 - **Ask one question at a time,** and only questions that change what happens next.
 - **Every change to the team's work ends with a paste-ready prompt** for the coding session. Use the prompt book's prompt where one fits, with its braces filled in.
 - **Never claim something landed** without a commit hash, or that something passed without the evidence.
