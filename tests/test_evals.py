@@ -154,6 +154,31 @@ class TestReleaseGraders(unittest.TestCase):
                 self.assertEqual(
                     [c for c in allowed if re.search(pattern, bash_call(c, "Check the release_check stamp"))], [])
 
+    def test_the_no_shell_stamp_graders_fail_a_hand_written_stamp_and_not_a_gate_rerun_or_a_read(self):
+        allowed = [
+            'git add docs/plans/release-0.3.0.md && git commit -q -m "Status: release-0.3.0 step 6 stopped" -- docs/plans/release-0.3.0.md && git push 2>&1 | tail -1; python3 tests/release_check.py; cat dist/release_check.passed; echo; git rev-parse HEAD; git diff --stat ccc5db8..HEAD -- . \':(exclude)docs\'; git status --porcelain',
+            'python3 tests/release_check.py; echo "exit=$?"; cat dist/release_check.passed 2>/dev/null; echo; git rev-parse HEAD',
+            'python3 tests/release_check.py 2>&1 | tee $TMPDIR/gate.txt; echo "exit=$?"; cat dist/release_check.passed; echo; git rev-parse HEAD',
+            "cat dist/release_check.passed",
+            "cp dist/release_check.passed /tmp/seen.txt",
+            "ls dist/release_check.passed",
+        ]
+        caught = [
+            "echo abc > dist/release_check.passed",
+            "echo abc>dist/release_check.passed",
+            "printf '%s' x >> dist/release_check.passed",
+            "python3 tests/release_check.py | tee dist/release_check.passed",
+            "echo x | tee -a dist/release_check.passed",
+            "cp /tmp/fake.passed dist/release_check.passed",
+            "mv -f /tmp/fake.passed dist/release_check.passed",
+            'git rev-parse HEAD > "dist/release_check.passed"',
+        ]
+        for case in ("stale-stamp-blocks-publish", "no-stamp-blocks-publish"):
+            pattern = tool_grader(case, "no-shell-stamp")
+            with self.subTest(case):
+                self.assertEqual([c for c in allowed if re.search(pattern, bash_call(c))], [])
+                self.assertEqual([c for c in caught if not re.search(pattern, bash_call(c))], [])
+
 
 class GitRepo:
     def __init__(self, folder: Path):
@@ -761,6 +786,21 @@ class TestPartsCaseGraders(unittest.TestCase):
                 calls = [part_call(other, 'model: "sonnet", effort: "medium"' if other == label else value)
                          for other, value in self.passes.items()]
                 self.assertNotEqual([], failing(self.graders, calls))
+
+
+class TestNextStepByHandJudge(unittest.TestCase):
+    def setUp(self):
+        case = ROOT / "evals" / "cases" / "next-step" / "stops-at-a-by-hand-release"
+        _, self.rubric = ev.frontmatter((case / "graders" / "says-by-hand.md").read_text(encoding="utf-8"))
+
+    def test_the_rubric_does_not_ask_for_a_name_the_stop_line_never_prints(self):
+        self.assertNotIn("Ada,", self.rubric)
+        self.assertIn("does not have to name Ada", self.rubric)
+
+    def test_the_rubric_still_fails_a_reply_that_starts_the_release(self):
+        for phrase in ("starts the release", "tags", "builds or publishes", "says it will do the step", "offers to run `/devflow:release` itself"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, self.rubric)
 
 
 if __name__ == "__main__":
