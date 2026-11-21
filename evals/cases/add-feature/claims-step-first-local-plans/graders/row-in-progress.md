@@ -1,6 +1,6 @@
 ---
 type: regex
-pattern: 'in progress \(2026-10-22 10:\d\d\)'
+pattern: 'in progress \(\d{4}-\d\d-\d\d 10:\d\d\)'
 target: trace
 flags: i
 ---

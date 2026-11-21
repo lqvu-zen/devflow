@@ -803,5 +803,59 @@ class TestNextStepByHandJudge(unittest.TestCase):
                 self.assertIn(phrase, self.rubric)
 
 
+CLAIM_CASES = ROOT / "evals" / "cases"
+PINNED_DATE = "2026-10-22"
+OTHER_DATE = "2026-11-21"
+
+
+def regex_grader_passes(path: Path, trace: str) -> bool:
+    fields, _ = ev.frontmatter(path.read_text(encoding="utf-8"))
+    flags = re.IGNORECASE if "i" in ev.scalar(fields.get("flags", "")) else 0
+    found = re.search(ev.scalar(fields["pattern"]), trace, flags) is not None
+    return not found if ev.scalar(fields.get("match", "contains")) == "not_contains" else found
+
+
+def plan_trace(rows: dict[str, str]) -> str:
+    table = {"1 Fix #3: average of an empty list": "—", "2 Median": "—", "3 JSON output": "in progress (2026-10-19 22:05)",
+             "4 Reject non-numbers": "—", "5 Top N": "—", "6 Release 0.3.0": "—"}
+    table.update(rows)
+    text = "\n".join(f"| {step} | {state} |" for step, state in table.items())
+    commit = json.dumps({"tool": "Bash", "command": 'git commit -m "Status" -- docs/plans/release-0.3.0.md'})
+    return json.dumps({"tool": "Read", "output": text}) + "\n" + commit
+
+
+def edit_trace(step: str, state: str, before: dict[str, str] | None = None) -> str:
+    edit = json.dumps({"tool": "Edit", "old_string": f"| {step} | \u2014 |", "new_string": f"| {step} | {state} |"})
+    return plan_trace(before or {}) + "\n" + edit + "\n" + plan_trace({**(before or {}), step: state})
+
+
+class TestClaimGradersTakeAnyDate(unittest.TestCase):
+    NEXT_PLAN_BEFORE = {"2 Median": "in progress (2026-10-22 09:30)", "5 Top N": "in progress (2026-10-22 09:45)",
+                        "1 Mode": "\u2014", "2 Range": "\u2014", "3 Sum of squares": "\u2014"}
+    CLAIMS = {
+        CLAIM_CASES / "next-step" / "skips-a-claimed-step" / "graders" / "takes-step-5.md": ("5 Top N", {"2 Median": "in progress (2026-10-22 09:30)"}),
+        CLAIM_CASES / "next-step" / "takes-the-next-step-and-claims-it" / "graders" / "row-in-progress.md": ("2 Median", {}),
+        CLAIM_CASES / "add-feature" / "claims-step-first" / "graders" / "row-in-progress.md": ("2 Median", {}),
+        CLAIM_CASES / "add-feature" / "claims-step-first-local-plans" / "graders" / "row-in-progress.md": ("2 Median", {}),
+        CLAIM_CASES / "fix-bug" / "claims-step-first" / "graders" / "row-in-progress.md": ("1 Fix #3: average of an empty list", {}),
+        CLAIM_CASES / "next-step" / "falls-back-to-the-next-plan" / "graders" / "takes-step-3.md": ("3 Sum of squares", NEXT_PLAN_BEFORE),
+        CLAIM_CASES / "next-step" / "runs-fix-bug-for-a-bug-step" / "graders" / "row-in-progress.md": ("1 Fix #3: average of an empty list", {}),
+    }
+
+    def test_a_claim_passes_on_the_pinned_date_and_on_another_and_no_claim_fails(self):
+        for path, (step, before) in self.CLAIMS.items():
+            with self.subTest(path.relative_to(CLAIM_CASES).as_posix()):
+                self.assertTrue(regex_grader_passes(path, edit_trace(step, f"in progress ({PINNED_DATE} 10:00)", before)))
+                self.assertTrue(regex_grader_passes(path, edit_trace(step, f"in progress ({OTHER_DATE} 10:03)", before)))
+                self.assertFalse(regex_grader_passes(path, plan_trace(before)))
+
+    def test_rewriting_the_claimed_step_fails_leaves_step_2_on_any_date_and_leaving_it_passes(self):
+        path = CLAIM_CASES / "next-step" / "skips-a-claimed-step" / "graders" / "leaves-step-2.md"
+        claimed = {"2 Median": "in progress (2026-10-22 09:30)"}
+        self.assertFalse(regex_grader_passes(path, edit_trace("2 Median", f"in progress ({PINNED_DATE} 10:00)")))
+        self.assertFalse(regex_grader_passes(path, edit_trace("2 Median", f"in progress ({OTHER_DATE} 10:00)")))
+        self.assertTrue(regex_grader_passes(path, edit_trace("5 Top N", f"in progress ({OTHER_DATE} 10:00)", claimed)))
+
+
 if __name__ == "__main__":
     unittest.main()
