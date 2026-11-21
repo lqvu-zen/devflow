@@ -803,6 +803,28 @@ class TestNextStepByHandJudge(unittest.TestCase):
                 self.assertIn(phrase, self.rubric)
 
 
+class TestColdReadQuestionsJudge(unittest.TestCase):
+    def setUp(self):
+        case = ROOT / "evals" / "cases" / "manage-project" / "vague-step-gets-a-cold-read"
+        _, self.rubric = ev.frontmatter((case / "graders" / "ranked-questions.md").read_text(encoding="utf-8"))
+
+    def test_the_rubric_does_not_fail_a_reply_that_calls_the_draft_unready(self):
+        self.assertNotIn("says the draft is invalid", self.rubric)
+        for phrase in ("not ready", "can't start as written", "has vague steps", "must wait for another release or for the maintainer's answers", "is not a reason to fail"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, self.rubric)
+
+    def test_the_rubric_still_fails_a_reply_that_answers_or_writes_the_plan(self):
+        for phrase in ("gives no questions from the cold read", "answers a maintainer's question itself", "says the plan was accepted or the plan file was written", "must gain a Review Focus or Interfaces section before it can be used"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, self.rubric)
+
+    def test_the_rubric_still_asks_for_ranked_and_sorted_questions(self):
+        for phrase in ("most important first", "already answers or that are minor", "the ones the maintainer must decide"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, self.rubric)
+
+
 CLAIM_CASES = ROOT / "evals" / "cases"
 PINNED_DATE = "2026-10-22"
 OTHER_DATE = "2026-11-21"
