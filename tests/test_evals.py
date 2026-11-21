@@ -864,18 +864,22 @@ class TestClaimGradersTakeAnyDate(unittest.TestCase):
         CLAIM_CASES / "next-step" / "runs-fix-bug-for-a-bug-step" / "graders" / "row-in-progress.md": ("1 Fix #3: average of an empty list", {}),
     }
 
-    def test_a_claim_passes_on_the_pinned_date_and_on_another_and_no_claim_fails(self):
+    def test_a_claim_passes_on_any_date_and_time_and_no_claim_fails(self):
         for path, (step, before) in self.CLAIMS.items():
             with self.subTest(path.relative_to(CLAIM_CASES).as_posix()):
                 self.assertTrue(regex_grader_passes(path, edit_trace(step, f"in progress ({PINNED_DATE} 10:00)", before)))
                 self.assertTrue(regex_grader_passes(path, edit_trace(step, f"in progress ({OTHER_DATE} 10:03)", before)))
+                self.assertTrue(regex_grader_passes(path, edit_trace(step, f"in progress ({OTHER_DATE} 06:07)", before)))
+                self.assertTrue(regex_grader_passes(path, edit_trace(step, f"in progress ({OTHER_DATE} 16:35)", before)))
                 self.assertFalse(regex_grader_passes(path, plan_trace(before)))
 
-    def test_rewriting_the_claimed_step_fails_leaves_step_2_on_any_date_and_leaving_it_passes(self):
+    def test_rewriting_the_claimed_step_fails_leaves_step_2_on_any_date_and_time_and_leaving_it_passes(self):
         path = CLAIM_CASES / "next-step" / "skips-a-claimed-step" / "graders" / "leaves-step-2.md"
         claimed = {"2 Median": "in progress (2026-10-22 09:30)"}
         self.assertFalse(regex_grader_passes(path, edit_trace("2 Median", f"in progress ({PINNED_DATE} 10:00)")))
         self.assertFalse(regex_grader_passes(path, edit_trace("2 Median", f"in progress ({OTHER_DATE} 10:00)")))
+        self.assertFalse(regex_grader_passes(path, edit_trace("2 Median", f"in progress ({OTHER_DATE} 06:07)")))
+        self.assertFalse(regex_grader_passes(path, edit_trace("2 Median", f"in progress ({OTHER_DATE} 16:35)")))
         self.assertTrue(regex_grader_passes(path, edit_trace("5 Top N", f"in progress ({OTHER_DATE} 10:00)", claimed)))
 
 
