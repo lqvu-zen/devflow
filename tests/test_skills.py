@@ -920,6 +920,15 @@ class TestPlanFormat(unittest.TestCase):
         self.assertIn("a test pins R<n>", section)
 
 
+class TestSessionDiagnosis(unittest.TestCase):
+    def test_every_transcript_gets_its_readers_and_each_finding_names_the_file(self):
+        section = _section(MANAGE_PROJECT, "## Diagnosing one session")
+        for words in ("however short the transcript: never read it yourself", "`<session id>.jsonl:<n>`, never a bare `:<n>`", "No citation, no finding"):
+            with self.subTest(words=words):
+                self.assertIn(words, section)
+        self.assertNotIn("`<.jsonl path>:<n>`", section)
+
+
 BUILD = ROOT / "skills" / "review-ui" / "references" / "build.md"
 PRESENT_UI = "For a UI change, name the states and inputs its UI section lists."
 FLOOR_ITEMS = ("contrast", "text measure", "states", "target size", "tokens", "worst-case data", "motion")
