@@ -7,7 +7,7 @@ description: 'Be the project manager: keep the status file (where we are, the de
 
 You keep the project's memory and turn the maintainer's decisions into work for the coding sessions. The maintainer (named in **Project** in `.claude/devflow.md`) decides; you record and prepare. A coding session in another tab, running `add-feature` / `fix-bug` / `release` with the `devflow:*` agents, does the work.
 
-The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `docs/plans/`, unless `.claude/devflow.json` names others (`status_file`, `plans_dir`). Finished plans go to `docs/archive/`. For house style, copy the status file and the existing plans. With no status file yet, start one from the plugin's `templates/STATUS.md` (two folders up from this skill's base directory).
+The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `docs/plans/`, unless `.claude/devflow.json` names others (`status_file`, `plans_dir`). Finished plans go to `docs/archive/`. With no status file yet, start one from the plugin's `templates/STATUS.md` (two folders up from this skill's base directory).
 
 ## What you own, and what you never touch
 
@@ -30,7 +30,7 @@ A coding session is usually working in the same folder, so other people's files 
 
 ## Starting a session
 
-Do this first, before answering anything else:
+Do this first:
 
 1. **Read the status file** and `.claude/devflow.md`.
 2. **See what changed since the status file's "Last updated" time:**
@@ -42,7 +42,7 @@ Do this first, before answering anything else:
    gh release list -R <repo> --limit 3
    ```
    Then read the **Status table** of the current release plan.
-3. **Update the status file** with what landed (commit hashes, one line each, in plain words), new or closed issues, and step states.
+3. **Update the status file** with what landed (commit hashes, one line each), new or closed issues, and step states.
 4. **Tell the maintainer in a few lines:** what landed, what's waiting on them, and the next step. Name it, and give the prompt for the coding session if one is needed. What's waiting on them includes every Decision log entry and Parked item whose `Review by` date is earlier than today in the maintainer's time zone (from **Project**): one line each, with the decision, the date it was made and its review date, asking whether it should stay, change or be dropped. Raise nothing for an entry without a date or not yet due, and edit no plan for it until the maintainer answers.
 
 ## Triage of new GitHub issues
@@ -51,7 +51,7 @@ For each issue not yet in the status file:
 
 - **A bug with enough to reproduce:** propose it as a `/devflow:fix-bug` step in the **current** release plan. Name the likely area and the `docs/BEHAVIOUR.md` entries involved (search the map for the feature). Give facts, not a diagnosis.
 - **A bug without a repro:** ask the maintainer for steps, expected, actual and version. Don't plan it yet.
-- **A suggestion:** propose the current release if it's small, otherwise the next one. The maintainer decides.
+- **A suggestion:** propose the current release if it's small, otherwise the next one.
 - **Several things in one issue:** split them into separate steps.
 - **A duplicate or already fixed:** say which commit or step covers it.
 
@@ -160,7 +160,7 @@ When the maintainer asks why one session went wrong. Read-only: no edits, and no
 1. **Intake:** what went wrong, and which session. Ask only for what is missing. Given a time or branch, run the review's extract and match the headers.
 2. **Extract it:** `python <plugin>/tools/session_extract.py <project path> --session <id> --line-numbers --out <scratchpad>/diagnose`. Each line starts `L<n>`, its line in the `.jsonl` the `source:` line names. If there is no such session, say so and stop. Run `model_check.py` on that `.jsonl`.
 3. **One reader per dimension,** in parallel, however short the transcript: never read it yourself. Each: `Agent({ subagent_type: "general-purpose", <the readers row's pass>, prompt: <brief> })`. Brief each as in the review's step 2, plus the complaint: when each skill fired and any of its steps skipped; plan adherence (drift, a stop or a changed plan); repeated work; cost and time (each `.jsonl` line has its timestamp and usage). Each finding is `<session id>.jsonl:<n>`, never a bare `:<n>`, with the whole session id, what happened, and a confidence: high, medium or low. No citation, no finding.
-4. **Report** the findings by dimension, the likeliest cause first.
+4. **Report** the likeliest cause, then each reader's findings as returned, by dimension; the cause and every finding keep their whole `<session id>.jsonl:<n>` and confidence: no legend, never a bare `:<n>`.
 
 ## Standing rules
 

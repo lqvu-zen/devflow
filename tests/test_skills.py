@@ -950,6 +950,16 @@ class TestSessionDiagnosis(unittest.TestCase):
         section = _section(MANAGE_PROJECT, "## Diagnosing one session")
         self.assertIn('Agent({ subagent_type: "general-purpose", <the readers row\'s pass>', section)
 
+    def test_the_report_pastes_the_readers_findings_and_never_shortens_a_citation(self):
+        section = _section(MANAGE_PROJECT, "## Diagnosing one session")
+        for words in (
+            "each reader's findings as returned, by dimension",
+            "the cause and every finding keep their whole `<session id>.jsonl:<n>` and confidence",
+            "no legend, never a bare `:<n>`",
+        ):
+            with self.subTest(words=words):
+                self.assertIn(words, section)
+
     def test_citations_carry_the_whole_session_id(self):
         section = _section(MANAGE_PROJECT, "## Diagnosing one session")
         self.assertIn("never a bare `:<n>`, with the whole session id", section)
