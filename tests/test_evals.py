@@ -920,5 +920,23 @@ class TestManageProjectJudges(unittest.TestCase):
                 self.assertIn(phrase, rubric)
 
 
+class TestDesignSystemJudges(unittest.TestCase):
+    RUBRIC = ROOT / "evals" / "cases" / "review-ui" / "design-system-choice-not-reported" / "graders" / "eyebrow-waived.md"
+
+    def test_the_eyebrow_judge_fails_a_change_to_the_look_and_passes_waivers_and_markup_only_notes(self):
+        rubric = ev.frontmatter(self.RUBRIC.read_text(encoding="utf-8"))[1]
+        for phrase in (
+            "Fail if the report lists the label's look as an issue or a fix",
+            "restyling it",
+            "a Waived line",
+            "Considered, not fixing",
+            "a passing contrast note",
+            "how the text is stored or marked up",
+            "rendered look stays the same",
+        ):
+            with self.subTest(phrase):
+                self.assertIn(phrase, rubric)
+
+
 if __name__ == "__main__":
     unittest.main()
