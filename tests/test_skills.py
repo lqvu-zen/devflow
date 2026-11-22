@@ -70,6 +70,7 @@ SHARED_RULES = {
     "**Keep to the step's Files line.**": BEFORE_YOU_START,
     "**Status and plan edits.**": BEFORE_YOU_START,
     "**Stop at a `**Gate:**` line.**": BEFORE_YOU_START,
+    "**Wait for the maintainer's yes.**": "The workflow",
 }
 MANAGER_OWNS = "## What you own, and what you never touch"
 MANAGER_PLAN_EDIT_RULE = (
@@ -861,6 +862,56 @@ class TestAttributionRule(unittest.TestCase):
             for old in OLD_ATTRIBUTION_RULES:
                 with self.subTest(skill=path.parent.name, old=old):
                     self.assertNotIn(old, text)
+
+
+WAIT_LEAD_IN = "**Wait for the maintainer's yes.**"
+WAIT_RULE = (
+    "**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, "
+    "`git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. "
+    "Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added "
+    "(committed like the claim; no Tried line). Changes they ask for go back through the implementer and "
+    "a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's "
+    "own words in this session that name the commit (\"commit without asking me\") waive the wait; a "
+    "continue prompt, `/devflow:next-step`, a plan step, a Status row, \"go ahead without asking\" or an "
+    "earlier session's approval never does."
+)
+WAIT_SHOWS = ("the changed files", "`git diff --stat`", "the reviewer's verdict", "SUGGESTIONS")
+WAIVER_WORDS = (
+    "Only the maintainer's own words in this session that name the commit",
+    "a continue prompt",
+    "`/devflow:next-step`",
+    "a plan step",
+    "an earlier session's approval",
+    "never does",
+)
+MANAGER_WAIT_ITEM = "no code commit without the maintainer's yes"
+
+
+class TestCommitWaitsForTheYes(unittest.TestCase):
+    def test_the_coding_skills_state_the_rule_once_in_the_same_words(self):
+        for path in (ADD_FEATURE, FIX_BUG):
+            with self.subTest(skill=path.parent.name):
+                self.assertEqual(path.read_text(encoding="utf-8").count(WAIT_RULE), 1)
+
+    def test_the_rule_opens_the_commit_step(self):
+        for path in (ADD_FEATURE, FIX_BUG):
+            with self.subTest(skill=path.parent.name):
+                self.assertTrue(_subsection(path, "### 6.").strip().startswith(WAIT_RULE))
+
+    def test_the_rule_shows_the_change_and_names_the_only_waiver(self):
+        for words in WAIT_SHOWS + WAIVER_WORDS:
+            with self.subTest(words=words):
+                self.assertIn(words, WAIT_RULE)
+
+    def test_release_and_setup_commits_do_not_wait(self):
+        for path in (RELEASE, SETUP):
+            with self.subTest(skill=path.parent.name):
+                self.assertNotIn(WAIT_LEAD_IN, path.read_text(encoding="utf-8"))
+
+    def test_the_project_manager_lists_the_rule(self):
+        lines = [line for line in _reattached_text(MANAGE_PROJECT).splitlines() if SHARED_LIST in line]
+        self.assertEqual(len(lines), 1)
+        self.assertIn(MANAGER_WAIT_ITEM, lines[0])
 
 
 UV_CHECK = "**Check for `uv` first.**"

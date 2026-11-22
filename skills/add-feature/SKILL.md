@@ -5,9 +5,7 @@ description: 'Add or improve a feature the devflow way, end to end: understand, 
 
 # Adding or improving a feature
 
-A change that ignores the project's architecture rules, its data and migration rules, or its dependency direction can look correct and still break the running product or a user's data. So this workflow front-loads understanding and ends with real verification, before anything is committed.
-
-Work through the phases in order. Don't skip the test or review phase to save time; a feature that isn't verified isn't done.
+A change that ignores the project's architecture rules can look correct and still break the running product or a user's data. Work through the phases in order; a feature that isn't verified isn't done.
 
 ## Stop rules
 
@@ -15,20 +13,11 @@ Work through the phases in order. Don't skip the test or review phase to save ti
 
 ## The project profile
 
-Everything specific to this project is in **`.claude/devflow.md`**. Read it first. Its sections, by exact heading, are what the phases below paste into briefs:
-
-- **Project**: what it is, the repo, the main branch, the maintainer.
-- **Where things live**: the table the locator starts from.
-- **Architecture rules**: the canonical list. Paste it **whole and verbatim** wherever a brief below says "the architecture rules"; a partial list is how a rule quietly gets dropped.
-- **Verify**: the commands that must pass.
-- **Edit bounds**: what the implementer may and may not edit, and what is never staged.
-- **Escalate**: areas where the implementer runs on Opus.
-- **See it working**: how to see a change working without touching real data or the maintainer's screen.
-- **Design system**: the design-system file (`docs/DESIGN.md`), the platforms the project ships to and its UI surfaces. Absent when the project has no user interface.
+Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working** and **Design system** (absent when the project has no user interface). Read it first; the phases below paste its sections by exact heading. Paste **Architecture rules** whole and verbatim wherever a brief below says "the architecture rules"; a partial list is how a rule quietly gets dropped.
 
 If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setup` first.
 
-**You are the orchestrator.** You own the conversation with the user, the delegation below, the verification of everything you delegate, and the commit decision. You do **not** design the feature, write the implementation, run the tests, or review the final diff yourself. Each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Keep this separation even for small features.
+**You are the orchestrator.** You own the conversation with the user, the delegation below, the verification of everything you delegate, and the commit. You do **not** design the feature, write the implementation, run the tests, or review the final diff yourself. Each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Keep this separation even for small features.
 
 ## Who does each phase
 
@@ -107,8 +96,6 @@ For a trivially small, obvious change you can skip the subagent and run one targ
 
 ### 3. Design with a fresh Opus agent
 
-You do not design inline.
-
 ```
 Agent({ description: "Design <feature>", subagent_type: "devflow:designer", prompt: <self-contained brief> })
 ```
@@ -144,9 +131,11 @@ Agent({ description: "Review <feature>", subagent_type: "devflow:reviewer", prom
 
 The brief must include, verbatim: the original request; the approved plan; the full `git diff`; the whole **Architecture rules** section; the map rows; the plan step's Done when, if any; and: *"Diff mode. Review ONLY the diff and the files it modifies. Do NOT edit anything. Report BLOCKERS, SUGGESTIONS and OK. If there are no blockers, end with the line 'READY TO COMMIT'."*
 
-If the reviewer reports BLOCKERS, fix them or delegate back to the implementer via SendMessage, then re-review: one more round only. Proceed only on `READY TO COMMIT`; if the second review still has blockers, stop and report them.
+If the reviewer reports BLOCKERS, fix them or delegate back to the implementer via SendMessage, then re-review, within the stop rules. Proceed only on `READY TO COMMIT`.
 
 ### 6. Commit and push
+
+**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking" or an earlier session's approval never does.
 
 Match the commit style (`git log --oneline -5`). Stage only the relevant files, by path; never what **Edit bounds** says is never staged, and never `git add -A`. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any. Push to the main branch when the project's rules or the user's preferences say so; otherwise ask.
 

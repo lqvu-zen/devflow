@@ -17,7 +17,7 @@ Work through the phases in order. A "fix" you didn't reproduce and can't show pa
 
 Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working** and **Design system**. Read it first. Paste **Architecture rules** whole and verbatim wherever a brief below asks for it. If the file is missing, stop and tell the user to run `/devflow:setup` first.
 
-**You are the orchestrator.** You own the conversation, the delegation, the verification of everything you delegate, and the commit decision. You do **not** diagnose the root cause, write the fix, run the tests or review the final diff yourself; each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Your own job is steps 1 and 2 (reproduce, gather context), then spawning, verifying and committing. Keep the separation even for a one-line fix.
+**You are the orchestrator.** You own the conversation, the delegation, the verification of everything you delegate, and the commit. You do **not** diagnose the root cause, write the fix, run the tests or review the final diff yourself; each goes to a fresh subagent, because an independent agent has no anchoring from this conversation. Your own job is steps 1 and 2 (reproduce, gather context), then spawning, verifying and committing. Keep the separation even for a one-line fix.
 
 ## Who does each phase
 
@@ -179,6 +179,8 @@ The brief includes, verbatim: the bug and repro; the root cause and plan; the fu
 BLOCKERS get one more round, then stop and report.
 
 ### 6. Commit and push
+
+**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking" or an earlier session's approval never does.
 
 As in `add-feature` step 6: match the commit style, stage by path, push per the project's rules, watch CI on the pushed commit, and set the plan step's Status row to `done` with the hash. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any.
 
