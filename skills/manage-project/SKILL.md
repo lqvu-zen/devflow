@@ -108,8 +108,6 @@ Agent({ description: "Plan <what>", subagent_type: "devflow:planner", prompt: <b
 
 The brief includes: the goal in the maintainer's words; the source document (path); the **Standing rules**; the relevant decision-log entries, verbatim; and what to return: a draft plan in the house format, plus **open questions for the maintainer**.
 
-The agent returns a draft, with its lint findings, and does not write files.
-
 **A cold read, once.** Before the maintainer accepts a draft the planner returned (a plan, new steps, or a plan it checked), give the draft to one fresh `general-purpose` agent with the `model` and `effort` the board command prints for the planner, even where its `pass` column shows nothing, because a `general-purpose` agent has no pin:
 
 ```
@@ -126,13 +124,13 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
 
 `docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke. This review finds them in recent sessions. It only reports: you propose lines for § Harness escapes, the maintainer decides.
 
-**When:** on request ("review the sessions", "what rules are the agents breaking?"). Suggest it after a release or every couple of weeks, once per period.
+**When:** on request; suggest it after a release or every couple of weeks.
 
 1. **Extract the sessions** to your scratchpad, never into the repo, with the plugin's `tools/session_extract.py` (in `tools/`, two folders up from this skill's base directory):
    ```bash
    python <plugin>/tools/session_extract.py <project path> --count 15 --out <scratchpad>/sessions --exclude <this session's id>
    ```
-   It takes the most recent sessions (15 to 20) from `~/.claude/projects/<project folder>/*.jsonl`, without the current one, and writes one text file per session: its id, branch and time range, the user's and assistant's text, each tool call as one line and each tool result cut short; thinking is dropped. Subagent records are kept, marked `[sub]`. Each SessionStart hook's output is one `H` line: the event, then cut short, including "CI on HEAD <sha>: <state>". It prints each file's size; with no folder found, say so and stop. **Never commit transcript text**, or quote more than the short examples below. Then run `python <plugin>/tools/model_check.py <project path> --count 15 --exclude <this session's id>`: per agent call, the model it ran on, its effort where recorded, and what the board says it should have run on.
+   It writes one shortened text file per recent session, without the current one. Subagent records are kept, marked `[sub]`. Each SessionStart hook's output is one `H` line: the event, then cut short, including "CI on HEAD <sha>: <state>". It prints each file's size; with no folder found, say so and stop. **Never commit transcript text**, or quote more than the short examples below. Then run `python <plugin>/tools/model_check.py <project path> --count 15 --exclude <this session's id>`: per agent call, the model it ran on, its effort where recorded, and what the board says it should have run on.
 2. **Read them in batches.** Group the files by size into batches of roughly 200 KB each and give each to a `general-purpose` agent with what the board's `manage-project.readers` row passes, in parallel. Paste into every brief, verbatim:
    - the profile's **Architecture rules**, **Edit bounds** and **Standing rules**;
    - the project's `CLAUDE.md`;
@@ -158,9 +156,9 @@ Finish with the paste-ready prompt for the first approved step.
 When the maintainer asks why one session went wrong. Read-only: no edits, and no fix advice.
 
 1. **Intake:** what went wrong, and which session. Ask only for what is missing. Given a time or branch, run the review's extract and match the headers.
-2. **Extract it:** `python <plugin>/tools/session_extract.py <project path> --session <id> --line-numbers --out <scratchpad>/diagnose`. Each line starts `L<n>`, its line in the `.jsonl` the `source:` line names. If there is no such session, say so and stop. Run `model_check.py` on that `.jsonl`.
-3. **One reader per dimension,** in parallel, however short the transcript: never read it yourself. Each: `Agent({ subagent_type: "general-purpose", <the readers row's pass>, prompt: <brief> })`. Brief each as in the review's step 2, plus the complaint: when each skill fired and any of its steps skipped; plan adherence (drift, a stop or a changed plan); repeated work; cost and time (each `.jsonl` line has its timestamp and usage). Each finding is `<session id>.jsonl:<n>`, never a bare `:<n>`, with the whole session id, what happened, and a confidence: high, medium or low. No citation, no finding.
-4. **Report** the likeliest cause, then the findings by dimension. Every line number, even in a table or an aside, is a whole `<session id>.jsonl:<n>`: no legend, no bare `:<n>`, no `:9, :11`. Keep every confidence.
+2. **Extract it:** `python <plugin>/tools/session_extract.py <project path> --session <id> --line-numbers --out <scratchpad>/diagnose`. Each line starts `L<n>`, its line in the `.jsonl` the `source:` line names. If there is no such session, say so and stop. Run `model_check.py` on that `.jsonl` and give its output to the readers.
+3. **One reader per dimension,** in parallel, however short the transcript: never read it yourself. Each: `Agent({ subagent_type: "general-purpose", <the readers row's pass>, prompt: <brief> })`. Brief each as in the review's step 2, plus the complaint: when each skill fired and any of its steps skipped; plan adherence (drift, a stop or a changed plan); repeated work; cost and time (each `.jsonl` line has its timestamp and usage). Each finding is `<session id>.jsonl:<n>`, never a bare `:<n>`, with the whole session id, what happened, and a confidence: high, medium or low. Return each as one line, `- <what happened> (<session id>.jsonl:<n>, <confidence>)`: what happened only, no fix advice. No citation, no finding.
+4. **Report** only the readers' finding lines, unchanged: the likeliest cause first (one of the readers' lines), then each dimension's under its bare name. Every line number is a whole `<session id>.jsonl:<n>`: no legend, no bare `:<n>`, no `:9, :11`. Keep every confidence. Nothing of your own: no lead-in, summary, timing, note or offer, and nothing after the last finding.
 
 ## Standing rules
 
