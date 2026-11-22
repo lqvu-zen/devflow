@@ -9,8 +9,8 @@
     {
       "name": "devflow",
       "source": "./",
-      "description": "Locate, design, implement, review and commit through fresh agents; a behaviour map; claimable plan steps; a secretary; releases through a tested candidate; guard hooks.",
-      "version": "0.2.2",
+      "description": "Locate, design, implement, review and commit through fresh agents; a behaviour map; claimable plan steps; a project manager; releases through a tested candidate; guard hooks.",
+      "version": "0.3.0",
       "license": "MIT"
     }
   ]
