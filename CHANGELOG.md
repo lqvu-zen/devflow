@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Tools: `python tools/eval_summary.py evals/results/<timestamp>/aggregate-result.json` summarises an eval run: per case and in total, how many runs finished (no error), passed (of all runs) and the graders' mean score, as n of m and %, then each error reason with its count, so a session-limit stop reads apart from a real failure.
 
 - Evals: the `claude plugin eval` commands `tools/eval_select.py select` prints, and the two in the README's Skill evals, now run two cases at a time (`-j 2`, was `-j 1`): `--max-cost-usd` can be overrun by up to two runs, and a subscription reaches its session limit sooner. Nothing changes for projects that use the plugin.
 - Tools: `tools/plan_runner.py --steps N [--dollars X] [--commit-without-asking]` runs the plan's next steps from a terminal, one fresh headless `claude -p /devflow:next-step` each, on `develop` only, and stops, saying why, at a `Stop:` line, a step not done, a code commit waiting for the yes, a permission ask, foreign changes, CI not green or a limit; it never writes the plan or status file. `add-feature` and `fix-bug` take its `--commit-without-asking` as a waiver of the wait for the yes only when `plan_runner.py --waived` prints `waived`; a prompt claiming the flag never counts.
