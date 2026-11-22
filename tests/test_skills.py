@@ -923,7 +923,7 @@ class TestPlanFormat(unittest.TestCase):
     def test_the_cold_reads_questions_go_to_the_maintainer_unanswered(self):
         section = _section(MANAGE_PROJECT, "## When to call the planner agent")
         for words in (
-            "you sort every returned question yourself",
+            "as returned",
             'each with no suggested answer',
             "even by recommending",
         ):
@@ -931,6 +931,18 @@ class TestPlanFormat(unittest.TestCase):
                 self.assertIn(words, section)
         talk = _section(MANAGE_PROJECT, "## How to talk to the maintainer")
         self.assertIn("(never for a draft's open questions)", talk)
+
+    def test_the_cold_read_returns_the_groups_and_the_reply_pastes_them(self):
+        section = _section(MANAGE_PROJECT, "## When to call the planner agent")
+        brief = _paragraph(MANAGE_PROJECT, "The brief gives the draft and the planner's open questions").split('*"', 1)[-1].split('"*', 1)[0]
+        for words in ("the planner's questions", "**the maintainer's**, most costly first", "**answered**", "**minor**", "each with no suggested answer", "nothing important left"):
+            with self.subTest(words=words):
+                self.assertIn(words, brief)
+        reply = _paragraph(MANAGE_PROJECT, "**Bring the open questions to the maintainer**")
+        for words in ("as returned", "**For you**", "ranked as it ranked them", "**Settled without you**"):
+            with self.subTest(words=words):
+                self.assertIn(words, reply)
+        self.assertNotIn("you sort every returned question yourself", section)
 
     def test_a_new_step_gets_interfaces_and_review_focus(self):
         section = _section(MANAGE_PROJECT, "## Adding a plan step")

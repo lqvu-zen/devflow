@@ -116,9 +116,9 @@ The agent returns a draft, with its lint findings, and does not write files.
 Agent({ description: "Cold read <plan>", subagent_type: "general-purpose", model: <the planner's>, effort: <the planner's>, prompt: <brief> })
 ```
 
-The brief gives the draft, verbatim, and says: *"You will build this plan, one step per fresh session that sees only its own step. Read the draft and the code it names; edit nothing. Return only the questions where a wrong guess would change what gets built or break another step, most costly first, one line each with its step number; or exactly 'nothing important left'."* Then you sort every returned question yourself into **answered** (the draft or the code already answers it: say where), **minor** (any reasonable guess will do: the designer's) or **the maintainer's**. One round: no second cold read after the answers.
+The brief gives the draft and the planner's open questions, verbatim, and says: *"You will build this plan, one step per fresh session that sees only its own step. Read the draft and the code it names; edit nothing. Return the planner's questions and yours where a wrong guess would change what gets built or break another step, one line each with its step number, each with no suggested answer, in three groups: **the maintainer's**, most costly first; **answered** (the draft or code says where); **minor** (any guess will do); or exactly 'nothing important left'."* One round: no second cold read after the answers.
 
-**Bring the open questions to the maintainer:** the planner's, its lint findings, and the cold read's maintainer's questions, ranked as it ranked them, each with no suggested answer. Never answer one yourself, even by recommending. Apply the maintainer's answers, then write the plan file yourself and log the decisions.
+**Bring the open questions to the maintainer** as returned: **For you**, its maintainer's group, ranked as it ranked them; **Settled without you**, the other two; then the lint findings. Never answer one yourself, even by recommending. Apply the maintainer's answers, then write the plan file yourself and log the decisions.
 
 If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for the planner, and paste the plugin's `agents/planner.md` at the top of the brief.
 

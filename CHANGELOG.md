@@ -4,6 +4,7 @@
 
 - Session start: a step whose Needs name a step of an archived plan (`<name>-N`) starts once that step is done; the token names `release-<name>.md`, or the plan the status file records as ``was `release-<name>.md` ``, and a step whose Need names no plan, or more than one, still waits, naming it.
 - Repo: development moved to `develop`. `main`, the default branch users install from, moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; CI runs on pushes to both, and evals run from a checkout frozen at one `develop` commit. Nothing changes for projects that use the plugin.
+- Skills: `manage-project`'s cold read now gets the planner's open questions too and returns them with its own in three groups (the maintainer's, ranked; answered, saying where; minor), each with no suggested answer, and the reply pastes them as returned under **For you** and **Settled without you**. Eval: `manage-project/vague-step-gets-a-cold-read` (the three-run WSL pass is still to be recorded).
 
 ## 0.3.0
 
