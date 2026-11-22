@@ -77,6 +77,7 @@ Optional: put `.claude/ui-review.json` in the project to set the server URL, pag
 ## Requirements
 
 - `uv` on `PATH`. The hooks run as `uv run --no-project python …`, using only the standard library. `/devflow:setup` checks for it first and, if it is missing, stops and gives the install command.
+- Python 3.14 or newer for the hooks and tools (tested on 3.14 and 3.15 on Linux and Windows). `uv run --no-project python` uses the project's `.python-version` if it has one, otherwise a Python uv finds; `uv python install 3.14` adds one. On 3.13 they still run today but are not tested, and a later release may use a 3.14 feature: the guard would then ask "not checked" on every guarded call and session start would print nothing.
 - Node 22+ and Chrome, Edge or Chromium, only for `/devflow:review-ui` on a web page.
 - `git`. `gh`, logged in, for the CI line, issues and releases.
 - The hooks are run by `bash`. On Windows, that's the Git Bash that Claude Code uses.
@@ -86,6 +87,8 @@ Optional: put `.claude/ui-review.json` in the project to set the server URL, pag
 ```
 python -m unittest discover -s tests
 ```
+
+Run them on Python 3.14 or newer; CI runs them on 3.14 and 3.15 with deprecation warnings as errors.
 
 `tests/test_guard.py` runs the RYOS guard's test cases against an RYOS-shaped config to show the generic guard behaves the same, and adds a Linux-style project and a minimal config. `tests/test_session_start.py` and `tests/test_checks.py` cover the other hook and the CI check; the CI-check tests use real throwaway git repositories.
 

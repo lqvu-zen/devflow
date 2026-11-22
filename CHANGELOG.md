@@ -1,6 +1,7 @@
 # Changelog
 
 ## Unreleased
+- Python: the hooks and tools now support Python 3.14 or newer (was 3.13). CI runs the tests on 3.14 and 3.15 on Linux and Windows, with deprecation warnings as errors. Nothing checks the version at run time: on 3.13 the hooks still run but are untested, and once a change uses a 3.14 feature the guard asks "not checked" on every guarded call and session start prints nothing. A project whose `.python-version` says 3.13 runs the hooks on 3.13.
 - Tools: `python tools/eval_summary.py evals/results/<timestamp>/aggregate-result.json` summarises an eval run: per case and in total, how many runs finished (no error), passed (of all runs) and the graders' mean score, as n of m and %, then each error reason with its count, so a session-limit stop reads apart from a real failure.
 
 - Evals: the `claude plugin eval` commands `tools/eval_select.py select` prints, and the two in the README's Skill evals, now run two cases at a time (`-j 2`, was `-j 1`): `--max-cost-usd` can be overrun by up to two runs, and a subscription reaches its session limit sooner. Nothing changes for projects that use the plugin.

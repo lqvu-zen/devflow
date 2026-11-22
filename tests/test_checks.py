@@ -436,6 +436,38 @@ class TestBranchWiring(unittest.TestCase):
         self.assertEqual(config.default_base, "origin/main")
 
 
+class TestPythonWiring(unittest.TestCase):
+    def matrix_pythons(self):
+        text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+        found = re.search(r"^        python: \[([^\]]*)\]", text, re.MULTILINE)
+        self.assertIsNotNone(found)
+        names = [name.strip().strip("\"'") for name in found.group(1).split(",")]
+        return sorted(names, key=lambda name: tuple(int(part) for part in name.split(".")))
+
+    def profile_pythons(self):
+        text = (ROOT / ".claude" / "devflow.md").read_text(encoding="utf-8")
+        section = text.split("\n## Project\n", 1)[1].split("\n## ", 1)[0]
+        floor = re.search(r"Python (\d+\.\d+) or newer", section)
+        newest = re.search(r"CI also tests (\d+\.\d+), the newest", section)
+        self.assertIsNotNone(floor)
+        self.assertIsNotNone(newest)
+        return floor.group(1), newest.group(1)
+
+    def test_the_profile_floor_is_the_oldest_python_ci_runs(self):
+        self.assertEqual(self.profile_pythons()[0], self.matrix_pythons()[0])
+
+    def test_the_profile_newest_is_the_newest_python_ci_runs(self):
+        self.assertEqual(self.profile_pythons()[1], self.matrix_pythons()[-1])
+
+    def test_the_unittest_job_runs_the_matrix_python(self):
+        text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+        self.assertIn("python-version: ${{ matrix.python }}", text)
+
+    def test_the_unittest_job_fails_on_a_deprecation(self):
+        text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+        self.assertIn("PYTHONWARNINGS: error::DeprecationWarning", text)
+
+
 class TestNewBranchPush(_RepoCase):
     def test_a_first_push_checks_every_commit_main_lacks(self):
         release = self.repo.commit("Release 2.4.0", {
