@@ -479,6 +479,32 @@ def view(path: str, md: str):
     return session_start.read_plan(path, md)
 
 
+ARCHIVE_PATH = "docs/archive/release-0.3.0.md"
+LATER_PATH = "docs/plans/release-0.5.0.md"
+SHIPPED = with_states(CURRENT, {n: "done" for n in range(1, 7)})
+
+ARCHIVED_STATUS = """# Status
+
+## Releases
+
+| Release | What | Plan |
+|---|---|---|
+| **0.3.0** (done) | median, JSON output, empty-list fix | `docs/archive/release-0.3.0.md` (was `release-next.md`) |
+| **0.4.0** (in progress) | mode, range, sum of squares | `docs/plans/release-0.4.0.md` |
+"""
+
+THREE_STATUS = f"""# Status
+
+## Releases
+
+| Release | What | Plan |
+|---|---|---|
+| **0.3.0** (done) | median, JSON output, empty-list fix | `{ARCHIVE_PATH}` |
+| **0.4.0** (in progress) | mode, range, sum of squares | `{NEXT_PATH}` |
+| **0.5.0** (next) | more | `{LATER_PATH}` |
+"""
+
+
 class TestNextStep(unittest.TestCase):
     def test_the_next_plan_is_the_other_plan_in_a_status_table(self):
         self.assertEqual(session_start.next_plan(TWO_STATUS, CURRENT_PATH), NEXT_PATH)
@@ -683,6 +709,60 @@ class TestNextStep(unittest.TestCase):
             f"Stop: couldn't read the Order and Status of {CURRENT_PATH}. Next: run /devflow:manage-project.",
         ])
 
+    def test_the_summary_and_the_flag_agree_on_an_archived_need(self):
+        project = Path(tempfile.mkdtemp(prefix="devflow-next-"))
+        self.addCleanup(shutil.rmtree, project, ignore_errors=True)
+        (project / "docs" / "plans").mkdir(parents=True)
+        (project / "docs" / "archive").mkdir(parents=True)
+        (project / "docs" / "STATUS.md").write_text(THREE_STATUS, encoding="utf-8")
+        (project / ARCHIVE_PATH).write_text(SHIPPED, encoding="utf-8")
+        (project / NEXT_PATH).write_text(with_states(NEXT, {2: "in progress (x)", 3: "in progress (y)"}),
+                                         encoding="utf-8")
+        (project / LATER_PATH).write_text(CURRENT, encoding="utf-8")
+        text = session_start.report(lambda argv: None, project, session_start.DEFAULT_LAYOUT)
+        self.assertIn("\nNext open step in Order: 1 Mode\n", text)
+        self.assertNotIn("from the next plan", text)
+        self.assertEqual(session_start.next_step_lines(project)[:3],
+                         [f"Plan: {NEXT_PATH}", "Step: 1 Mode", "Run: /devflow:add-feature"])
+
+    def test_a_need_on_an_archived_plan_reads_its_status(self):
+        nxt = view(NEXT_PATH, NEXT)
+        shipped = view(ARCHIVE_PATH, SHIPPED)
+        self.assertEqual(session_start.blockers(nxt, 1, None, archived=(shipped,)), [])
+        self.assertEqual(session_start.blockers(nxt, 1, None, archived=(view(ARCHIVE_PATH, CURRENT),)),
+                         ["needs v0.3.0-4"])
+        self.assertEqual(session_start.blockers(nxt, 1, None), ["needs v0.3.0-4"])
+        choice = session_start.choose_step(nxt, None, archived=(shipped,))
+        self.assertEqual((choice.plan, choice.number, choice.run, choice.fallback), (NEXT_PATH, 1, "add-feature", False))
+
+    def test_a_need_names_its_plan_by_release_name_or_former_name(self):
+        nxt = view(NEXT_PATH, NEXT.replace("`v0.3.0-4`", "next-4"))
+        old = session_start.read_plan(ARCHIVE_PATH, SHIPPED, ("release-next",))
+        decoy = view("docs/archive/next.md", SHIPPED)
+        self.assertEqual(session_start.blockers(nxt, 1, None, archived=(decoy, old)), [])
+        self.assertEqual(session_start.blockers(nxt, 1, None, archived=(decoy,)), ["needs next-4"])
+        twin = session_start.read_plan("docs/archive/release-0.3.1.md", SHIPPED, ("release-next",))
+        self.assertEqual(session_start.blockers(nxt, 1, None, archived=(old, twin)), ["needs next-4"])
+        self.assertEqual(session_start.blockers(nxt, 1, view(CURRENT_PATH, SHIPPED)), ["needs next-4"])
+
+    def test_a_renamed_open_plan_is_read_by_its_former_name(self):
+        status = TWO_STATUS.replace("`docs/plans/release-0.3.0.md`", "`docs/plans/release-0.3.0.md` (was `release-next.md`)")
+        project = Path(tempfile.mkdtemp(prefix="devflow-next-"))
+        self.addCleanup(shutil.rmtree, project, ignore_errors=True)
+        (project / "docs" / "plans").mkdir(parents=True)
+        (project / "docs" / "STATUS.md").write_text(status, encoding="utf-8")
+        (project / CURRENT_PATH).write_text(BLOCKED, encoding="utf-8")
+        (project / NEXT_PATH).write_text(NEXT.replace("v0.3.0-1", "next-1"), encoding="utf-8")
+        text = session_start.report(lambda argv: None, project, session_start.DEFAULT_LAYOUT)
+        self.assertIn(f"Next open step in Order: 3 Sum of squares, from the next plan {NEXT_PATH}", text)
+        lines = session_start.next_step_lines(project)
+        self.assertEqual((lines[0], lines[-2:]), (f"Plan: {NEXT_PATH} (the next plan)",
+                                                   ["Step: 3 Sum of squares", "Run: /devflow:add-feature"]))
+
+    def test_former_names_come_from_the_status_row(self):
+        self.assertEqual(session_start.former_names(ARCHIVED_STATUS), {ARCHIVE_PATH: ("release-next",)})
+        self.assertEqual(session_start.former_names(TWO_STATUS), {})
+
 
 class TestMain(unittest.TestCase):
     def setUp(self):
@@ -863,6 +943,50 @@ class TestMain(unittest.TestCase):
         result = self.run_in(worktree(main, self.project / "wt"), "--next-step")
         self.assertEqual((result.returncode, result.stderr), (0, ""))
         self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n")
+
+    def archived_project(self, root: Path, archived: str | None, needs: str = "`v0.3.0-4`",
+                         decoy: str | None = None) -> Path:
+        (root / ".claude").mkdir(parents=True, exist_ok=True)
+        (root / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        (root / "docs" / "plans").mkdir(parents=True, exist_ok=True)
+        (root / "docs" / "archive").mkdir(parents=True, exist_ok=True)
+        (root / "docs" / "STATUS.md").write_text(ARCHIVED_STATUS, encoding="utf-8")
+        (root / NEXT_PATH).write_text(NEXT.replace("`v0.3.0-4`", needs), encoding="utf-8")
+        if archived is not None:
+            (root / ARCHIVE_PATH).write_text(archived, encoding="utf-8")
+        if decoy is not None:
+            (root / "docs" / "archive" / "next.md").write_text(decoy, encoding="utf-8")
+        return root
+
+    def test_next_step_flag_takes_a_step_whose_need_is_done_in_an_archived_plan(self):
+        self.archived_project(self.project, SHIPPED)
+        result = self.run_next_step()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {NEXT_PATH}\nStep: 1 Mode\nRun: /devflow:add-feature\n")
+
+    def test_next_step_flag_reads_a_renamed_archived_plan_by_its_old_name(self):
+        self.archived_project(self.project, SHIPPED, "next-4", decoy=CURRENT)
+        result = self.run_next_step()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {NEXT_PATH}\nStep: 1 Mode\nRun: /devflow:add-feature\n")
+
+    def test_next_step_flag_blocks_on_an_archived_step_not_done_or_no_plan(self):
+        for archived in (CURRENT, None):
+            self.archived_project(self.project, archived)
+            if archived is None:
+                (self.project / ARCHIVE_PATH).unlink(missing_ok=True)
+            result = self.run_next_step()
+            self.assertEqual(result.stdout, f"Plan: {NEXT_PATH}\nStep: 1 Mode\nStop: step 1 needs v0.3.0-4. "
+                                            "Next: the steps it needs land first.\n")
+
+    def test_next_step_flag_reads_an_archived_plan_in_the_store(self):
+        main = self.project / "main"
+        store = make_store(self.project / "home" / "projects" / "tally", {"name": "tally"})
+        self.archived_project(store, SHIPPED)
+        link(main / ".git", store)
+        result = self.run_in(worktree(main, self.project / "wt"), "--next-step")
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {NEXT_PATH}\nStep: 1 Mode\nRun: /devflow:add-feature\n")
 
     def test_a_pointer_to_a_missing_store_says_so(self):
         main = self.project / "main"

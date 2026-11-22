@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Session start: a step whose Needs name a step of an archived plan (`<name>-N`) starts once that step is done; the token names `release-<name>.md`, or the plan the status file records as ``was `release-<name>.md` ``, and a step whose Need names no plan, or more than one, still waits, naming it.
 - Repo: development moved to `develop`. `main`, the default branch users install from, moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; CI runs on pushes to both, and evals run from a checkout frozen at one `develop` commit. Nothing changes for projects that use the plugin.
 
 ## 0.3.0

@@ -9,7 +9,7 @@ import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, Mapping, NamedTuple, Optional
+from typing import Any, Callable, Mapping, NamedTuple, Optional, Sequence
 
 HOOKS_DIR = os.path.dirname(os.path.abspath(__file__))
 if HOOKS_DIR not in sys.path:
@@ -34,6 +34,7 @@ class Layout:
         self.plans_dir = (plans if isinstance(plans, str) and plans else "docs/plans")
         self.status_file = self.status_file.replace("\\", "/").strip("/")
         self.plans_dir = self.plans_dir.replace("\\", "/").strip("/")
+        self.archive_dir = "docs/archive"
         self.name = name if isinstance(name, str) and name else "devflow"
         self.plan_pattern = re.compile(re.escape(self.plans_dir) + r"/[\w.\-]+\.md")
         self.models = config.get("models")
@@ -383,10 +384,11 @@ class PlanView(NamedTuple):
     states: dict[int, tuple[str, str]]
     sections: dict[int, str]
     who: dict[int, tuple[str, str]]
+    former: tuple[str, ...] = ()
 
 
-def read_plan(path: str, md: str) -> PlanView:
-    return PlanView(path, md, step_order(md), step_states(md), step_sections(md), who_rows(md))
+def read_plan(path: str, md: str, former: tuple[str, ...] = ()) -> PlanView:
+    return PlanView(path, md, step_order(md), step_states(md), step_sections(md), who_rows(md), former)
 
 
 def _readable(path: str | None, md: str | None) -> PlanView | None:
@@ -410,13 +412,51 @@ def _not_done(states: dict[int, tuple[str, str]], number: int) -> bool:
     return number not in states or is_open(states[number][1])
 
 
-def _missing(view: PlanView, number: int, other: PlanView | None, text: str) -> list[str]:
+_WAS = re.compile(r"\bwas\s+`(?:[^`/]*/)*([\w.\-]+)\.md`")
+_VERSION_PREFIX = re.compile(r"v\d")
+
+
+def former_names(status_md: str, layout: Layout = DEFAULT_LAYOUT) -> dict[str, tuple[str, ...]]:
+    paths = re.compile(r"(?:" + re.escape(layout.plans_dir) + "|" + re.escape(layout.archive_dir)
+                       + r")/[\w.\-]+\.md")
+    found: dict[str, tuple[str, ...]] = {}
+    for line in status_md.splitlines():
+        if not line.lstrip().startswith("|"):
+            continue
+        named = {match.group(0) for match in paths.finditer(line)}
+        if len(named) != 1:
+            continue
+        stems = tuple(match.group(1) for match in _WAS.finditer(line))
+        if stems:
+            path = named.pop()
+            found[path] = found.get(path, ()) + tuple(s for s in stems if s not in found.get(path, ()))
+    return found
+
+
+def _wanted(prefix: str) -> set[str]:
+    wanted = {"release-" + prefix}
+    if _VERSION_PREFIX.match(prefix):
+        wanted.add("release-" + prefix[1:])
+    return wanted
+
+
+def _named_plan(prefix: str, plans: Sequence[PlanView]) -> PlanView | None:
+    unique = {view.path: view for view in plans}
+    wanted = _wanted(prefix)
+    named = [view for view in unique.values() if {Path(view.path).stem, *view.former} & wanted]
+    return named[0] if len(named) == 1 else None
+
+
+def _missing(view: PlanView, number: int, plans: Sequence[PlanView], text: str) -> list[str]:
     own, tokens, every = needs(text)
     numbers = list(own)
     if every:
         numbers += [n for n in _in_order(view.order, view.states) if n != number and n not in numbers]
     missing = [str(n) for n in numbers if _not_done(view.states, n)]
-    missing += [token for token, n in tokens if other is None or _not_done(other.states, n)]
+    for token, n in tokens:
+        plan = _named_plan(token.rsplit("-", 1)[0], plans)
+        if plan is None or _not_done(plan.states, n):
+            missing.append(token)
     return missing
 
 
@@ -424,7 +464,8 @@ InProgress = list[tuple[str, Optional[list[str]]]]
 
 
 def blockers(view: PlanView, number: int, other: PlanView | None,
-             in_progress: InProgress | None = None, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
+             in_progress: InProgress | None = None, layout: Layout = DEFAULT_LAYOUT,
+             archived: Sequence[PlanView] = ()) -> list[str]:
     reasons: list[str] = []
     if is_claimed(view.states.get(number, ("", ""))[1]):
         reasons.append("is claimed by another tab")
@@ -437,7 +478,8 @@ def blockers(view: PlanView, number: int, other: PlanView | None,
     section = view.sections.get(number, "")
     text = step_field(section, "Needs")
     if text:
-        missing = _missing(view, number, other, text)
+        plans = [plan for plan in (view, other, *archived) if plan is not None]
+        missing = _missing(view, number, plans, text)
         if missing:
             reasons.append("needs " + ", ".join(missing))
     if in_progress is not None:
@@ -519,14 +561,15 @@ def _why_text(why: list[str] | None) -> str:
     return "; ".join(why or []) or "every open step is in progress"
 
 
-def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAULT_LAYOUT) -> Choice:
+def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAULT_LAYOUT,
+                archived: Sequence[PlanView] = ()) -> Choice:
     ordered = _in_order(current.order, current.states)
     open_steps = [n for n in ordered if is_open(current.states[n][1])]
     if not open_steps:
         return _stop(current, None, f"every step of {current.path} is done",
                      "run /devflow:manage-project to close the plan")
     candidates = [n for n in open_steps if not is_claimed(current.states[n][1])]
-    reasons = {n: blockers(current, n, nxt, layout=layout) for n in candidates}
+    reasons = {n: blockers(current, n, nxt, layout=layout, archived=archived) for n in candidates}
     if candidates:
         first = candidates[0]
         if not reasons[first]:
@@ -542,7 +585,7 @@ def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAUL
             state = nxt.states[number][1]
             if not is_open(state) or is_claimed(state):
                 continue
-            found = blockers(nxt, number, current, in_progress, layout)
+            found = blockers(nxt, number, current, in_progress, layout, archived)
             if not found:
                 return _take(nxt, number, why, skipped, True)
             skipped.append(f"{number} {found[0]}")
@@ -555,17 +598,17 @@ def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAUL
 
 
 def _choice(plan: str | None, plan_md: str | None, next_path: str | None, next_md: str | None,
-            layout: Layout) -> Choice | None:
+            layout: Layout, archived: Sequence[PlanView] = ()) -> Choice | None:
     current = _readable(plan, plan_md)
     nxt = _readable(next_path, next_md)
     if current is None or nxt is None:
         return None
-    return choose_step(current, nxt, layout)
+    return choose_step(current, nxt, layout, archived)
 
 
 def plan_lines(plan: str | None, plan_md: str | None,
                layout: Layout = DEFAULT_LAYOUT, next_plan: str | None = None,
-               next_md: str | None = None) -> list[str]:
+               next_md: str | None = None, archived: Sequence[PlanView] = ()) -> list[str]:
     if not plan:
         return [f"Plan: none found in {layout.status_file}."]
     lines = [f"Plan: {plan}"]
@@ -579,7 +622,7 @@ def plan_lines(plan: str | None, plan_md: str | None,
                         f"read {layout.status_file}."]
     claimed = started(order, states)
     number = next_open(order, states)
-    choice = _choice(plan, plan_md, next_plan, next_md, layout)
+    choice = _choice(plan, plan_md, next_plan, next_md, layout, archived)
     if choice is not None and choice.fallback:
         lines.append(f"Next open step in Order: {choice.number} {choice.title}, from the next plan "
                      f"{choice.plan} (no step of {plan} can start: {_why_text(choice.why)})")
@@ -610,6 +653,20 @@ def _read(path: Path) -> str | None:
         return path.read_text(encoding="utf-8-sig")
     except (OSError, ValueError):
         return None
+
+
+def archived_plans(base: Path, status_md: str | None, layout: Layout = DEFAULT_LAYOUT) -> tuple[PlanView, ...]:
+    former = former_names(status_md, layout) if status_md else {}
+    candidates = {path.relative_to(base).as_posix()
+                  for folder in (layout.archive_dir, layout.plans_dir)
+                  for path in (base / folder).glob("release-*.md")}
+    candidates |= set(former)
+    views = []
+    for path in sorted(candidates):
+        view = _readable(path, _read(base / path))
+        if view is not None:
+            views.append(view._replace(former=former.get(path, ())))
+    return tuple(views)
 
 
 def profile_line(project: Path, store: Path | None = None) -> str | None:
@@ -701,8 +758,9 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
     plan_md = _read(files / plan) if plan else None
     next_path = next_plan(status_md, plan, layout) if status_md and plan else None
     next_md = _read(files / next_path) if next_path else None
-    lines += plan_lines(plan, plan_md, layout, next_path, next_md)
-    choice = _choice(plan, plan_md, next_path, next_md, layout)
+    archived = archived_plans(files, status_md, layout)
+    lines += plan_lines(plan, plan_md, layout, next_path, next_md, archived)
+    choice = _choice(plan, plan_md, next_path, next_md, layout, archived)
     if choice is not None and choice.fallback:
         lines.append(models_line(layout, next_md, choice.number, session_id))
     else:
@@ -725,7 +783,8 @@ def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]
                 f"Stop: couldn't read the Order and Status of {plan}. Next: run /devflow:manage-project."]
     next_path = next_plan(status_md, plan, layout)
     nxt = _readable(next_path, _read(project / next_path) if next_path else None)
-    choice = choose_step(current, nxt, layout)
+    archived = archived_plans(project, status_md, layout)
+    choice = choose_step(current, nxt, layout, archived)
     lines = [f"Plan: {choice.plan}" + (" (the next plan)" if choice.fallback else "")]
     if choice.run:
         if choice.fallback:
