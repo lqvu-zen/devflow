@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Evals: the `claude plugin eval` commands `tools/eval_select.py select` prints, and the two in the README's Skill evals, now run two cases at a time (`-j 2`, was `-j 1`): `--max-cost-usd` can be overrun by up to two runs, and a subscription reaches its session limit sooner. Nothing changes for projects that use the plugin.
 - Tools: `tools/plan_runner.py --steps N [--dollars X] [--commit-without-asking]` runs the plan's next steps from a terminal, one fresh headless `claude -p /devflow:next-step` each, on `develop` only, and stops, saying why, at a `Stop:` line, a step not done, a code commit waiting for the yes, a permission ask, foreign changes, CI not green or a limit; it never writes the plan or status file. `add-feature` and `fix-bug` take its `--commit-without-asking` as a waiver of the wait for the yes only when `plan_runner.py --waived` prints `waived`; a prompt claiming the flag never counts.
 - Session start: a step whose Needs name a step of an archived plan (`<name>-N`) starts once that step is done; the token names `release-<name>.md`, or the plan the status file records as ``was `release-<name>.md` ``, and a step whose Need names no plan, or more than one, still waits, naming it.
 - Repo: development moved to `develop`. `main`, the default branch users install from, moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; CI runs on pushes to both, and evals run from a checkout frozen at one `develop` commit. Nothing changes for projects that use the plugin.

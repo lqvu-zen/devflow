@@ -536,15 +536,19 @@ class TestSelect(_SelectRepo):
         self.assertIn('--case "trigger-release-1-fires"', lines[1])
         self.assertIn("--scaffold", lines[1])
 
-    def test_commands_run_one_case_at_a_time(self):
+    def test_commands_run_two_cases_at_a_time(self):
         self.repo.commit("Fixture", {"evals/fixture/build.sh": "work=2\n"})
-        selection = ev.select(self.repo_path)
         cases = ev.find_cases(self.repo_path, depends_for_tests())
-        lines = ev.commands(selection, cases)
-        self.assertTrue(any("--tag behaviour" in line for line in lines))
-        self.assertTrue(any("--tag trigger" in line for line in lines))
-        for line in lines:
-            self.assertEqual(re.findall(r"-j (\d+)", line), ["1"])
+        seen = []
+        for release in (False, True):
+            with self.subTest(release=release):
+                selection = ev.select(self.repo_path, release=release)
+                lines = ev.commands(selection, cases)
+                seen.extend(lines)
+                for line in lines:
+                    self.assertEqual(re.findall(r"-j (\d+)", line), ["2"])
+        self.assertTrue(any("--tag behaviour" in line for line in seen))
+        self.assertTrue(any("--tag trigger" in line for line in seen))
 
     def test_a_trigger_glob_without_a_scaffolded_case_has_no_scaffold_flag(self):
         self.repo.commit("Description", {
