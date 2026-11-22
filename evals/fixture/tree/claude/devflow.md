@@ -40,7 +40,7 @@ python3 -m unittest discover -s tests -p "test_*.py"
 
 ## Escalate
 
-The implementer runs on Opus at medium effort for: packaging and builds.
+The implementer runs on the board's `implementer.escalate` model, Opus at medium effort by default, for: packaging and builds.
 
 ## See it working
 

@@ -5,7 +5,7 @@ description: 'Add or improve a feature the devflow way, end to end: understand, 
 
 # Adding or improving a feature
 
-A change that ignores the project's architecture rules can look correct and still break the running product or a user's data. Work through the phases in order; a feature that isn't verified isn't done.
+Work through the phases in order; a feature that isn't verified isn't done.
 
 ## Stop rules
 
@@ -13,7 +13,7 @@ A change that ignores the project's architecture rules can look correct and stil
 
 ## The project profile
 
-Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working** and **Design system** (absent when the project has no user interface). Read it first; the phases below paste its sections by exact heading. Paste **Architecture rules** whole and verbatim wherever a brief below says "the architecture rules"; a partial list is how a rule quietly gets dropped.
+Everything specific to this project is in **`.claude/devflow.md`**: **Project**, **Where things live**, **Architecture rules**, **Verify**, **Edit bounds**, **Escalate**, **See it working** and **Design system** (absent when the project has no user interface). Read it first; the phases below paste its sections by exact heading. Paste **Architecture rules** whole and verbatim wherever a brief below says "the architecture rules".
 
 If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setup` first.
 
@@ -23,12 +23,12 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 
 | Phase | Runs as | Model (default; the board sets it) | Why |
 |---|---|---|---|
-| 1. Understand | orchestrator (you) | session model: run from Sonnet | Owns the conversation; needs sound judgment, not peak reasoning. |
-| 2. Locate code | `devflow:locator` | Haiku | Cheap, fast search; returns the code excerpts the design brief needs. |
-| 3. Design | `devflow:designer` | Opus, medium effort | Hardest reasoning: architecture fit, edge cases, the smallest correct change. |
-| 4. Implement / test / fix | `devflow:implementer` | Sonnet (Opus, medium effort, when escalated) | Strong coder; fast and economical across the many tool calls in the fix loop. |
+| 1. Understand | orchestrator (you) | session model: run from Sonnet | Owns the conversation. |
+| 2. Locate code | `devflow:locator` | Haiku | Cheap, fast search. |
+| 3. Design | `devflow:designer` | Opus, medium effort | Hardest reasoning. |
+| 4. Implement / test / fix | `devflow:implementer` | Sonnet (Opus, medium effort, when escalated) | Strong coder; fast across the fix loop. |
 | 4b. Verify | orchestrator (you) | session model | Re-runs tests and walks the checklist. |
-| 5. Review | `devflow:reviewer` | Opus, medium effort | Fresh eyes: catches correctness and architecture-rule bugs the implementer missed. |
+| 5. Review | `devflow:reviewer` | Opus, medium effort | Fresh eyes on the diff. |
 | 6. Commit & push | orchestrator (you) | session model | Mechanical. |
 | 7. Report | orchestrator (you) | session model | Summary. |
 
@@ -40,11 +40,11 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 
 **If the `devflow:*` agent types aren't listed**, fall back to `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for that role, and paste the plugin's `agents/<name>.md` (two folders up from this skill's base directory) at the top of the brief.
 
-**When the work is a step from a release plan** (in the plans folder, `docs/plans/` unless `.claude/devflow.json` names another), paste the whole step section verbatim, from its `### N —` heading to the next heading, into the design, implement and review briefs. That includes its **Needs** and **Done when** lines and its `**Tried:**` line, if it has one. Tell the designer to read Tried and not repeat an approach it lists unless it says why this time is different. The reviewer checks every "Done when" item, and the step isn't finished until each one is met or marked "needs a human". Report the "needs a human" items to the user.
+**When the work is a step from a release plan** (in the plans folder, `docs/plans/` unless `.claude/devflow.json` names another), paste the whole step section verbatim, from its `### N —` heading to the next heading, into the design, implement and review briefs. That includes its **Needs** and **Done when** lines and its `**Tried:**` line, if it has one. Tell the designer to read Tried and not repeat an approach it lists unless it says why this time is different. The reviewer checks every "Done when" item, and the step isn't finished until each one is met or marked "needs a human".
 
 ## The behaviour map (`docs/BEHAVIOUR.md`)
 
-The map lists each behaviour, **every surface** it appears on, and the test that guards it (or **untested**). A change that reaches one surface and not the others is how "working on A breaks B" happens.
+The map lists each behaviour, **every surface** it appears on, and the test that guards it (or **untested**).
 
 - **Locate (step 2):** the locator returns the map rows for the area(s) the change touches, verbatim, with their IDs.
 - **Design (step 3):** paste those rows into the brief; the plan lists **every surface** the change touches and how each is kept working.
@@ -80,7 +80,7 @@ A change touches a UI surface when it edits one that **Design system** lists und
 
 ### 1. Understand the request
 
-Read what the user asked for and restate it to yourself in one sentence: what should the user be able to do after this ships that they can't do now? If a real ambiguity blocks the design, ask **one** focused question before anything else. Don't ask about things you can reasonably default.
+Restate the request in one sentence: what should the user be able to do after this ships that they can't do now? If a real ambiguity blocks the design, ask **one** focused question before anything else. Don't ask about things you can reasonably default.
 
 For an **improvement**, also pin down what's wrong with the current behaviour and what "good" looks like as a concrete, observable outcome. A crash or wrong output the user can reproduce is a bug: use `fix-bug`.
 
@@ -112,7 +112,7 @@ Agent({ description: "Implement <feature>", subagent_type: "devflow:implementer"
 
 The brief includes, verbatim: the **full approved plan**; the whole **Architecture rules** section; the **Verify**, **Edit bounds** and **See it working** sections; and: *"Implement the plan as your instructions say, within Edit bounds and at most two fix rounds after the first run. Do not commit or push."*
 
-When the agent returns, **verify before moving on**; this is the gate, not a formality. Run `git diff` and the project's main test command yourself, then walk this checklist against the diff:
+When the agent returns, **verify before moving on**. Run `git diff` and the project's main test command yourself, then walk this checklist against the diff:
 
 - [ ] Changes match the approved plan; nothing extra crept in.
 - [ ] Every rule in **Architecture rules** holds in the changed code.
@@ -137,13 +137,13 @@ If the reviewer reports BLOCKERS, fix them or delegate back to the implementer v
 
 **Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait, and so does the plan runner's `--commit-without-asking` when `python <plugin>/tools/plan_runner.py --waived`, run alone, prints `waived`; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does.
 
-Match the commit style (`git log --oneline -5`). Stage only the relevant files, by path; never what **Edit bounds** says is never staged, and never `git add -A`. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any. Push to the main branch when the project's rules or the user's preferences say so; otherwise ask.
+Match the commit style (`git log --oneline -5`). Stage only the relevant files, by path; never what **Edit bounds** says is never staged, and never `git add -A`. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any. Push to the main branch when the project's rules or the user's standing preferences say so; otherwise ask.
 
 Then watch CI on the pushed commit: `gh run list -L 1 --json databaseId,headSha` to find its run, and `gh run watch <id> --exit-status`. A red run makes its fix the next step, ahead of anything else; say so in the report.
 
 **Check the models.** Run the board command again without `--board`, with the same `--model` lines, `--escalated` if the implementer was escalated and `--diagnosis` in `fix-bug`. It lists each agent call's role, the model it ran on, its effort where recorded, and what was expected and from where. Put every mismatch, and what it could not read, in the report and the step's Status row.
 
-If this was a plan step, set its Status row to `done`, with the commit hash and one line on what landed, in the same commit or a `docs`-only one straight after; where the plan is gitignored, save it and don't commit it.
+If this was a plan step, set its Status row to `done`, with the commit hash and one line on what landed, in the same commit or a `docs`-only one straight after.
 
 ### 7. Report back
 

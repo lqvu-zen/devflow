@@ -451,6 +451,13 @@ class TestBoard(BoardFixture):
             self.assertEqual(table[key][4], "nothing", key)
         self.assertEqual(table["orchestrator"][4], "session model, set with /model; this session's model was not read")
 
+    def test_the_old_secretary_readers_key_is_ignored(self):
+        self.write_board({"secretary.readers": "Haiku"})
+        code, output = self.board()
+        self.assertEqual(code, 0, output)
+        self.assertIn("ignored: secretary.readers: unknown key", output)
+        self.assertEqual(board_table(output)["manage-project.readers"][1:4], ["sonnet", "-", "default"])
+
     def test_the_orchestrator_names_the_session_model(self):
         folder = self.root / session_extract.folder_names(str(self.project.resolve()))[0]
         _write_jsonl(folder / "s.jsonl", [

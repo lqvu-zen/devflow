@@ -1,11 +1,11 @@
 {
   "every_behaviour_case": ["hooks/"],
   "skills": {
-    "add-feature": ["skills/add-feature/", "skills/review-ui/references/core.md", "skills/review-ui/references/build.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py"],
-    "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md", "skills/review-ui/references/core.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py"],
+    "add-feature": ["skills/add-feature/", "skills/review-ui/references/core.md", "skills/review-ui/references/build.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py", "tools/plan_runner.py"],
+    "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md", "skills/review-ui/references/core.md", "skills/review-ui/references/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py", "tools/plan_runner.py"],
     "release": ["skills/release/", "skills/add-feature/SKILL.md", "agents/tester.md", "agents/reviewer.md", "tools/model_check.py"],
     "review-ui": ["skills/review-ui/"],
-    "manage-project": ["skills/manage-project/","agents/planner.md", "tools/model_check.py", "templates/plan.md", "tools/session_extract.py"],
+    "manage-project": ["skills/manage-project/", "agents/planner.md", "tools/model_check.py", "templates/plan.md", "tools/session_extract.py"],
     "next-step": ["skills/next-step/", "skills/add-feature/SKILL.md", "skills/fix-bug/SKILL.md"]
   },
   "near_misses": {

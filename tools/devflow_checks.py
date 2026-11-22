@@ -19,9 +19,10 @@ DIRECTIVE = re.compile(r"#\s*(noqa|type:\s*ignore|pragma|pyright:|mypy:|ruff:|fm
 CODING = re.compile(r"^#.*coding[:=]\s*[-\w.]+")
 HUNK = re.compile(r"^@@ -(\d+)(?:,(\d+))? \+(\d+)(?:,(\d+))? @@")
 ATTRIBUTION_RULE = "(.claude/devflow.json, attribution)"
-CLAUDE_TRAILER = re.compile(r"^[ \t]*co-authored-by:.*(claude|anthropic\.com)",
+CLAUDE_TRAILER = re.compile(r"^[ \t]*co-authored-by:.*(?:(?<![\w-])claude\b|noreply@anthropic\.com)",
                             re.IGNORECASE | re.MULTILINE)
-GENERATED_LINE = re.compile(r"^.*generated with \[?claude code", re.IGNORECASE | re.MULTILINE)
+GENERATED_LINE = re.compile(r"^[ \t]*(?:\U0001F916\ufe0f?[ \t]*)?generated with \[?claude code",
+                            re.IGNORECASE | re.MULTILINE)
 
 
 class GitError(Exception):

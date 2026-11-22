@@ -7,14 +7,14 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 | | Name | What it does |
 |---|---|---|
 | Skill | `/devflow:setup` | Adopts devflow in a project. It reads the codebase, drafts the profile and guard config, and starts the behaviour map, status file and plans. Nothing is written before the maintainer approves. |
-| Skill | `/devflow:add-feature` | A feature or improvement: understand → locate (Haiku) → design (Opus) → implement and test (Sonnet) → review (Opus) → the maintainer's yes → commit. |
+| Skill | `/devflow:add-feature` | A feature or improvement: understand → locate (Haiku) → design (Opus) → implement and test (Sonnet) → review (Opus) → the maintainer's yes → commit. The models are defaults; the `models` board sets them. |
 | Skill | `/devflow:fix-bug` | The same pipeline for a bug: reproduce it, write a failing test, find the root cause and fix it. Adds an escape line when the bug got past a release. |
 | Skill | `/devflow:release` | Ships through a release candidate: version → build → gate → pre-release → tester → the maintainer's checklist → release review → promotion. |
 | Skill | `/devflow:manage-project` | Keeps the status file and the decision log, triages issues, and turns decisions into plan steps with paste-ready prompts. Keeps the prompt book (`docs/PROMPTS.md`, from `templates/PROMPTS.md`). Reviews recent sessions for process rules the agents broke (`tools/session_extract.py` shrinks them) and proposes Harness escapes lines for the maintainer to approve. |
 | Skill | `/devflow:next-step` | Continues the plan: takes the current plan's next open step that no other tab has claimed (else the next plan's first ready step) and runs it through the skill its Who does what row names, `add-feature` or `fix-bug`. Stops, editing nothing, at an uncleared Gate, a project-manager step, a step done by hand or when no step can start. |
 | Skill | `/devflow:review-ui` | One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or game UI, in one report format. On the web it measures the page in headless Chrome, reads phone and desktop screenshots, drives the states and audits WCAG 2.2 AA. For apps and games it reads screenshots of each state at each size or resolution, and the UI source. Prioritized report with file:line fixes. Read-only. The web path needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `skills/review-ui/vendor/`. |
 | Agent | `devflow:locator` | Haiku, read-only. Quotes the code and the behaviour-map rows. |
-| Agent | `devflow:designer` | Opus, medium effort. A plan or a root cause, never code. |
+| Agent | `devflow:designer` | Opus, medium effort by default; the board's `designer` row moves it, and `fix-bug`'s diagnosis takes `designer.diagnosis`. A plan or a root cause, never code. |
 | Agent | `devflow:implementer` | Sonnet. Implements and verifies, with at most two fix rounds. Never commits. |
 | Agent | `devflow:reviewer` | Opus, medium effort. Diff review, or a release review before publishing. |
 | Agent | `devflow:planner` | Opus, medium effort, read-only. Drafts release plans for the project manager. |
@@ -31,6 +31,8 @@ Facts about each project live in that project, in two files that `/devflow:setup
 
 - **`.claude/devflow.md`** is the profile that every skill and agent reads. It has fixed headings: Project, Where things live, Architecture rules, Verify, Edit bounds, Escalate, See it working, Design system, Release, Try it, Standing rules. Briefs paste these sections word for word, so the agents work to this project's rules. See `templates/devflow.md`.
 - **`.claude/devflow.json`** configures the guard and the CI check: real data folders, secrets, maintainer-only scripts, how the product starts and which environment variables must point at a scratch folder, and the version files. See `templates/devflow.json`. **The hooks do nothing in a project without this file**, so installing the plugin for your user account is safe.
+
+`/devflow:setup` also copies the plugin's `tools/devflow_checks.py` into the project for CI. Copy it again after updating the plugin, or CI keeps running the old check.
 
 The method also expects `docs/BEHAVIOUR.md` (the behaviour map), `docs/STATUS.md` (the status file), `docs/plans/` and `docs/archive/`. The status file and plans folder can be moved in `devflow.json`.
 

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 import re
 import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -12,6 +14,7 @@ SKILLS = ROOT / "skills"
 CUT = 20_000
 MARGIN = 1_000
 CEILING = CUT - MARGIN
+ADD_FEATURE_ROOM = 500
 STOP_RULES = "**Stop rules in the loop.**"
 ADD_FEATURE = SKILLS / "add-feature" / "SKILL.md"
 FIX_BUG = SKILLS / "fix-bug" / "SKILL.md"
@@ -131,6 +134,9 @@ class TestSkillSize(unittest.TestCase):
     def test_every_skill_is_under_the_ceiling(self):
         self.assertTrue(list(SKILLS.glob("*/SKILL.md")))
         self.assertEqual(_too_long(SKILLS), [])
+
+    def test_add_feature_keeps_room_to_grow(self):
+        self.assertLessEqual(_length(_reattached_text(ADD_FEATURE)), CEILING - ADD_FEATURE_ROOM)
 
     def test_a_skill_at_the_ceiling_is_named(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -394,6 +400,34 @@ def _lf_files(skills_dir: Path) -> list[str]:
     return sorted(found)
 
 
+def _git(repo: Path, *args: str) -> None:
+    env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_NOSYSTEM="1")
+    subprocess.run(["git", "-c", "core.autocrlf=false", *args], cwd=repo, env=env, check=True,
+                   capture_output=True)
+
+
+def _tracked_lf_files(repo: Path) -> list[str] | None:
+    try:
+        listed = subprocess.run(["git", "-C", str(repo), "ls-files", "--eol", "-z"],
+                                capture_output=True, text=True, encoding="utf-8")
+    except OSError:
+        return None
+    if listed.returncode != 0:
+        return None
+    found = []
+    for entry in listed.stdout.split("\0"):
+        if "\t" not in entry:
+            continue
+        info, name = entry.split("\t", 1)
+        path = repo / name
+        if name.startswith("evals/") or "-text" in info or not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\0" not in data and LF_ONLY.search(data):
+            found.append(f"{name}: LF line endings")
+    return sorted(found)
+
+
 def _all_headings(path: Path) -> set[str]:
     found = set()
     fenced = False
@@ -648,6 +682,33 @@ class TestSkillFiles(unittest.TestCase):
             ["lf/SKILL.md: LF line endings", "mixed/references/notes.md: LF line endings"],
         )
 
+    def test_every_tracked_text_file_outside_evals_has_crlf_endings(self):
+        found = _tracked_lf_files(ROOT)
+        if found is None:
+            self.skipTest("not a git checkout, or git is not installed")
+        self.assertEqual(found, [])
+
+    def test_a_tracked_lf_or_mixed_file_outside_evals_is_named(self):
+        if shutil.which("git") is None:
+            self.skipTest("git is not installed")
+        with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as temp:
+            repo = Path(temp)
+            files = {
+                "crlf.md": b"a\r\nb\r\n",
+                "lf.py": b"a\nb\n",
+                "docs/mixed.md": b"a\r\nb\nc\r\n",
+                "evals/cases/x/scaffold.sh": b"echo a\necho b\n",
+                "image.png": b"\x89PNG\r\n\x1a\n\0\n",
+                "untracked.md": b"a\n",
+            }
+            for name, data in files.items():
+                (repo / name).parent.mkdir(parents=True, exist_ok=True)
+                (repo / name).write_bytes(data)
+            _git(repo, "init", "-q")
+            _git(repo, "add", "crlf.md", "lf.py", "docs/mixed.md", "evals/cases/x/scaffold.sh", "image.png")
+            found = _tracked_lf_files(repo)
+        self.assertEqual(found, ["docs/mixed.md: LF line endings", "lf.py: LF line endings"])
+
 
 class TestCrossSkillCitations(unittest.TestCase):
     def test_every_cited_heading_of_another_skill_exists(self):
@@ -816,7 +877,7 @@ class TestModelRules(unittest.TestCase):
 
     def test_the_model_line_is_in_the_plan_template_and_the_project_manager(self):
         self.assertIn("**Model:**", (TEMPLATES / "plan.md").read_text(encoding="utf-8"))
-        self.assertIn("**Model:**", _section(MANAGE_PROJECT,"## Adding a plan step"))
+        self.assertIn("**Model:**", _section(MANAGE_PROJECT, "## Adding a plan step"))
 
     def test_escalation_names_the_board_entry(self):
         self.assertIn("implementer.escalate", (ROOT / "agents" / "planner.md").read_text(encoding="utf-8"))
@@ -939,6 +1000,7 @@ UV_WORDS = (
     "stop here, before reading the codebase or drafting anything",
     "new terminal",
     "`/devflow:setup` again",
+    "There is no fallback to plain `python`",
 )
 
 

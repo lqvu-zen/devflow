@@ -333,6 +333,22 @@ class TestAttributionCheck(_RepoCase):
         self.repo.commit("feat: x", {}, body="Co-Authored-By: Jane <jane@example.com>")
         self.assertEqual(self.problems(), [])
 
+    def test_a_message_that_only_quotes_the_phrase_passes(self):
+        self.repo.commit("feat: x", {}, body="The old footer said Generated with Claude Code; this drops it.")
+        self.assertEqual(self.problems(), [])
+
+    def test_a_jean_claude_co_author_passes(self):
+        self.repo.commit("feat: x", {}, body="Co-Authored-By: Jean-Claude Van Damme <jc@example.com>")
+        self.assertEqual(self.problems(), [])
+
+    def test_a_trailer_with_the_noreply_address_fails(self):
+        self.repo.commit("feat: x", {}, body="Co-Authored-By: Assistant <noreply@anthropic.com>")
+        self.assertEqual(len(self.problems()), 1)
+
+    def test_an_indented_footer_fails(self):
+        self.repo.commit("feat: x", {}, body="  " + GENERATED_FOOTER)
+        self.assertEqual(len(self.problems()), 1)
+
     def test_without_the_setting_or_with_another_value_every_commit_passes(self):
         for value in (None, "default", False):
             with self.subTest(value=value):

@@ -436,6 +436,17 @@ class TestSelect(_SelectRepo):
         self.repo.commit("Reviewer", {"agents/reviewer.md": "reviewer two\n"})
         self.assertEqual(BEHAVIOUR, self.names("behaviour"))
 
+    def test_a_plan_runner_change_lists_the_add_feature_and_fix_bug_cases(self):
+        recorded = self.repo.commit("Real depends", {
+            "evals/depends.json": (ROOT / "evals" / "depends.json").read_text(encoding="utf-8"),
+            "tools/plan_runner.py": "x = 1\n"})
+        self.write_passes({name: recorded for name in BEHAVIOUR + [
+            "trigger-release-1-fires", "trigger-add-feature-5-near-miss"]})
+        self.repo.commit("Runner", {"tools/plan_runner.py": "x = 2\n"})
+        self.assertEqual(["add-feature-plain", "add-feature-ui", "fix-bug-plain"], self.names("behaviour"))
+        self.assertEqual([], self.names("trigger"))
+        self.assertIn("tools/plan_runner.py since", self.reasons("behaviour")["fix-bug-plain"])
+
     def test_a_ui_fixture_change_lists_only_its_cases(self):
         self.repo.commit("Web", {"evals/fixture/ui/web/index.html": "<p>web two</p>\n"})
         self.assertEqual(["add-feature-ui"], self.names("behaviour"))
@@ -708,6 +719,15 @@ class TestEvalFiles(unittest.TestCase):
                 cited = f"skills/review-ui/references/{name}"
                 if (ROOT / cited).exists() and not covered(cited, entries):
                     problems.append(f"{skill} cites references/{name} but depends lacks {cited}")
+        self.assertEqual([], problems)
+
+    def test_depends_names_each_plugin_tool_a_skill_runs(self):
+        problems = []
+        for skill, entries in self.depends["skills"].items():
+            text = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+            for cited in sorted(set(re.findall(r"<plugin>/(tools/[A-Za-z0-9_]+\.py)", text))):
+                if not covered(cited, entries):
+                    problems.append(f"{skill} runs {cited} but depends lacks it")
         self.assertEqual([], problems)
 
     def test_depends_entries_exist(self):
