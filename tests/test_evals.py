@@ -883,5 +883,42 @@ class TestClaimGradersTakeAnyDate(unittest.TestCase):
         self.assertTrue(regex_grader_passes(path, edit_trace("5 Top N", f"in progress ({OTHER_DATE} 10:00)", claimed)))
 
 
+class TestManageProjectJudges(unittest.TestCase):
+    CASES = ROOT / "evals" / "cases" / "manage-project"
+
+    def rubric(self, case: str, name: str) -> str:
+        return ev.frontmatter((self.CASES / case / "graders" / f"{name}.md").read_text(encoding="utf-8"))[1]
+
+    def test_the_step_judge_does_not_ask_the_reply_to_name_the_files(self):
+        rubric = self.rubric("new-step-has-a-files-line", "step")
+        self.assertNotIn("tests/test_cli.py", rubric)
+        for phrase in ("new step 7 was added", "renumbered", "was not added"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, rubric)
+
+    def test_the_files_grader_reads_the_written_step_not_the_reply(self):
+        path = self.CASES / "new-step-has-a-files-line" / "graders" / "files-name-both.md"
+        step = "### 7 \\u2014 Precision\\n\\n_Added._\\n\\n**Files:** `tally/cli.py`, `tests/test_cli.py`, `docs/BEHAVIOUR.md`.\\n**Needs** nothing."
+        scaffold = "**Files:** `tally/cli.py`, `tests/test_cli.py`, `docs/BEHAVIOUR.md`.\\n    61\\t**Needs** nothing."
+        self.assertTrue(regex_grader_passes(path, '{"new_string": "' + step + '"}'))
+        self.assertFalse(regex_grader_passes(path, '{"output": "' + scaffold + '"}'))
+        self.assertFalse(regex_grader_passes(path, '{"new_string": "' + step.replace("`tests/test_cli.py`, ", "") + '"}'))
+        self.assertFalse(regex_grader_passes(path, '{"new_string": "' + step.replace("### 7", "### 8") + '"}'))
+
+    def test_the_files_grader_does_not_borrow_a_files_line_from_a_later_event_or_step(self):
+        path = self.CASES / "new-step-has-a-files-line" / "graders" / "files-name-both.md"
+        bare = "### 7 \\u2014 Precision\\n\\n_Added._\\n\\n### 8 \\u2014 Release"
+        echo = '{"output": "    71\\t**Files:** `tally/cli.py`, `tests/test_cli.py`.\\n"}'
+        self.assertFalse(regex_grader_passes(path, '{"new_string": "' + bare + '"}\n' + echo))
+        renumbered = '{"new_string": "### 6 \\u2014 Precision\\n**Files:** `tally/cli.py`, `tests/test_cli.py`.\\n### 7 \\u2014 Release 0.3.0\\n"}\n' + echo
+        self.assertFalse(regex_grader_passes(path, renumbered))
+
+    def test_the_not_due_judge_lets_a_not_yet_due_note_pass_and_fails_a_raised_decision(self):
+        rubric = self.rubric("raises-an-overdue-review", "not-due-not-raised")
+        for phrase in ("is not yet due", "is not raising it", "is not a reason to fail", "among what is waiting on the maintainer", "whether it should stay, change or be dropped"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, rubric)
+
+
 if __name__ == "__main__":
     unittest.main()
