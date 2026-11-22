@@ -115,7 +115,7 @@ Agent({ description: "Design <feature>", subagent_type: "devflow:designer", prom
 
 The brief must be self-contained; the designer can't see this conversation. Start it with **"Feature mode."** and paste, verbatim: the user's request (one paragraph); the **Where things live** table and the whole **Architecture rules** section; the excerpts, map rows and "already exists" findings from step 2; and: *"Design the smallest correct implementation. Do NOT write code; produce only a plan with the sections in your instructions. If something is ambiguous, list it as a question for the maintainer instead of guessing."*
 
-Present the plan to the user and proceed once they're on board (a "go ahead" with no comment counts as approval). For a UI change, name the states and inputs its UI section lists. Use a task list so each concrete change is visible during implementation.
+Present the plan to the user and proceed once they're on board (a "go ahead" with no comment counts as approval). For a UI change, paste the UI section's **States** and **Inputs** items as returned. Use a task list for the concrete changes.
 
 ### 4. Implement, test and fix with a Sonnet agent
 

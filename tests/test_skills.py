@@ -992,7 +992,7 @@ class TestSessionDiagnosis(unittest.TestCase):
 
 
 BUILD = ROOT / "skills" / "review-ui" / "references" / "build.md"
-PRESENT_UI = "For a UI change, name the states and inputs its UI section lists."
+PRESENT_UI = "For a UI change, paste the UI section's **States** and **Inputs** items as returned."
 FLOOR_ITEMS = ("contrast", "text measure", "states", "target size", "tokens", "worst-case data", "motion")
 FLOOR_MARKS = "met, not met or not checked"
 
@@ -1002,8 +1002,14 @@ def _floor_bullets() -> list[str]:
 
 
 class TestUiReport(unittest.TestCase):
-    def test_the_presented_design_names_its_states_and_inputs(self):
-        self.assertIn(PRESENT_UI, _paragraph(ADD_FEATURE, "Present the plan to the user"))
+    def test_the_presented_design_pastes_the_designers_states_and_inputs(self):
+        present = _paragraph(ADD_FEATURE, "Present the plan to the user")
+        self.assertIn(PRESENT_UI, present)
+        self.assertNotIn("name the states and inputs", present)
+        ui = _section(DESIGNER, "## UI section")
+        for label in ("**States**", "**Inputs**"):
+            with self.subTest(label=label):
+                self.assertIn(f"- {label}: every", ui)
 
     def test_the_report_lists_every_floor_item_with_its_mark(self):
         report = _subsection(ADD_FEATURE, "### 7.")
