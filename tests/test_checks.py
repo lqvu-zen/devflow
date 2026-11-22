@@ -423,5 +423,31 @@ class TestAttributionWiring(unittest.TestCase):
                 self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["attribution"], "none")
 
 
+class TestBranchWiring(unittest.TestCase):
+    def test_ci_runs_on_pushes_to_develop_and_main(self):
+        text = (ROOT / ".github" / "workflows" / "test.yml").read_text(encoding="utf-8")
+        found = re.search(r"^  push:\n    branches: \[([^\]]*)\]", text, re.MULTILINE)
+        self.assertIsNotNone(found)
+        self.assertEqual(sorted(name.strip() for name in found.group(1).split(",")), ["develop", "main"])
+        self.assertIn("  pull_request:", text)
+
+    def test_the_checks_fall_back_to_origin_main(self):
+        config = checks.checks_from(checks.load_config(str(ROOT)))
+        self.assertEqual(config.default_base, "origin/main")
+
+
+class TestNewBranchPush(_RepoCase):
+    def test_a_first_push_checks_every_commit_main_lacks(self):
+        release = self.repo.commit("Release 2.4.0", {
+            "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0")})
+        self.repo.git("update-ref", "refs/remotes/origin/main", release)
+        self.repo.git("checkout", "-q", "-b", "develop")
+        first = self.repo.commit("feat: a", {"app/a.py": "def a():\n    return 2  # keeps one\n"})
+        second = self.repo.commit("feat: b", {"app/a.py": "def a():\n    return 3  # keeps one\n"})
+        repo = str(self.tmp)
+        self.assertEqual(checks.commit_range(repo, "0" * 40, "HEAD", "origin/main"), release)
+        self.assertEqual(checks.commits_in(repo, release, "HEAD"), [first, second])
+
+
 if __name__ == "__main__":
     unittest.main()

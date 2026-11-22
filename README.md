@@ -59,7 +59,7 @@ The install is a snapshot in the plugin cache, so changes to the repository (or 
 /plugin update devflow@devflow
 ```
 
-From a terminal: `claude plugin marketplace update devflow`, then `claude plugin update devflow@devflow`. Restart the session to apply. An update only picks up a new version number, which is bumped in release commits.
+From a terminal: `claude plugin marketplace update devflow`, then `claude plugin update devflow@devflow`. Restart the session to apply. An update only picks up a new version number, which is bumped in release commits. Installs read `main`, the default branch, which moves only at a release; work lands on `develop`, so a local clone on `develop` holds unreleased changes.
 
 To run a checkout without installing or updating, start a session with `claude --plugin-dir D:/Projects/devflow`. It loads the folder as it is on disk, so edits apply on the next start. Disable the installed copy for that session to avoid loading both.
 
@@ -113,9 +113,11 @@ How the runner reads a case (so you can write more):
 - A `tool_order` grader cannot pass unless both calls are in the trace. Write every `input_match` and `pattern` in single quotes (backslashes stay literal); `tests/test_evals.py` compiles them all, the way the runner does (`new RegExp`), so a pattern that does not compile fails there, not in a paid run.
 - `--tag` is "any tag matches": every behaviour case carries `behaviour`, so `--tag manage-project --tag behaviour` runs all of them. Use `--case` to pick a skill.
 
-Which cases to run: `python tools/eval_select.py select [--release]` lists the cases a change can reach since each one's last recorded pass, with the reason, and prints the `claude plugin eval` commands to run (one per `--case` glob). A change to a skill's body reruns its behaviour cases; a change to its `name` or `description` also reruns its trigger cases and the near misses that point at it; `--release` also lists every trigger case. After the run, once the inputs are committed, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores the cases whose every run scored 1 and prints `skipped <case>: <reason>` for the others; commit `evals/passes.json` together with the Recorded runs row below.
+Which cases to run: `python tools/eval_select.py select [--release]` lists the cases a change can reach since each one's last recorded pass, with the reason, and prints the `claude plugin eval` commands to run (one per `--case` glob). A change to a skill's body reruns its behaviour cases; a change to its `name` or `description` also reruns its trigger cases and the near misses that point at it; `--release` also lists every trigger case. After the run, in the frozen checkout, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores the cases whose every run scored 1 and prints `skipped <case>: <reason>` for the others; commit `evals/passes.json` together with the Recorded runs row below.
 
-Run them from the plugin root:
+Where to run them: evals run from a checkout frozen at one `develop` commit, never from the working folder where coding sessions commit: a skill edit during a run spoils it. (1) Make the frozen checkout at a commit already pushed to `develop`: `git worktree add --detach ../devflow-eval <commit>` (in WSL, a clone checked out to that commit does the same). (2) Run `select`, the `claude plugin eval` commands and `record` in that checkout; `record` stamps the tested commit, which is on `develop`. (3) In the frozen checkout, commit `evals/passes.json` and the README's Recorded runs row. (4) In the `develop` checkout, cherry-pick that commit (from a worktree `git cherry-pick <commit>`; from a WSL clone `git fetch <clone path> HEAD` then `git cherry-pick FETCH_HEAD`) and push `develop`; a conflict in `evals/passes.json` is resolved by keeping both sides' lines. (5) Move the frozen checkout on with `git -C ../devflow-eval checkout --detach <commit>`, or remove it with `git worktree remove ../devflow-eval`.
+
+Run them from the frozen checkout's root:
 
 ```
 claude plugin eval . --tag trigger --ablation none --runs 1 --scaffold --trust-plugin --no-publish -j 1

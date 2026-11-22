@@ -5,7 +5,7 @@ The devflow skills and agents read this file for everything specific to this pro
 ## Project
 
 - **What it is:** a Claude Code plugin, and its own single-plugin marketplace. It ships a working method: skills that send each phase of a feature, bug fix or release to a fresh agent with a pinned model; a project manager that keeps the status file and plans; and hooks and a CI check that turn the process rules into checks. Maintainers of other projects install it from this repository and adopt it with `/devflow:setup`. RYOS keeps its own copies of these skills; devflow is the general version.
-- **Repo:** lqvu-zen/devflow (main branch: `main`)
+- **Repo:** lqvu-zen/devflow (main branch: `develop`, where work lands: every coding session commits and pushes there; release branch: `main`, the GitHub default that users install from, which moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; `main_branch` in `.claude/devflow.json` names `main`, the base the CI check falls back to)
 - **Maintainer:** Vu Le-Quang (lqvu-zen), time zone UTC+7. They decide, name versions, and run the manual checks.
 - **Languages and stack:** Markdown (skills, agents, templates); Python 3.13, standard library only (hooks and tools); Node 22+ for `review-ui` only; bash for the hook commands and the eval scaffolds; GitHub Actions on Linux and Windows.
 
@@ -60,7 +60,7 @@ When a change edits a skill's `description`, also run that skill's trigger cases
 claude plugin eval . --tag trigger --case "trigger-<skill>-*" --ablation none --runs 1 --trust-plugin --no-publish -j 1
 ```
 
-Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_select.py select` lists the behaviour and trigger cases a change can reach, with the commands to run; after a committed pass, `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` stores it. Run them only when the plan step says so; the details are in `README.md` under Skill evals. There is no lint or type check.
+Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_select.py select` lists the behaviour and trigger cases a change can reach, with the commands to run. Evals run from a checkout frozen at one `develop` commit, never from the working folder where coding sessions commit, because a skill edit during a run spoils it. `select`, the eval commands and `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` all run there, and the record commit is cherry-picked onto `develop`. Run them only when the plan step says so; the details are in `README.md` under Skill evals. There is no lint or type check.
 
 ## Edit bounds
 
@@ -87,13 +87,14 @@ How to see a change working, safely:
 
 - **Repo:** `lqvu-zen/devflow`.
 - **Version files:** `.claude-plugin/plugin.json` (`"version": "X.Y.Z"`); `.claude-plugin/marketplace.json` (the plugin entry's `"version": "X.Y.Z"`). Both numbers only: devflow has no release candidates (see Standing rules).
-- **Build:** none. Users install from the repository at the tag.
-- **Gate:** green CI on the release commit (Linux and Windows), plus the trigger evals, and the behaviour cases `python tools/eval_select.py select --release` lists (all trigger cases, plus the behaviour cases changed since their last recorded pass in `evals/passes.json`), each with its pass count recorded in `README.md`.
+- **Build:** none. Users install from `main`, which sits at the latest release.
+- **Branches:** the `Release X.Y.Z` commit lands on `develop` like any other. Once the gate is green on it, `main` moves only by a fast-forward to it (`git push origin <release commit>:main`; never a merge or a force), which then gets the `vX.Y.Z` tag, so the tagged commit is the one the gate tested.
+- **Gate:** green CI on the release commit on `develop` (Linux and Windows), plus the trigger evals, and the behaviour cases `python tools/eval_select.py select --release` lists (all trigger cases, plus the behaviour cases changed since their last recorded pass in `evals/passes.json`), each with its pass count recorded in `README.md` (run from a checkout frozen at one `develop` commit, see Verify).
 - **Stamp:** none. `gh release` writes ask the maintainer.
 - **Sign:** none.
 - **Artifacts:** none. The GitHub release carries notes only.
 - **Notes:** the release's `CHANGELOG.md` section, plus "Updating: `/plugin marketplace update devflow`".
-- **After:** start a new `## Unreleased` section in `CHANGELOG.md`; check that the README's skill, agent and template lists match the folders.
+- **After:** start a new `## Unreleased` section in `CHANGELOG.md` on `develop`; check that the README's skill, agent and template lists match the folders.
 
 ### Checklist
 
@@ -108,7 +109,8 @@ Rules from the decision log that every session keeps (the project manager adds t
 
 - Few release plans: the current one and the next at most.
 - The version number is the maintainer's.
-- **devflow releases without a candidate** (2026-10-28): a `Release X.Y.Z` commit that changes both version files, a `vX.Y.Z` tag, and a GitHub release with notes, done by hand as the plan's release step. Don't run `/devflow:release` here: its runbook always cuts a candidate.
+- **devflow releases without a candidate** (2026-10-28): a `Release X.Y.Z` commit on `develop` that changes both version files, `main` fast-forwarded to it, which then gets the `vX.Y.Z` tag, and a GitHub release with notes, done by hand as the plan's release step. Don't run `/devflow:release` here: its runbook always cuts a candidate.
+- **Work lands on `develop`; `main` moves only at a release** (2026-11-19): every coding session commits and pushes to `develop`; `main`, what users install, moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; evals run from a checkout frozen at one `develop` commit.
 - **The status file, plans, archive and prompt book stay local** (2026-10-28): `docs/STATUS.md`, `docs/plans/`, `docs/archive/` and `docs/PROMPTS.md` are gitignored. The project manager saves them and commits nothing; coding sessions never stage them.
 - Every escaped bug adds its check.
 - Coding sessions: one fresh conversation per plan step.

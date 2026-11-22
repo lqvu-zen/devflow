@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Repo: development moved to `develop`. `main`, the default branch users install from, moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; CI runs on pushes to both, and evals run from a checkout frozen at one `develop` commit. Nothing changes for projects that use the plugin.
+
 ## 0.3.0
 
 - Plans: a step may carry an `**Interfaces:**` line (the exact names it uses from and makes for other steps) and a plan a `## Review Focus` section (failure modes a step's Done when pins with a test, so the reviewer checks them); both are optional and existing plans read as before. The planner lints its draft for vague lines and for a step with more than one reasonable implementation, and `manage-project` gives each planner draft one cold read by a fresh agent, which returns only the questions where a wrong guess matters, ranked, or "nothing important left"; the maintainer's questions go to the maintainer. Eval: `manage-project/vague-step-gets-a-cold-read`.
