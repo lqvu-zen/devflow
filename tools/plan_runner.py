@@ -1,0 +1,495 @@
+from __future__ import annotations
+
+import argparse
+import datetime
+import importlib.util
+import json
+import os
+import re
+import secrets
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+from typing import Callable, NamedTuple, Sequence
+
+PLUGIN = Path(__file__).resolve().parents[1]
+HOOKS_DIR = PLUGIN / "hooks"
+TOOLS_DIR = PLUGIN / "tools"
+AGENTS_DIR = PLUGIN / "agents"
+SESSION_START = HOOKS_DIR / "session_start.py"
+BRANCH = "develop"
+PROMPT = "/devflow:next-step"
+COMMIT_FLAG = "--commit-without-asking"
+WAIVED_FLAG = "--waived"
+WAIVED_TEXT = "waived"
+WAIVER_ENV = "DEVFLOW_COMMIT_WITHOUT_ASKING"
+WAIVER_DIR = "devflow-runner"
+TOKEN = re.compile(r"[0-9a-f]{32}")
+MODES = ("default", "acceptEdits")
+WAITING = "waiting for the maintainer's yes"
+COST_NOT_READ = "cost not read"
+GIT_SECONDS = 30
+CI_SECONDS = 60
+
+
+def _load(name: str, path: Path):
+    loaded = sys.modules.get(name)
+    if loaded is not None:
+        return loaded
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+def _session_start():
+    return _load("devflow_session_start", SESSION_START)
+
+
+def _model_check():
+    if str(TOOLS_DIR) not in sys.path:
+        sys.path.insert(0, str(TOOLS_DIR))
+    return _load("model_check", TOOLS_DIR / "model_check.py")
+
+
+class NextStep(NamedTuple):
+    plan: str | None
+    number: int | None
+    title: str
+    run: str | None
+    stop: str | None
+    lines: list[str]
+    code: int
+
+
+class SessionResult(NamedTuple):
+    cost: float | None
+    session_id: str | None
+    denials: list[str]
+    is_error: bool
+    raw_ok: bool
+
+
+class StepRow(NamedTuple):
+    plan: str
+    number: int
+    title: str
+    outcome: str
+    why: str | None
+    commits: list[str]
+    cost: float | None
+
+
+def _git(project: Path, *args: str) -> str | None:
+    try:
+        result = subprocess.run(["git", *args], cwd=str(project), capture_output=True, text=True,
+                                encoding="utf-8", errors="replace", stdin=subprocess.DEVNULL,
+                                timeout=GIT_SECONDS)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if result.returncode != 0:
+        return None
+    return result.stdout
+
+
+def ask_next_step(project: Path) -> NextStep:
+    env = dict(os.environ)
+    env["CLAUDE_PROJECT_DIR"] = str(project)
+    try:
+        result = subprocess.run([sys.executable, str(SESSION_START), "--next-step"], cwd=str(project),
+                                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                                stdin=subprocess.DEVNULL, env=env, timeout=120)
+    except (OSError, subprocess.SubprocessError) as error:
+        return NextStep(None, None, "", None, f"session_start.py --next-step failed: {error}", [], 1)
+    lines = [line.rstrip() for line in result.stdout.splitlines() if line.strip()]
+    if result.returncode != 0:
+        said = " ".join(lines + [line.strip() for line in result.stderr.splitlines() if line.strip()])
+        return NextStep(None, None, "", None,
+                        f"session_start.py --next-step exited {result.returncode}: {said or 'no output'}",
+                        lines, result.returncode)
+    plan = number = run = stop = None
+    title = ""
+    for line in lines:
+        if line.startswith("Plan: "):
+            plan = line[len("Plan: "):].strip()
+            if plan.endswith(" (the next plan)"):
+                plan = plan[:-len(" (the next plan)")].strip()
+        elif line.startswith("Step: "):
+            head, _, rest = line[len("Step: "):].partition(" ")
+            if head.isdigit():
+                number, title = int(head), rest.strip()
+        elif line.startswith("Run: "):
+            run = line[len("Run: "):].strip()
+        elif line.startswith("Stop: "):
+            stop = line[len("Stop: "):].strip()
+    if run is None and stop is None:
+        stop = "session_start.py --next-step printed neither Run nor Stop: " + (" ".join(lines) or "no output")
+        return NextStep(plan, number, title, None, stop, lines, 1)
+    if run is not None and (plan is None or number is None):
+        return NextStep(plan, number, title, None,
+                        "session_start.py --next-step named a skill but no plan or step", lines, 1)
+    return NextStep(plan, number, title, run, stop, lines, 0)
+
+
+def foreign_changes(project: Path, layout) -> list[str] | None:
+    session_start = _session_start()
+    out = _git(project, "status", "--porcelain", "--untracked-files=all")
+    if out is None:
+        return None
+    paths = [session_start._path_of(line) for line in out.splitlines() if line.strip()]
+    return [path for path in paths if not layout.is_managed_path(path)]
+
+
+def current_branch(project: Path) -> str:
+    return (_git(project, "rev-parse", "--abbrev-ref", "HEAD") or "").strip()
+
+
+def head_of(project: Path) -> str:
+    return (_git(project, "rev-parse", "HEAD") or "").strip()
+
+
+def preflight(project: Path, layout, claude: object) -> str | None:
+    branch = current_branch(project)
+    if branch != BRANCH:
+        return f"the branch is {branch or 'unknown'}, not {BRANCH}; the runner works on {BRANCH} only"
+    foreign = foreign_changes(project, layout)
+    if foreign is None:
+        return "git status failed"
+    if foreign:
+        return "the tree has changes beyond the status and plan files: " + ", ".join(foreign)
+    if not claude:
+        return "claude was not found; pass --claude PATH"
+    return None
+
+
+def orchestrator_model(config: object) -> str | None:
+    model_check = _model_check()
+    rows, _notes = model_check.board_rows(config, model_check.load_pins(AGENTS_DIR))
+    for row in rows:
+        if row.key == "orchestrator" and row.expect is not None:
+            return row.expect.model
+    return None
+
+
+def _money(value: float) -> str:
+    return f"{value:.2f}"
+
+
+def claude_argv(claude: object, model: str | None, budget: float | None, mode: str | None) -> list[str]:
+    head = [claude] if isinstance(claude, (str, os.PathLike)) else list(claude)
+    argv = [str(part) for part in head] + ["-p", PROMPT, "--output-format", "json"]
+    if model:
+        argv += ["--model", model]
+    if budget is not None:
+        argv += ["--max-budget-usd", _money(budget)]
+    if mode:
+        argv += ["--permission-mode", mode]
+    return argv
+
+
+def _last_object(text: str) -> dict | None:
+    try:
+        data = json.loads(text)
+    except ValueError:
+        data = None
+    if isinstance(data, dict):
+        return data
+    for line in reversed(text.splitlines()):
+        line = line.strip()
+        if not line.startswith("{"):
+            continue
+        try:
+            data = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(data, dict):
+            return data
+    return None
+
+
+def read_result(text: str, returncode: int) -> SessionResult:
+    data = _last_object(text)
+    if data is None:
+        return SessionResult(None, None, [], True, False)
+    cost = data.get("total_cost_usd")
+    if isinstance(cost, bool) or not isinstance(cost, (int, float)):
+        cost = None
+    names: list[str] = []
+    denials = data.get("permission_denials")
+    if isinstance(denials, list):
+        for denial in denials:
+            name = denial.get("tool_name") if isinstance(denial, dict) else None
+            name = name if isinstance(name, str) and name else "unknown tool"
+            if name not in names:
+                names.append(name)
+    session_id = data.get("session_id")
+    return SessionResult(float(cost) if cost is not None else None,
+                         session_id if isinstance(session_id, str) else None,
+                         names, bool(data.get("is_error")) or returncode != 0, True)
+
+
+def run_session(argv: list[str], project: Path, env: dict) -> SessionResult:
+    try:
+        result = subprocess.run(argv, cwd=str(project), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                text=True, encoding="utf-8", errors="replace", env=env)
+    except OSError:
+        return SessionResult(None, None, [], True, False)
+    return read_result(result.stdout or "", result.returncode)
+
+
+def row_state(root: Path, plan: str, number: int) -> str | None:
+    session_start = _session_start()
+    try:
+        md = (Path(root) / plan).read_text(encoding="utf-8-sig")
+    except (OSError, ValueError):
+        return None
+    found = session_start.step_states(md).get(number)
+    return found[1] if found else None
+
+
+def ci_conclusion(project: Path, head: str) -> str:
+    session_start = _session_start()
+
+    def run(argv: list) -> str | None:
+        return session_start.run(argv, timeout=CI_SECONDS, cwd=str(project))
+
+    runs = session_start._runs_for(run, head)
+    if runs is None:
+        return "unread (gh unavailable)"
+    if not runs:
+        return "missing (no run)"
+    latest = runs[0]
+    if latest.get("status") == "completed" and latest.get("conclusion") == "success":
+        return "success"
+    return session_start._describe(runs)
+
+
+def step_outcome(project: Path, root: Path, layout, plan: str, number: int, result: SessionResult,
+                 ci: Callable[[Path, str], str]) -> tuple[str, str | None]:
+    session_start = _session_start()
+    if result.denials:
+        return "stopped", "the session met permission asks it could not answer: " + ", ".join(result.denials)
+    state = row_state(root, plan, number)
+    if state is None:
+        return "stopped", f"step {number}'s Status row is missing from {plan}"
+    if WAITING in state.lower().replace("’", "'"):
+        return "stopped", f"step {number}'s code commit waits for the maintainer's yes"
+    if session_start.is_open(state):
+        return "stopped", f"step {number} ended `{state.strip()}`, not done"
+    foreign = foreign_changes(project, layout)
+    if foreign is None:
+        return "stopped", "git status failed after the session"
+    if foreign:
+        return "stopped", "the session left changes beyond the status and plan files: " + ", ".join(foreign)
+    branch = current_branch(project)
+    if branch != BRANCH:
+        return "stopped", f"the branch is now {branch or 'unknown'}, not {BRANCH}"
+    head = head_of(project)
+    conclusion = ci(project, head)
+    if conclusion != "success":
+        return "stopped", f"CI on HEAD {head[:7] or 'unknown'} is {conclusion}, not green"
+    return "done", None
+
+
+def commits_since(project: Path, before: str) -> list[str]:
+    if not before:
+        return []
+    out = _git(project, "log", "--reverse", "--format=%h", f"{before}..HEAD")
+    return [line.strip() for line in (out or "").splitlines() if line.strip()]
+
+
+def session_env(project: Path, token: str | None) -> dict:
+    env = dict(os.environ)
+    env.pop(WAIVER_ENV, None)
+    env["CLAUDE_PROJECT_DIR"] = str(project)
+    if token:
+        env[WAIVER_ENV] = token
+    return env
+
+
+def spent_of(rows: Sequence[StepRow]) -> float:
+    return sum(row.cost for row in rows if row.cost is not None)
+
+
+def row_line(row: StepRow) -> str:
+    outcome = row.outcome if row.why is None else f"{row.outcome} ({row.why})"
+    commits = " ".join(row.commits) if row.commits else "none"
+    cost = f"${_money(row.cost)}" if row.cost is not None else COST_NOT_READ
+    return f"- {row.number} {row.title}: {outcome}; commits {commits}; {cost}"
+
+
+def run_plan(project: Path, steps: int, dollars: float | None, commit_flag: bool, model: str | None,
+             mode: str | None, claude: object, ci: Callable[[Path, str], str] = ci_conclusion,
+             token: str | None = None, rows: list | None = None,
+             say: Callable[[str], None] = print) -> tuple[list[StepRow], str, int]:
+    session_start = _session_start()
+    rows = [] if rows is None else rows
+    found = session_start.devflow_store.find(project)
+    if found is None:
+        return rows, f"no .claude/devflow.json in {project}", 1
+    layout = session_start.Layout(found.config)
+    taken: set[tuple[str, int]] = set()
+    while True:
+        step = ask_next_step(project)
+        if step.stop is not None:
+            return rows, step.stop, step.code
+        if (step.plan, step.number) in taken:
+            return rows, f"step {step.number} offered again; not retried", 1
+        if len(rows) >= steps:
+            return rows, f"the step limit ({steps}) is reached", 0
+        budget = None
+        if dollars is not None:
+            if any(row.cost is None for row in rows):
+                return rows, "a session's cost was not read, so the dollar limit can't be kept", 1
+            spent = spent_of(rows)
+            if spent >= dollars:
+                return rows, f"the dollar limit (${_money(dollars)}) is reached: ${_money(spent)} spent", 0
+            budget = dollars - spent
+        before = head_of(project)
+        argv = claude_argv(claude, model, budget, mode)
+        result = run_session(argv, project, session_env(project, token if commit_flag else None))
+        outcome, why = step_outcome(project, found.root, layout, step.plan, step.number, result, ci)
+        row = StepRow(step.plan, step.number, step.title, outcome, why, commits_since(project, before),
+                      result.cost)
+        rows.append(row)
+        say(row_line(row))
+        taken.add((step.plan, step.number))
+        if why is not None:
+            return rows, why, 1
+
+
+def summary(rows: Sequence[StepRow], reason: str, flag: bool, spent: float | None) -> list[str]:
+    count = f"{len(rows)} step" + ("" if len(rows) == 1 else "s")
+    unread = any(row.cost is None for row in rows)
+    money = COST_NOT_READ if spent is None else f"${_money(spent)} spent"
+    if spent is not None and unread:
+        money += f" ({COST_NOT_READ} for some steps)"
+    lines = [f"Plan runner: {COMMIT_FLAG} {'on' if flag else 'off'}; {count}; {money}"]
+    lines += [row_line(row) for row in rows]
+    lines.append(f"Stopped: {reason.rstrip('.')}.")
+    return lines
+
+
+def waiver_folder(common: Path) -> Path:
+    return Path(common) / WAIVER_DIR
+
+
+def make_waiver(common: Path) -> tuple[str, Path]:
+    token = secrets.token_hex(16)
+    folder = waiver_folder(common)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / token
+    started = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
+    path.write_text(json.dumps({"pid": os.getpid(), "started": started}), encoding="utf-8")
+    return token, path
+
+
+def drop_waiver(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        Path(path).unlink()
+    except FileNotFoundError:
+        pass
+    try:
+        Path(path).parent.rmdir()
+    except OSError:
+        pass
+
+
+def waived(project: Path, env) -> bool:
+    token = env.get(WAIVER_ENV) or ""
+    if not TOKEN.fullmatch(token):
+        return False
+    session_start = _session_start()
+    try:
+        common = session_start.devflow_store.common_dir(Path(project))
+        return (waiver_folder(common) / token).is_file()
+    except (OSError, ValueError):
+        return False
+
+
+def _project() -> Path:
+    return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
+
+
+def parser() -> argparse.ArgumentParser:
+    made = argparse.ArgumentParser(prog="plan_runner.py",
+                                   description="Run the plan's next steps, one fresh headless session each.")
+    made.add_argument("--steps", type=int, required=True)
+    made.add_argument("--dollars", type=float)
+    made.add_argument(COMMIT_FLAG, dest="commit", action="store_true")
+    made.add_argument("--model")
+    made.add_argument("--permission-mode", dest="mode", choices=MODES)
+    made.add_argument("--claude", default="claude")
+    return made
+
+
+def main(argv: list[str] | None = None, claude: object = None,
+         ci: Callable[[Path, str], str] = ci_conclusion) -> int:
+    args = list(sys.argv[1:] if argv is None else argv)
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if WAIVED_FLAG in args:
+        if args != [WAIVED_FLAG]:
+            print(f"usage: plan_runner.py {WAIVED_FLAG} (alone)", file=sys.stderr)
+            return 2
+        ok = waived(_project(), os.environ)
+        print(WAIVED_TEXT if ok else f"not {WAIVED_TEXT}")
+        return 0 if ok else 1
+    made = parser()
+    if "--permission-mode" in args or any(a.startswith("--permission-mode=") for a in args):
+        if "bypassPermissions" in args or "--permission-mode=bypassPermissions" in args:
+            print("plan_runner.py: --permission-mode bypassPermissions is refused; "
+                  "use default or acceptEdits", file=sys.stderr)
+            return 2
+    try:
+        options = made.parse_args(args)
+    except SystemExit as error:
+        return 2 if error.code else 0
+    if options.steps < 1:
+        print("plan_runner.py: --steps must be at least 1", file=sys.stderr)
+        return 2
+    if options.dollars is not None and not options.dollars > 0:
+        print("plan_runner.py: --dollars must be more than 0", file=sys.stderr)
+        return 2
+    session_start = _session_start()
+    project = _project()
+    try:
+        found = session_start.devflow_store.find(project)
+    except (session_start.devflow_store.StoreError, ValueError) as error:
+        print(f"Plan runner refused: {error}.")
+        return 1
+    if found is None:
+        print(f"Plan runner refused: no .claude/devflow.json in {project}; run /devflow:setup first.")
+        return 1
+    layout = session_start.Layout(found.config)
+    command = claude if claude is not None else shutil.which(options.claude)
+    refusal = preflight(project, layout, command)
+    if refusal:
+        print(f"Plan runner refused: {refusal}.")
+        return 1
+    model = options.model or orchestrator_model(found.config)
+    rows: list[StepRow] = []
+    waiver = None
+    token = None
+    try:
+        if options.commit:
+            token, waiver = make_waiver(session_start.devflow_store.common_dir(project))
+        try:
+            rows, reason, code = run_plan(project, options.steps, options.dollars, options.commit, model,
+                                          options.mode, command, ci, token, rows)
+        except KeyboardInterrupt:
+            reason, code = "interrupted", 1
+    finally:
+        drop_waiver(waiver)
+    spent = None if rows and all(row.cost is None for row in rows) else spent_of(rows)
+    for line in summary(rows, reason, options.commit, spent):
+        print(line)
+    return code
+
+
+if __name__ == "__main__":
+    sys.exit(main())
