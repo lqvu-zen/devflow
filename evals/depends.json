@@ -6,7 +6,8 @@
     "release": ["skills/release/", "skills/add-feature/SKILL.md", "agents/tester.md", "agents/reviewer.md", "tools/model_check.py"],
     "review-ui": ["skills/review-ui/"],
     "manage-project": ["skills/manage-project/", "agents/planner.md", "tools/model_check.py", "templates/plan.md", "tools/session_extract.py"],
-    "next-step": ["skills/next-step/", "skills/add-feature/SKILL.md", "skills/fix-bug/SKILL.md"]
+    "next-step": ["skills/next-step/", "skills/add-feature/SKILL.md", "skills/fix-bug/SKILL.md"],
+    "run-plan": ["skills/run-plan/", "tools/plan_runner.py"]
   },
   "near_misses": {
     "add-feature-4-near-miss": "fix-bug",
@@ -26,6 +27,10 @@
     "manage-project-6-near-miss": "release",
     "next-step-4-near-miss": "add-feature",
     "next-step-5-near-miss": "fix-bug",
-    "next-step-6-near-miss": "manage-project"
+    "next-step-6-near-miss": "manage-project",
+    "next-step-7-near-miss": "run-plan",
+    "run-plan-4-near-miss": "next-step",
+    "run-plan-5-near-miss": "next-step",
+    "run-plan-6-near-miss": "manage-project"
   }
 }

@@ -367,6 +367,7 @@ SKILL_COMMANDS = [
     "cd D:/Projects/RYOS && uv run --no-project --with pytest pytest -q",
     "cd D:/Projects/RYOS && uvx ruff check . && uvx mypy --platform linux",
     "uv run python tests/session_smoke.py",
+    "python /home/u/.claude/plugins/devflow/tools/plan_runner.py --steps 3 --dollars 10 --commit-without-asking",
     "git diff",
     "git log --oneline -5",
     "cd D:/Projects/RYOS && git add ryos/ tests/test_ryos.py && git commit -m \"$(cat <<'EOF'\n"

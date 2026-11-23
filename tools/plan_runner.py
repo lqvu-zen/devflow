@@ -31,6 +31,10 @@ DEFAULT_MODE = "acceptEdits"
 DENIAL_TEXT = 100
 DENIAL_KEYS = ("command", "file_path", "notebook_path", "path", "pattern")
 WAITING = "waiting for the maintainer's yes"
+CUT_OFF = "cut off by the usage limit"
+BOM = b"\xef\xbb\xbf"
+USAGE_LIMIT = re.compile(r"hit your [\w -]*?limit|usage limit reached", re.I)
+LIMIT_TEXT = 120
 COST_NOT_READ = "cost not read"
 GIT_SECONDS = 30
 CI_SECONDS = 60
@@ -74,6 +78,7 @@ class SessionResult(NamedTuple):
     is_error: bool
     raw_ok: bool
     subtype: str | None = None
+    limit: str | None = None
 
 
 class StepRow(NamedTuple):
@@ -232,10 +237,23 @@ def denial_text(denial: object) -> str:
     return name
 
 
-def read_result(text: str, returncode: int) -> SessionResult:
+def limit_message(text: object) -> str | None:
+    if not isinstance(text, str):
+        return None
+    for line in text.splitlines():
+        if USAGE_LIMIT.search(line):
+            line = " ".join(line.split())
+            if len(line) > LIMIT_TEXT:
+                line = line[:LIMIT_TEXT - 3] + "..."
+            return line
+    return None
+
+
+def read_result(text: str, returncode: int, errors: str = "") -> SessionResult:
     data = _last_object(text)
     if data is None:
-        return SessionResult(None, None, [], True, False)
+        found = limit_message(errors) if returncode != 0 else None
+        return SessionResult(None, None, [], True, False, None, found)
     cost = data.get("total_cost_usd")
     if isinstance(cost, bool) or not isinstance(cost, (int, float)):
         cost = None
@@ -248,19 +266,28 @@ def read_result(text: str, returncode: int) -> SessionResult:
                 names.append(name)
     session_id = data.get("session_id")
     subtype = data.get("subtype")
+    failed = bool(data.get("is_error")) or returncode != 0
+    found = None
+    if failed:
+        found = limit_message(data.get("result")) or limit_message(errors)
     return SessionResult(float(cost) if cost is not None else None,
                          session_id if isinstance(session_id, str) else None,
-                         names, bool(data.get("is_error")) or returncode != 0, True,
-                         subtype if isinstance(subtype, str) and subtype else None)
+                         names, failed, True,
+                         subtype if isinstance(subtype, str) and subtype else None, found)
 
 
 def run_session(argv: list[str], project: Path, env: dict) -> SessionResult:
     try:
         result = subprocess.run(argv, cwd=str(project), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                text=True, encoding="utf-8", errors="replace", env=env)
+                                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                env=env)
     except OSError:
         return SessionResult(None, None, [], True, False)
-    return read_result(result.stdout or "", result.returncode)
+    errors = result.stderr or ""
+    if errors:
+        sys.stderr.write(errors)
+        sys.stderr.flush()
+    return read_result(result.stdout or "", result.returncode, errors)
 
 
 def row_state(root: Path, plan: str, number: int) -> str | None:
@@ -271,6 +298,43 @@ def row_state(root: Path, plan: str, number: int) -> str | None:
         return None
     found = session_start.step_states(md).get(number)
     return found[1] if found else None
+
+
+def mark_for_retake(root: Path, plan: str, number: int, claimed: str, stamp: str) -> bool:
+    session_start = _session_start()
+    path = Path(root) / plan
+    try:
+        raw = path.read_bytes()
+        bom = raw.startswith(BOM)
+        text = raw[3:].decode("utf-8") if bom else raw.decode("utf-8")
+    except (OSError, ValueError):
+        return False
+    lines = re.split(r"(?<=\n)", text)
+    inside = False
+    hits = []
+    for index, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            inside = stripped[3:].strip().lower() == "status"
+            continue
+        if not inside:
+            continue
+        match = session_start._STATUS_ROW.match(stripped)
+        if match and int(match.group(1)) == number and match.group(3) == claimed:
+            hits.append(index)
+    if len(hits) != 1:
+        return False
+    index = hits[0]
+    cell = re.match(r"^(\s*\|\s*\d+\s+[^|]*?\s*\|\s*)([^|]*?)(\s*\|.*)$", lines[index], re.S)
+    if cell is None or cell.group(2) != claimed:
+        return False
+    lines[index] = f"{cell.group(1)}stopped ({stamp}): {CUT_OFF}; retake it{cell.group(3)}"
+    data = "".join(lines).encode("utf-8")
+    try:
+        path.write_bytes((BOM if bom else b"") + data)
+    except OSError:
+        return False
+    return True
 
 
 def ci_conclusion(project: Path, head: str) -> str:
@@ -299,9 +363,31 @@ def session_trouble(result: SessionResult) -> str:
     return ""
 
 
+def limit_stop(project: Path, root: Path, layout, plan: str, number: int, message: str) -> str:
+    session_start = _session_start()
+    head = f"the usage limit cut off step {number}'s session ({message})"
+    state = row_state(root, plan, number)
+    if state is not None and session_start.is_claimed(state) and WAITING not in state.lower().replace("’", "'"):
+        stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+        if mark_for_retake(root, plan, number, state, stamp):
+            why = (f"{head}; its row now reads `stopped ({stamp}): {CUT_OFF}; retake it`, "
+                   "so the next run takes it again")
+        else:
+            why = f"{head}; its row could not be marked: set it to stopped by hand"
+    else:
+        why = f"{head}; its row was left as it was"
+    foreign = foreign_changes(project, layout)
+    if foreign:
+        why += ("; it left changes beyond the status and plan files: " + ", ".join(foreign)
+                + " (the next run refuses until they are dealt with)")
+    return why
+
+
 def step_outcome(project: Path, root: Path, layout, plan: str, number: int, result: SessionResult,
                  ci: Callable[[Path, str], str]) -> tuple[str, str | None]:
     session_start = _session_start()
+    if result.limit:
+        return "stopped", limit_stop(project, root, layout, plan, number, result.limit)
     if result.denials:
         return "stopped", "the session met permission asks it could not answer: " + ", ".join(result.denials)
     state = row_state(root, plan, number)
@@ -336,6 +422,7 @@ def commits_since(project: Path, before: str) -> list[str]:
 def session_env(project: Path, token: str | None) -> dict:
     env = dict(os.environ)
     env.pop(WAIVER_ENV, None)
+    env.pop("CLAUDECODE", None)
     env["CLAUDE_PROJECT_DIR"] = str(project)
     if token:
         env[WAIVER_ENV] = token
@@ -357,7 +444,7 @@ def say_now(line: str) -> None:
     print(line, flush=True)
 
 
-def run_plan(project: Path, steps: int, dollars: float | None, commit_flag: bool, model: str | None,
+def run_plan(project: Path, steps: int | None, dollars: float | None, commit_flag: bool, model: str | None,
              mode: str | None, claude: object, ci: Callable[[Path, str], str] = ci_conclusion,
              token: str | None = None, rows: list | None = None,
              say: Callable[[str], None] = None) -> tuple[list[StepRow], str, int]:
@@ -375,7 +462,7 @@ def run_plan(project: Path, steps: int, dollars: float | None, commit_flag: bool
             return rows, step.stop, step.code
         if (step.plan, step.number) in taken:
             return rows, f"step {step.number} offered again; not retried", 1
-        if len(rows) >= steps:
+        if steps is not None and len(rows) >= steps:
             return rows, f"the step limit ({steps}) is reached", 0
         budget = None
         if dollars is not None:
@@ -459,7 +546,7 @@ def _project() -> Path:
 def parser() -> argparse.ArgumentParser:
     made = argparse.ArgumentParser(prog="plan_runner.py",
                                    description="Run the plan's next steps, one fresh headless session each.")
-    made.add_argument("--steps", type=int, required=True)
+    made.add_argument("--steps", type=int, default=None)
     made.add_argument("--dollars", type=float)
     made.add_argument(COMMIT_FLAG, dest="commit", action="store_true")
     made.add_argument("--model")
@@ -490,7 +577,7 @@ def main(argv: list[str] | None = None, claude: object = None,
         options = made.parse_args(args)
     except SystemExit as error:
         return 2 if error.code else 0
-    if options.steps < 1:
+    if options.steps is not None and options.steps < 1:
         print("plan_runner.py: --steps must be at least 1", file=sys.stderr)
         return 2
     if options.dollars is not None and not options.dollars > 0:

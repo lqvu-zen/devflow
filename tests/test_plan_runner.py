@@ -138,6 +138,13 @@ else:
               "session_id": f"s{index}",
               "permission_denials": [{"tool_name": name, "tool_use_id": "t", "tool_input": given}
                                      for name, given in denials]}
+    if spec.get("limit"):
+        sentence = "You've hit your session limit \u00b7 resets 2:10am (Asia/Bangkok)"
+        result["is_error"] = True
+        if spec.get("limit_on") == "stderr":
+            sys.stderr.write(sentence + "\n")
+        else:
+            result["result"] = sentence
     if spec.get("cost", 0.25) is not None:
         result["total_cost_usd"] = spec.get("cost", 0.25)
     print("progress line")
@@ -145,6 +152,8 @@ else:
 record["end"] = time.time()
 with open(log, "a", encoding="utf-8") as handle:
     handle.write(json.dumps(record) + "\n")
+if spec.get("limit"):
+    sys.exit(1)
 '''
 
 
@@ -241,6 +250,27 @@ class TestRunsSteps(RunnerCase):
         self.assertEqual((len(rows), len(self.records()), reason, code),
                          (1, 1, "the step limit (1) is reached", 0))
 
+    def test_without_a_step_limit_three_ready_steps_run_and_the_run_ends_at_the_stop_line(self):
+        self.calls([{"row": {"1": "done"}}, {"row": {"2": "done"}}, {"row": {"3": "done"}}])
+        code, out = self.main()
+        self.assertEqual(len(self.records()), 3)
+        self.assertIn("Plan runner: --commit-without-asking off; 3 steps;", out)
+        self.assertNotIn("step limit", out)
+        self.assertIn("Stopped: ", out.splitlines()[-1])
+        self.assertEqual(code, 0)
+
+    def test_with_two_steps_it_ends_after_two(self):
+        self.calls([{"row": {"1": "done"}}, {"row": {"2": "done"}}, {"row": {"3": "done"}}])
+        rows, reason, code = self.run_plan(steps=2)
+        self.assertEqual((len(rows), len(self.records()), reason, code),
+                         (2, 2, "the step limit (2) is reached", 0))
+
+    def test_run_plan_without_a_limit_runs_until_the_plan_stops(self):
+        self.calls([{"row": {"1": "done"}}, {"row": {"2": "done"}}, {"row": {"3": "done"}}])
+        rows, reason, code = self.run_plan(steps=None)
+        self.assertEqual((len(rows), code), (3, 0))
+        self.assertNotIn("step limit", reason)
+
     def test_the_dollar_limit_ends_the_run_and_passes_what_is_left(self):
         self.calls([{"row": {"1": "done"}, "cost": 0.6}, {"row": {"2": "done"}, "cost": 0.4}])
         rows, reason, code = self.run_plan(dollars=1.0)
@@ -293,6 +323,8 @@ class TestRunsSteps(RunnerCase):
                           "--max-budget-usd", "2.50", "--permission-mode", "acceptEdits"])
         self.assertEqual(self.main("--steps", "1", "--permission-mode", "bypassPermissions")[0], 2)
         self.assertEqual(self.main("--steps", "0")[0], 2)
+        self.assertIsNone(plan_runner.parser().parse_args([]).steps)
+        self.assertEqual(plan_runner.parser().parse_args(["--steps", "2"]).steps, 2)
         self.assertEqual(self.main("--waived", "--steps", "1")[0], 2)
         self.assertEqual(self.records(), [])
 
@@ -396,6 +428,139 @@ class TestStops(RunnerCase):
         with mock.patch.object(plan_runner, "current_branch", return_value="feature"):
             rows, reason, code = self.run_plan()
         self.assertEqual((reason, code), ("the branch is now feature, not develop", 1))
+
+
+LIMIT_SENTENCE = "You've hit your session limit \u00b7 resets 2:10am (Asia/Bangkok)"
+CLAIMED = "in progress (2026-11-24 10:00)"
+RETAKE = r"stopped \(\d{4}-\d\d-\d\d \d\d:\d\d\): cut off by the usage limit; retake it"
+
+
+class TestUsageLimit(RunnerCase):
+    def crlf_plan(self):
+        text = (self.project / PLAN).read_bytes().replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+        (self.project / PLAN).write_bytes(text)
+        self.git("add", "-A")
+        self.git("commit", "-q", "--allow-empty", "-m", "crlf")
+
+    def test_a_session_cut_off_by_the_limit_stops_the_run_with_that_reason(self):
+        self.calls([{"row": {"1": CLAIMED}, "limit": True}, {"row": {"2": "done"}}])
+        code, out = self.main("--steps", "3")
+        self.assertEqual(len(self.records()), 1)
+        self.assertEqual(code, 1)
+        self.assertIn("Stopped: the usage limit cut off step 1's session (You've hit your session limit", out)
+        self.assertIn("resets 2:10am (Asia/Bangkok)", out)
+        self.assertRegex(out, r"its row now reads `" + RETAKE + r"`, so the next run takes it again")
+        self.assertIn("- 1 Alpha: stopped (the usage limit cut off", out)
+        self.assertEqual(out.splitlines()[-1], "To answer step 1's session: claude --resume s0")
+
+    def test_its_claimed_row_is_marked_for_retaking_and_only_that_line_changes(self):
+        self.crlf_plan()
+        before = (self.project / PLAN).read_bytes()
+        self.calls([{"row": {"1": CLAIMED}, "limit": True}])
+        self.run_plan()
+        after = (self.project / PLAN).read_bytes()
+        self.assertNotIn(b"\n", after.replace(b"\r\n", b""))
+        old = before.decode().replace("| 1 Alpha | — |", "| 1 Alpha | " + CLAIMED + " |").split("\r\n")
+        new = after.decode().split("\r\n")
+        self.assertEqual(len(old), len(new))
+        changed = [(a, b) for a, b in zip(old, new) if a != b]
+        self.assertEqual(len(changed), 1)
+        self.assertRegex(changed[0][1], r"^\| 1 Alpha \| " + RETAKE + r" \|$")
+        session_start = plan_runner._session_start()
+        state = session_start.step_states(after.decode())[1][1]
+        self.assertFalse(session_start.is_claimed(state))
+        self.assertTrue(session_start.is_open(state))
+        self.assertEqual((self.project / STATUS).read_text(encoding="utf-8"), STATUS_MD)
+
+    def test_a_byte_order_mark_survives_the_row_write(self):
+        text = plan_md().replace("| 1 Alpha | — |", "| 1 Alpha | " + CLAIMED + " |")
+        (self.project / PLAN).write_bytes(b"\xef\xbb\xbf" + text.encode("utf-8"))
+        self.assertTrue(plan_runner.mark_for_retake(self.project, PLAN, 1, CLAIMED, "2026-11-24 11:00"))
+        data = (self.project / PLAN).read_bytes()
+        self.assertTrue(data.startswith(b"\xef\xbb\xbf# x"))
+        self.assertIn("| 1 Alpha | stopped (2026-11-24 11:00): cut off by the usage limit; retake it |".encode(),
+                      data)
+
+    def test_it_writes_nothing_unless_exactly_one_line_matches(self):
+        for state in ("—", "done"):
+            with self.subTest(state=state):
+                text = plan_md().replace("| 1 Alpha | — |", f"| 1 Alpha | {state} |")
+                (self.project / PLAN).write_text(text, encoding="utf-8")
+                before = (self.project / PLAN).read_bytes()
+                self.assertFalse(plan_runner.mark_for_retake(self.project, PLAN, 1, CLAIMED, "2026-11-24 11:00"))
+                self.assertEqual((self.project / PLAN).read_bytes(), before)
+        doubled = plan_md().replace("| 1 Alpha | — |", f"| 1 Alpha | {CLAIMED} |\n| 1 Alpha | {CLAIMED} |")
+        (self.project / PLAN).write_text(doubled, encoding="utf-8")
+        self.assertFalse(plan_runner.mark_for_retake(self.project, PLAN, 1, CLAIMED, "2026-11-24 11:00"))
+        self.assertEqual((self.project / PLAN).read_text(encoding="utf-8"), doubled)
+        self.assertFalse(plan_runner.mark_for_retake(self.project, "docs/plans/none.md", 1, CLAIMED, "x"))
+
+    def test_the_next_run_takes_that_step_again(self):
+        self.calls([{"row": {"1": CLAIMED}, "limit": True}, {"row": {"1": "done"}}, {"row": {"2": "done"}}])
+        rows, reason, code = self.run_plan(steps=1)
+        self.assertIn("usage limit", reason)
+        self.assertEqual(len(self.records()), 1)
+        rows, reason, code = self.run_plan(steps=1)
+        self.assertEqual((len(rows), rows[0].number, rows[0].outcome, code), (1, 1, "done", 0))
+        self.assertEqual(len(self.records()), 2)
+
+    def test_the_limit_on_stderr_is_read_too(self):
+        self.calls([{"row": {"1": CLAIMED}, "limit": True, "limit_on": "stderr"}])
+        rows, reason, code = self.run_plan()
+        self.assertTrue(reason.startswith("the usage limit cut off step 1's session (You've hit your session limit"),
+                        reason)
+        self.assertRegex(reason, RETAKE)
+        self.assertEqual(code, 1)
+
+    def test_a_row_waiting_for_the_yes_is_left_alone(self):
+        waiting = "in progress (2026-11-24 10:00), waiting for the maintainer's yes"
+        self.calls([{"row": {"1": waiting}, "limit": True}])
+        rows, reason, code = self.run_plan()
+        self.assertTrue(reason.endswith("; its row was left as it was"), reason)
+        self.assertIn("| 1 Alpha | " + waiting + " |", (self.project / PLAN).read_text(encoding="utf-8"))
+
+    def test_a_row_the_session_never_claimed_is_left_as_it_was(self):
+        before = (self.project / PLAN).read_bytes()
+        self.calls([{"limit": True}])
+        rows, reason, code = self.run_plan()
+        self.assertTrue(reason.endswith("; its row was left as it was"), reason)
+        self.assertEqual((self.project / PLAN).read_bytes(), before)
+
+    def test_foreign_changes_are_named_as_well(self):
+        self.calls([{"row": {"1": CLAIMED}, "limit": True, "foreign": "junk.txt"}])
+        rows, reason, code = self.run_plan()
+        self.assertIn("; it left changes beyond the status and plan files: junk.txt "
+                      "(the next run refuses until they are dealt with)", reason)
+        self.assertRegex(reason, RETAKE)
+
+    def test_a_row_that_cannot_be_marked_says_to_set_it_by_hand(self):
+        self.calls([{"row": {"1": CLAIMED}, "limit": True}])
+        with mock.patch.object(plan_runner, "mark_for_retake", return_value=False):
+            rows, reason, code = self.run_plan()
+        self.assertTrue(reason.endswith("; its row could not be marked: set it to stopped by hand"), reason)
+
+    def test_another_error_is_not_the_limit(self):
+        self.calls([{"error": True, "subtype": "error_max_budget_usd"}])
+        rows, reason, code = self.run_plan()
+        self.assertEqual(reason, "step 1 ended `—`, not done; the session ended with error_max_budget_usd")
+
+    def test_only_a_failed_session_is_read_for_the_limit(self):
+        ok = json.dumps({"is_error": False, "result": LIMIT_SENTENCE, "subtype": "success"})
+        self.assertIsNone(plan_runner.read_result(ok, 0, LIMIT_SENTENCE).limit)
+        bad = json.dumps({"is_error": True, "result": LIMIT_SENTENCE})
+        self.assertIn("resets 2:10am", plan_runner.read_result(bad, 1).limit)
+        self.assertIsNone(plan_runner.read_result(json.dumps({"is_error": True, "result": "boom"}), 1).limit)
+        five = plan_runner.limit_message("a\nYou've hit your 5-hour limit \u00b7 resets 4:10pm (Asia/Bangkok)\nb")
+        self.assertEqual(five, "You've hit your 5-hour limit \u00b7 resets 4:10pm (Asia/Bangkok)")
+        long = plan_runner.limit_message("hit your session limit " + "x" * 300)
+        self.assertEqual(len(long), plan_runner.LIMIT_TEXT)
+        self.assertIsNone(plan_runner.limit_message("rate limit exceeded"))
+
+    def test_session_env_drops_claudecode(self):
+        with mock.patch.dict(os.environ, {"CLAUDECODE": "1"}):
+            env = plan_runner.session_env(self.project, None)
+        self.assertNotIn("CLAUDECODE", env)
+        self.assertEqual(env["CLAUDE_PROJECT_DIR"], str(self.project))
 
 
 class TestRefuses(RunnerCase):
