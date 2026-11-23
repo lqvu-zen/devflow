@@ -27,6 +27,9 @@ WAIVER_ENV = "DEVFLOW_COMMIT_WITHOUT_ASKING"
 WAIVER_DIR = "devflow-runner"
 TOKEN = re.compile(r"[0-9a-f]{32}")
 MODES = ("default", "acceptEdits")
+DEFAULT_MODE = "acceptEdits"
+DENIAL_TEXT = 100
+DENIAL_KEYS = ("command", "file_path", "notebook_path", "path", "pattern")
 WAITING = "waiting for the maintainer's yes"
 COST_NOT_READ = "cost not read"
 GIT_SECONDS = 30
@@ -70,6 +73,7 @@ class SessionResult(NamedTuple):
     denials: list[str]
     is_error: bool
     raw_ok: bool
+    subtype: str | None = None
 
 
 class StepRow(NamedTuple):
@@ -209,6 +213,24 @@ def _last_object(text: str) -> dict | None:
     return None
 
 
+def denial_text(denial: object) -> str:
+    if not isinstance(denial, dict):
+        return "unknown tool"
+    name = denial.get("tool_name")
+    name = name if isinstance(name, str) and name else "unknown tool"
+    given = denial.get("tool_input")
+    if not isinstance(given, dict):
+        return name
+    for key in DENIAL_KEYS:
+        value = given.get(key)
+        if isinstance(value, str) and value.strip():
+            first = " ".join(value.split())
+            if len(first) > DENIAL_TEXT:
+                first = first[:DENIAL_TEXT - 3] + "..."
+            return f"{name} `{first}`"
+    return name
+
+
 def read_result(text: str, returncode: int) -> SessionResult:
     data = _last_object(text)
     if data is None:
@@ -220,14 +242,15 @@ def read_result(text: str, returncode: int) -> SessionResult:
     denials = data.get("permission_denials")
     if isinstance(denials, list):
         for denial in denials:
-            name = denial.get("tool_name") if isinstance(denial, dict) else None
-            name = name if isinstance(name, str) and name else "unknown tool"
+            name = denial_text(denial)
             if name not in names:
                 names.append(name)
     session_id = data.get("session_id")
+    subtype = data.get("subtype")
     return SessionResult(float(cost) if cost is not None else None,
                          session_id if isinstance(session_id, str) else None,
-                         names, bool(data.get("is_error")) or returncode != 0, True)
+                         names, bool(data.get("is_error")) or returncode != 0, True,
+                         subtype if isinstance(subtype, str) and subtype else None)
 
 
 def run_session(argv: list[str], project: Path, env: dict) -> SessionResult:
@@ -266,6 +289,15 @@ def ci_conclusion(project: Path, head: str) -> str:
     return session_start._describe(runs)
 
 
+def session_trouble(result: SessionResult) -> str:
+    if not result.raw_ok:
+        return "; the session's result could not be read"
+    if result.is_error:
+        ended = result.subtype if result.subtype and result.subtype != "success" else "an error"
+        return f"; the session ended with {ended}"
+    return ""
+
+
 def step_outcome(project: Path, root: Path, layout, plan: str, number: int, result: SessionResult,
                  ci: Callable[[Path, str], str]) -> tuple[str, str | None]:
     session_start = _session_start()
@@ -277,7 +309,7 @@ def step_outcome(project: Path, root: Path, layout, plan: str, number: int, resu
     if WAITING in state.lower().replace("’", "'"):
         return "stopped", f"step {number}'s code commit waits for the maintainer's yes"
     if session_start.is_open(state):
-        return "stopped", f"step {number} ended `{state.strip()}`, not done"
+        return "stopped", f"step {number} ended `{state.strip()}`, not done" + session_trouble(result)
     foreign = foreign_changes(project, layout)
     if foreign is None:
         return "stopped", "git status failed after the session"
@@ -320,11 +352,16 @@ def row_line(row: StepRow) -> str:
     return f"- {row.number} {row.title}: {outcome}; commits {commits}; {cost}"
 
 
+def say_now(line: str) -> None:
+    print(line, flush=True)
+
+
 def run_plan(project: Path, steps: int, dollars: float | None, commit_flag: bool, model: str | None,
              mode: str | None, claude: object, ci: Callable[[Path, str], str] = ci_conclusion,
              token: str | None = None, rows: list | None = None,
-             say: Callable[[str], None] = print) -> tuple[list[StepRow], str, int]:
+             say: Callable[[str], None] = None) -> tuple[list[StepRow], str, int]:
     session_start = _session_start()
+    say = say or say_now
     rows = [] if rows is None else rows
     found = session_start.devflow_store.find(project)
     if found is None:
@@ -348,6 +385,7 @@ def run_plan(project: Path, steps: int, dollars: float | None, commit_flag: bool
                 return rows, f"the dollar limit (${_money(dollars)}) is reached: ${_money(spent)} spent", 0
             budget = dollars - spent
         before = head_of(project)
+        say(f"Running step {step.number} {step.title} ({step.plan}) with {step.run}...")
         argv = claude_argv(claude, model, budget, mode)
         result = run_session(argv, project, session_env(project, token if commit_flag else None))
         outcome, why = step_outcome(project, found.root, layout, step.plan, step.number, result, ci)
@@ -422,7 +460,7 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--dollars", type=float)
     made.add_argument(COMMIT_FLAG, dest="commit", action="store_true")
     made.add_argument("--model")
-    made.add_argument("--permission-mode", dest="mode", choices=MODES)
+    made.add_argument("--permission-mode", dest="mode", choices=MODES, default=DEFAULT_MODE)
     made.add_argument("--claude", default="claude")
     return made
 

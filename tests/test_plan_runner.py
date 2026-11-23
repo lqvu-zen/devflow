@@ -133,9 +133,11 @@ time.sleep(spec.get("sleep", 0))
 if spec.get("out") == "text":
     print("this is not json")
 else:
-    result = {"type": "result", "subtype": "success", "is_error": False, "session_id": f"s{index}",
-              "permission_denials": [{"tool_name": name, "tool_use_id": "t", "tool_input": {}}
-                                     for name in spec.get("denials", [])]}
+    denials = [d if isinstance(d, list) else [d, {}] for d in spec.get("denials", [])]
+    result = {"type": "result", "subtype": spec.get("subtype", "success"), "is_error": spec.get("error", False),
+              "session_id": f"s{index}",
+              "permission_denials": [{"tool_name": name, "tool_use_id": "t", "tool_input": given}
+                                     for name, given in denials]}
     if spec.get("cost", 0.25) is not None:
         result["total_cost_usd"] = spec.get("cost", 0.25)
     print("progress line")
@@ -268,8 +270,22 @@ class TestRunsSteps(RunnerCase):
         self.main("--steps", "1")
         argv = self.records()[0]["argv"]
         self.assertEqual(argv[argv.index("--model") + 1], "opus")
-        self.assertNotIn("--permission-mode", argv)
+        self.assertEqual(argv[argv.index("--permission-mode") + 1], "acceptEdits")
         self.assertNotIn("--max-budget-usd", argv)
+
+    def test_the_permission_mode_defaults_to_accept_edits_and_default_passes_through(self):
+        self.calls([{"row": {"1": "done"}}, {"row": {"2": "done"}}])
+        self.main("--steps", "1")
+        self.main("--steps", "1", "--permission-mode", "default")
+        modes = [record["argv"][record["argv"].index("--permission-mode") + 1] for record in self.records()]
+        self.assertEqual(modes, ["acceptEdits", "default"])
+
+    def test_each_step_says_it_is_starting_before_its_session_runs(self):
+        self.calls([{"row": {"1": "done"}}])
+        said = []
+        plan_runner.run_plan(self.project, 1, None, False, None, None, self.claude, ci=green, say=said.append)
+        self.assertEqual(said[0], f"Running step 1 Alpha ({PLAN}) with /devflow:add-feature...")
+        self.assertTrue(said[1].startswith("- 1 Alpha: done"), said)
 
     def test_the_command_line(self):
         self.assertEqual(plan_runner.claude_argv("claude", "sonnet", 2.5, "acceptEdits"),
@@ -316,6 +332,29 @@ class TestStops(RunnerCase):
         rows, reason, code = self.run_plan()
         self.assertEqual(len(self.records()), 1)
         self.assertEqual((reason, code), ("the session met permission asks it could not answer: Bash, Edit", 1))
+
+    def test_a_permission_denial_names_the_command_or_file(self):
+        long = "git log " + "x" * 200
+        self.calls([{"row": {"1": "done"}, "denials": [
+            ["Bash", {"command": "git check-ignore -q docs/plans/x.md;" + chr(10) + " echo ignored=$?"}],
+            ["Bash", {"command": "git check-ignore -q docs/plans/x.md;" + chr(10) + " echo ignored=$?"}],
+            ["Edit", {"file_path": "docs/plans/x.md", "old_string": "a", "new_string": "b"}],
+            ["Bash", {"command": long}]]}])
+        rows, reason, code = self.run_plan()
+        cut = " ".join(long.split())[:plan_runner.DENIAL_TEXT - 3] + "..."
+        self.assertEqual(reason, "the session met permission asks it could not answer: "
+                                 "Bash `git check-ignore -q docs/plans/x.md; echo ignored=$?`, "
+                                 f"Edit `docs/plans/x.md`, Bash `{cut}`")
+
+    def test_a_session_that_ends_in_an_error_says_so(self):
+        self.calls([{"error": True, "subtype": "error_max_budget_usd"}])
+        rows, reason, code = self.run_plan()
+        self.assertEqual((reason, code), ("step 1 ended `—`, not done; the session ended with error_max_budget_usd", 1))
+
+    def test_a_session_whose_result_cannot_be_read_says_so(self):
+        self.calls([{"out": "text"}])
+        rows, reason, code = self.run_plan()
+        self.assertEqual((reason, code), ("step 1 ended `—`, not done; the session's result could not be read", 1))
 
     def test_red_or_unread_ci_stops_the_run(self):
         for conclusion in ("CI failure", "unread (gh unavailable)", "missing (no run)"):
