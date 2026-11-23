@@ -1,5 +1,32 @@
 {
   "permissions": {
+    "allow": [
+      "Bash(python hooks/session_start.py*)",
+      "Bash(python tools/model_check.py*)",
+      "Bash(python -m unittest*)",
+      "Bash(git status*)",
+      "Bash(git diff*)",
+      "Bash(git log*)",
+      "Bash(git add*)",
+      "Bash(git commit*)",
+      "Bash(git push)",
+      "Bash(git push origin develop)",
+      "Bash(gh run*)",
+      "Bash(gh issue list*)",
+      "PowerShell(python hooks/session_start.py*)",
+      "PowerShell(python D:\\Projects\\devflow\\hooks\\*)",
+      "PowerShell(python tools/model_check.py*)",
+      "PowerShell(python -m unittest*)",
+      "PowerShell(git status*)",
+      "PowerShell(git diff*)",
+      "PowerShell(git log*)",
+      "PowerShell(git add*)",
+      "PowerShell(git commit*)",
+      "PowerShell(git push)",
+      "PowerShell(git push origin develop)",
+      "PowerShell(gh run*)",
+      "PowerShell(gh issue list*)"
+    ],
     "ask": [
       "Bash(gh release create*)",
       "Bash(gh release edit*)",
