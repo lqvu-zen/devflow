@@ -24,7 +24,7 @@ python <plugin>/hooks/session_start.py --next-step
 - `Plan:` the plan the step is in, ending "(the next plan)" when no step of the current plan can start.
 - `Why:` and `Skipped:` (only on the next plan): why no step of the current plan can start, and the next plan's steps passed over.
 - `Step:` the step's number and title, and `Last state:` its row's note, if any.
-- `Gate:` the text of an uncleared Gate line.
+- `Gate:` the text of a Gate that keeps the step from starting.
 - Then either `Run: /devflow:add-feature` or `Run: /devflow:fix-bug`, or `Stop: <reason>. Next: <what happens next>.`
 
 Take what it prints as it is. Never pick another step, and never re-read the plan to second-guess it. If the command fails or prints neither a `Run:` nor a `Stop:` line, show the user its output and stop.

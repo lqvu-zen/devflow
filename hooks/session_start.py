@@ -398,12 +398,13 @@ def _readable(path: str | None, md: str | None) -> PlanView | None:
     return view if view.order and view.states else None
 
 
-_CLEARED = re.compile(r"\bcleared\b", re.IGNORECASE)
+_CLEARED = re.compile(r"(?<![\w-])(?<!not )cleared\s+\d{4}-\d{2}-\d{2}", re.IGNORECASE)
+_IN_STEP = re.compile(r"(?<!not )\bat the design stop\b|(?<!not )\bbefore (?:the )?implementation\b", re.IGNORECASE)
 
 
 def _open_gate(view: PlanView, number: int) -> str | None:
     gate = step_field(view.sections.get(number, ""), "Gate")
-    if gate is None or _CLEARED.search(gate):
+    if gate is None or _CLEARED.search(gate) or _IN_STEP.search(gate):
         return None
     return gate
 

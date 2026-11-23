@@ -473,6 +473,7 @@ def with_states(plan_md: str, states: dict) -> str:
 BLOCKED = with_states(CURRENT, {1: "done: fixed", 2: "in progress (2026-10-22 09:30)",
                                 3: "in progress (2026-10-22 09:00)", 5: "in progress (2026-10-22 09:40)"})
 GATE = ("Ada chooses the error wording and signs it off before anything is committed.")
+DESIGN_GATE = "Ada approves the error wording the designer proposes, at the design stop, before implementation."
 
 
 def view(path: str, md: str):
@@ -550,6 +551,49 @@ class TestNextStep(unittest.TestCase):
         uncleared = CURRENT.replace(f"**Gate:** {GATE}", "**Gate:** uncleared until Ada answers.")
         self.assertEqual(session_start.blockers(view(CURRENT_PATH, uncleared), 4, None),
                          ["is at an uncleared Gate"])
+
+    def test_a_gate_at_the_design_stop_lets_the_step_start(self):
+        for words in (DESIGN_GATE, "Ada approves the wording before implementation.",
+                      "Ada approves the wording before the implementation.",
+                      "At the design stop, Ada approves the wording."):
+            plan = with_states(CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}"),
+                               {1: "done", 2: "done", 3: "done"})
+            self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None), [], words)
+            choice = session_start.choose_step(view(CURRENT_PATH, plan), view(NEXT_PATH, NEXT))
+            self.assertEqual((choice.number, choice.run, choice.stop, choice.gate),
+                             (4, "add-feature", None, None), words)
+
+    def test_a_gate_before_the_step_starts_still_blocks(self):
+        for words in ("Ada writes the error wording into this step.", GATE):
+            plan = with_states(CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}"),
+                               {1: "done", 2: "done", 3: "done"})
+            choice = session_start.choose_step(view(CURRENT_PATH, plan), None)
+            self.assertEqual((choice.number, choice.run, choice.gate), (4, None, words), words)
+
+    def test_not_cleared_is_not_cleared(self):
+        for words in ("not cleared yet: Ada writes the wording.",
+                      "Ada writes the wording; not cleared 2026-10-21.",
+                      "uncleared until Ada answers.",
+                      "Ada writes the wording. Cleared? Not yet.",
+                      "Ada writes the wording, not before implementation.",
+                      DESIGN_GATE.replace("at the design stop, before implementation", "not at the design stop")):
+            plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}")
+            self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None),
+                             ["is at an uncleared Gate"], words)
+
+    def test_a_dated_clear_clears_both_kinds(self):
+        for words in ("Ada writes the wording. Cleared 2026-10-21 09:00: Ada wrote it.",
+                      "Ada writes the wording. **Cleared 2026-10-21: done.**",
+                      "cleared 2026-10-21: Ada chose the wording.",
+                      f"{DESIGN_GATE} Cleared 2026-10-21: approved."):
+            plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}")
+            self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None), [], words)
+
+    def test_the_flag_names_a_design_gated_step(self):
+        plan = with_states(CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {DESIGN_GATE}"),
+                           {1: "done", 2: "done", 3: "done"})
+        self.assertEqual(session_start.next_step_lines(self.project_with(plan, None)),
+                         [f"Plan: {CURRENT_PATH}", "Step: 4 Reject non-numbers", "Run: /devflow:add-feature"])
 
     def test_files_overlap_by_path_folder_and_glob_and_skip_the_map(self):
         line = ("`tally/core.py`, `docs/BEHAVIOUR.md`, `CHANGELOG.md`, `docs/STATUS.md`, "

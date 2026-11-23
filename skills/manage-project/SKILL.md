@@ -5,7 +5,7 @@ description: 'Be the project manager: keep the status file (where we are, the de
 
 # The project manager
 
-You keep the project's memory and turn the maintainer's decisions into work for the coding sessions. The maintainer (named in **Project** in `.claude/devflow.md`) decides; you record and prepare. A coding session in another tab, running `add-feature` / `fix-bug` / `release` with the `devflow:*` agents, does the work.
+You keep the project's memory and turn the maintainer's decisions into work for the coding sessions. The maintainer (named in **Project** in `.claude/devflow.md`) decides; you record and prepare. A coding session in another tab does the work.
 
 The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `docs/plans/`, unless `.claude/devflow.json` names others (`status_file`, `plans_dir`). Finished plans go to `docs/archive/`. With no status file yet, start one from the plugin's `templates/STATUS.md` (two folders up from this skill's base directory).
 
@@ -55,7 +55,7 @@ For each issue not yet in the status file:
 - **Several things in one issue:** split them into separate steps.
 - **A duplicate or already fixed:** say which commit or step covers it.
 
-Ask before adding anything to a plan. Then add it the way "Adding a plan step" below describes.
+Ask before adding anything to a plan; then add it as "Adding a plan step" describes.
 
 ## Logging a decision
 
@@ -63,18 +63,18 @@ Every decision the maintainer makes goes into the status file's **Decision log**
 
 Things that are decisions: what goes in which release, dropping or parking an idea, naming, defaults, a process change, and "do it the better way" (record which way that was).
 
-An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date and let the maintainer decide it. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise. An entry without a date needs nothing.
+An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date and let the maintainer decide it. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise.
 
 ## Adding a plan step
 
 Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the plugin's `templates/plan.md` (or the latest archived plan, once there is one). A new step needs **all** of the following:
 
 1. **A new number** (never renumber existing steps), a heading `### N — <short title>`, and an italic line saying where it came from: `_Added YYYY-MM-DD from issue #N / the maintainer's decision / user feedback._`
-2. **What and why,** with facts the team needs: files and modules if you know them, related `docs/BEHAVIOUR.md` entries and their surfaces, earlier commits. Don't prescribe the design; that's the designer's job.
+2. **What and why,** with facts the team needs: files and modules if you know them, related `docs/BEHAVIOUR.md` entries and their surfaces, earlier commits. Don't prescribe the design.
 3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence. When the step uses or makes a name another step relies on (a function, option, file, setting or map ID), add an `**Interfaces:**` line with the exact names and the step each comes from or goes to.
 4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated; when the plan has a **Review Focus** section, "a test pins R<n>: <the failure mode>" for each item the step's work could cause.
 5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation (the board's `implementer.escalate` model) for any area **Escalate** names. To move a role off the board for this step, propose a `**Model:** <role>: <Model>, <effort>; <why>` line, one role per line, with the reason: any role may move up; only the designer, implementer and tester may move down, and never `fix-bug`'s diagnosis below Opus, medium; it overrides **Escalate** for that step.
-6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on.
+6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on. When they approve the step's own design, say "at the design stop": the session starts and stops there; any other Gate is met before a session starts. Clearing appends `Cleared YYYY-MM-DD HH:MM: <answer>.`
 7. **The plan's other sections updated to match:**
    - the **Goals** list, if it adds a goal;
    - the **Who does what** table;
@@ -82,7 +82,7 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
    - the **Order** section (bug fixes before features, the release test phase just before the release); a step to fix a flaky test goes first, ahead of bug fixes and features;
    - a new row in the **Status** table, `| N title | — |`.
 
-A new step has no `**Tried:**` line: coding sessions write it when they stop. When you edit an existing step, keep its Tried line exactly as it is.
+A new step has no `**Tried:**` line; coding sessions write it. When you edit an existing step, keep its Tried line exactly as it is.
 
 Then give the maintainer the paste-ready prompt for the coding session, e.g.:
 
@@ -122,7 +122,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
 
 ## Process escapes: review recent sessions
 
-`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke. This review finds them in recent sessions. It only reports: you propose lines for § Harness escapes, the maintainer decides.
+`docs/BEHAVIOUR.md` § Escapes turns every escaped product bug into a check. § Harness escapes does the same for process rules a session broke. This review only reports: you propose lines for § Harness escapes, the maintainer decides.
 
 **When:** on request; suggest it after a release or every couple of weeks.
 

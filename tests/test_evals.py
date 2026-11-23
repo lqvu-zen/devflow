@@ -886,6 +886,7 @@ class TestClaimGradersTakeAnyDate(unittest.TestCase):
         CLAIM_CASES / "fix-bug" / "claims-step-first" / "graders" / "row-in-progress.md": ("1 Fix #3: average of an empty list", {}),
         CLAIM_CASES / "next-step" / "falls-back-to-the-next-plan" / "graders" / "takes-step-3.md": ("3 Sum of squares", NEXT_PLAN_BEFORE),
         CLAIM_CASES / "next-step" / "runs-fix-bug-for-a-bug-step" / "graders" / "row-in-progress.md": ("1 Fix #3: average of an empty list", {}),
+        CLAIM_CASES / "next-step" / "starts-a-step-gated-at-its-design-stop" / "graders" / "row-in-progress.md": ("4 Reject non-numbers", {"5 Top N": "in progress (2026-10-22 09:30)"}),
     }
 
     def test_a_claim_passes_on_any_date_and_time_and_no_claim_fails(self):
