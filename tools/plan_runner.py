@@ -84,6 +84,7 @@ class StepRow(NamedTuple):
     why: str | None
     commits: list[str]
     cost: float | None
+    session: str | None = None
 
 
 def _git(project: Path, *args: str) -> str | None:
@@ -390,7 +391,7 @@ def run_plan(project: Path, steps: int, dollars: float | None, commit_flag: bool
         result = run_session(argv, project, session_env(project, token if commit_flag else None))
         outcome, why = step_outcome(project, found.root, layout, step.plan, step.number, result, ci)
         row = StepRow(step.plan, step.number, step.title, outcome, why, commits_since(project, before),
-                      result.cost)
+                      result.cost, result.session_id)
         rows.append(row)
         say(row_line(row))
         taken.add((step.plan, step.number))
@@ -407,6 +408,8 @@ def summary(rows: Sequence[StepRow], reason: str, flag: bool, spent: float | Non
     lines = [f"Plan runner: {COMMIT_FLAG} {'on' if flag else 'off'}; {count}; {money}"]
     lines += [row_line(row) for row in rows]
     lines.append(f"Stopped: {reason.rstrip('.')}.")
+    if rows and rows[-1].outcome != "done" and rows[-1].session:
+        lines.append(f"To answer step {rows[-1].number}'s session: claude --resume {rows[-1].session}")
     return lines
 
 

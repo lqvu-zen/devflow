@@ -351,6 +351,16 @@ class TestStops(RunnerCase):
         rows, reason, code = self.run_plan()
         self.assertEqual((reason, code), ("step 1 ended `—`, not done; the session ended with error_max_budget_usd", 1))
 
+    def test_a_stopped_step_says_how_to_resume_its_session(self):
+        self.calls([{"row": {"1": "in progress (2026-11-23 23:03)"}}])
+        code, out = self.main("--steps", "2")
+        self.assertEqual(out.splitlines()[-1], "To answer step 1's session: claude --resume s0")
+
+    def test_a_done_run_gives_no_resume_line(self):
+        self.calls([{"row": {"1": "done"}}])
+        code, out = self.main("--steps", "1")
+        self.assertNotIn("--resume", out)
+
     def test_a_session_whose_result_cannot_be_read_says_so(self):
         self.calls([{"out": "text"}])
         rows, reason, code = self.run_plan()
