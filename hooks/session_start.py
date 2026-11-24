@@ -608,7 +608,7 @@ def _choice(plan: str | None, plan_md: str | None, next_path: str | None, next_m
 
 
 def plan_lines(plan: str | None, plan_md: str | None,
-               layout: Layout = DEFAULT_LAYOUT, next_plan: str | None = None,
+               layout: Layout = DEFAULT_LAYOUT, next_path: str | None = None,
                next_md: str | None = None, archived: Sequence[PlanView] = ()) -> list[str]:
     if not plan:
         return [f"Plan: none found in {layout.status_file}."]
@@ -623,7 +623,7 @@ def plan_lines(plan: str | None, plan_md: str | None,
                         f"read {layout.status_file}."]
     claimed = started(order, states)
     number = next_open(order, states)
-    choice = _choice(plan, plan_md, next_plan, next_md, layout, archived)
+    choice = _choice(plan, plan_md, next_path, next_md, layout, archived)
     if choice is not None and choice.fallback:
         lines.append(f"Next open step in Order: {choice.number} {choice.title}, from the next plan "
                      f"{choice.plan} (no step of {plan} can start: {_why_text(choice.why)})")
@@ -634,7 +634,7 @@ def plan_lines(plan: str | None, plan_md: str | None,
         if choice.skipped:
             detail += "; next plan: " + "; ".join(choice.skipped)
         lines.append(f"Next open step in Order: none can start in {plan} or the next plan, "
-                     f"{next_plan} ({detail})")
+                     f"{next_path} ({detail})")
     elif number is not None:
         lines.append(f"Next open step in Order: {number} {states[number][0]}")
         if has_note(states[number][1]):

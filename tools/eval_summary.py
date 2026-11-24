@@ -50,9 +50,9 @@ class Tally:
             self.finished += 1
             if run.get("passed") is True:
                 self.passed += 1
-        value = run.get("score")
-        if isinstance(value, (int, float)) and not isinstance(value, bool):
-            self.score += value
+            value = run.get("score")
+            if isinstance(value, (int, float)) and not isinstance(value, bool):
+                self.score += value
 
 
 def summarise(data: dict):
@@ -94,7 +94,9 @@ def cell(n: int, m: int) -> str:
 
 
 def graders(t: Tally) -> str:
-    return f"{100 * t.score / t.runs:.1f}%"
+    if t.finished == 0:
+        return "none finished"
+    return f"{100 * t.score / t.finished:.1f}%"
 
 
 def cells_of(t: Tally) -> list[str]:

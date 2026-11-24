@@ -333,6 +333,10 @@ class TestAttributionCheck(_RepoCase):
         self.repo.commit("feat: x", {}, body="Co-Authored-By: Jane <jane@example.com>")
         self.assertEqual(self.problems(), [])
 
+    def test_a_human_anthropic_co_author_passes(self):
+        self.repo.commit("feat: x", {}, body="Co-Authored-By: Jane Doe <jane@anthropic.com>")
+        self.assertEqual(self.problems(), [])
+
     def test_a_message_that_only_quotes_the_phrase_passes(self):
         self.repo.commit("feat: x", {}, body="The old footer said Generated with Claude Code; this drops it.")
         self.assertEqual(self.problems(), [])

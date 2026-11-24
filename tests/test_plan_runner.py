@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -129,7 +130,16 @@ if spec.get("commit"):
 if spec.get("foreign"):
     with open(spec["foreign"], "w", encoding="utf-8") as handle:
         handle.write("left behind\n")
+if spec.get("child"):
+    subprocess.Popen([sys.executable, "-c", "import time; time.sleep(60)"], stdout=sys.stdout, stderr=sys.stderr,
+                     close_fds=False)
 time.sleep(spec.get("sleep", 0))
+if spec.get("crash"):
+    sys.stderr.write(spec["crash"]["stderr"])
+    record["end"] = time.time()
+    with open(log, "a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record) + "\n")
+    sys.exit(spec["crash"]["code"])
 if spec.get("out") == "text":
     print("this is not json")
 else:
@@ -215,10 +225,12 @@ class RunnerCase(unittest.TestCase):
             return []
         return [json.loads(line) for line in self.log.read_text(encoding="utf-8").splitlines()]
 
-    def run_plan(self, steps=5, dollars=None, flag=False, model=None, mode=None, ci=green, token=None):
+    def run_plan(self, steps=5, dollars=None, flag=False, model=None, mode=None, ci=green, token=None,
+                 session_seconds=None):
         said = []
+        extra = {} if session_seconds is None else {"session_seconds": session_seconds}
         rows, reason, code = plan_runner.run_plan(self.project, steps, dollars, flag, model, mode,
-                                                  self.claude, ci=ci, token=token, say=said.append)
+                                                  self.claude, ci=ci, token=token, say=said.append, **extra)
         return rows, reason, code
 
     def main(self, *args, ci=green):
@@ -276,6 +288,20 @@ class TestRunsSteps(RunnerCase):
         rows, reason, code = self.run_plan(dollars=1.0)
         budgets = [record["argv"][record["argv"].index("--max-budget-usd") + 1] for record in self.records()]
         self.assertEqual(budgets, ["1.00", "0.40"])
+        self.assertEqual((reason, code), ("the dollar limit ($1.00) is reached: $1.00 spent", 0))
+
+    def test_the_budget_passed_is_rounded_to_cents(self):
+        self.calls([{"row": {"1": "done"}, "cost": 0.7}, {"row": {"2": "done"}, "cost": 0.2},
+                    {"row": {"3": "done"}, "cost": 0.25}])
+        self.run_plan(dollars=1.0)
+        budgets = [record["argv"][record["argv"].index("--max-budget-usd") + 1] for record in self.records()]
+        self.assertEqual(budgets, ["1.00", "0.30", "0.10"])
+
+    def test_less_than_a_cent_left_counts_as_the_limit(self):
+        self.calls([{"row": {"1": "done"}, "cost": 0.6}, {"row": {"2": "done"}, "cost": 0.396},
+                    {"row": {"3": "done"}}])
+        rows, reason, code = self.run_plan(dollars=1.0)
+        self.assertEqual(len(self.records()), 2)
         self.assertEqual((reason, code), ("the dollar limit ($1.00) is reached: $1.00 spent", 0))
 
     def test_an_unread_cost_says_cost_not_read_and_stops_a_dollar_limited_run(self):
@@ -397,6 +423,38 @@ class TestStops(RunnerCase):
         self.calls([{"out": "text"}])
         rows, reason, code = self.run_plan()
         self.assertEqual((reason, code), ("step 1 ended `—`, not done; the session's result could not be read", 1))
+
+    def hung_session(self, **spec):
+        claim = "in progress (2026-11-24 10:00)"
+        self.calls([{"row": {"1": claim}, "sleep": 60, **spec}])
+        started = time.time()
+        rows, reason, code = self.run_plan(session_seconds=2)
+        self.assertLess(time.time() - started, 30)
+        self.assertEqual((reason, code),
+                         ("step 1's session ran past the session timeout (2 seconds) and was ended; "
+                          "its row was left as it was", 1))
+        self.assertEqual((rows[0].outcome, rows[0].cost), ("stopped", None))
+        self.assertEqual(plan_runner.row_state(self.project, PLAN, 1), claim)
+
+    def test_a_hung_session_ends_the_run_at_the_timeout(self):
+        self.hung_session()
+
+    def test_a_hung_session_with_a_child_holding_its_output_is_ended_too(self):
+        self.hung_session(child=True)
+
+    def test_a_crashed_session_gives_its_exit_and_error_line(self):
+        stderr = "C:\\x\\cli.js:1\nTypeError: boom\n    at main (cli.js:1)\n"
+        self.calls([{"crash": {"code": 3, "stderr": stderr}}])
+        rows, reason, code = self.run_plan()
+        self.assertEqual((reason, code),
+                         ("step 1 ended `—`, not done; the session's result could not be read "
+                          "(exit 3: TypeError: boom)", 1))
+        self.assertEqual(plan_runner.crash_text(3, ""), "exit 3")
+        self.assertIsNone(plan_runner.crash_text(0, "TypeError: boom"))
+        self.assertEqual(plan_runner.crash_text(1, "first\nlast line\n"), "exit 1: last line")
+        cut = plan_runner.crash_text(1, "Error: " + "x" * 300)
+        self.assertEqual(len(cut), len("exit 1: ") + plan_runner.CRASH_TEXT)
+        self.assertTrue(cut.endswith("..."))
 
     def test_red_or_unread_ci_stops_the_run(self):
         for conclusion in ("CI failure", "unread (gh unavailable)", "missing (no run)"):

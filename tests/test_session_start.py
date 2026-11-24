@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import inspect
 import json
 import os
 import shutil
@@ -118,6 +119,9 @@ class TestPlanReading(unittest.TestCase):
         plan = "## Order\n\n1. 1, then 2.\n\n## Status\n\n| 1 A | done |\n| 9 C | — |\n| 2 B | done |\n"
         order = session_start.step_order(plan)
         self.assertEqual(session_start.next_open(order, session_start.step_states(plan)), 9)
+
+    def test_plan_lines_does_not_shadow_next_plan(self):
+        self.assertNotIn("next_plan", inspect.signature(session_start.plan_lines).parameters)
 
     def test_plan_lines(self):
         lines = session_start.plan_lines("docs/plans/release-2.4.0.md", PLAN)
@@ -542,6 +546,14 @@ class TestNextStep(unittest.TestCase):
         self.assertEqual(session_start.step_field(session_start.step_sections(NEXT)[3], "Needs"),
                          "v0.3.0-1.")
 
+    def test_a_conditional_need_still_waits(self):
+        self.assertEqual(session_start.needs("44 (room in add-feature, if it changes), 46."), ([44, 46], [], False))
+        old = "### 2 — Median\n\n**Files:** `tally/core.py`, `tests/test_core.py`, `docs/BEHAVIOUR.md`.\n**Needs** nothing."
+        self.assertIn(old, CURRENT)
+        plan = CURRENT.replace(old, old.replace("nothing.", "1 (room in add-feature, if it changes)."))
+        self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 2, None), ["needs 1"])
+        self.assertEqual(session_start.blockers(view(CURRENT_PATH, with_states(plan, {1: "done"})), 2, None), [])
+
     def test_a_gate_blocks_until_cleared(self):
         self.assertEqual(session_start.step_field(session_start.step_sections(CURRENT)[4], "Gate"), GATE)
         self.assertEqual(session_start.blockers(view(CURRENT_PATH, CURRENT), 4, None),
@@ -889,6 +901,15 @@ class TestMain(unittest.TestCase):
         self.assertIn("Branch: ", out)
         self.assertNotIn("Branch: unknown", out)
         self.assertIn("This session runs on opus;", out)
+
+    def test_an_unknown_argument_prints_the_usage_and_exits_2(self):
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        for args in (["--bogus"], ["--next-step", "extra"]):
+            result = self.run_in(self.project, *args)
+            self.assertEqual(result.returncode, 2, args)
+            self.assertEqual(result.stdout, "", args)
+            self.assertIn("usage: session_start.py [--next-step]", result.stderr, args)
 
     def run_next_step(self) -> subprocess.CompletedProcess:
         env = dict(os.environ)

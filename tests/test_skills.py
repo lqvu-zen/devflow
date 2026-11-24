@@ -15,6 +15,7 @@ CUT = 20_000
 MARGIN = 1_000
 CEILING = CUT - MARGIN
 ADD_FEATURE_ROOM = 500
+MANAGE_PROJECT_ROOM = 500
 STOP_RULES = "**Stop rules in the loop.**"
 ADD_FEATURE = SKILLS / "add-feature" / "SKILL.md"
 FIX_BUG = SKILLS / "fix-bug" / "SKILL.md"
@@ -137,6 +138,9 @@ class TestSkillSize(unittest.TestCase):
 
     def test_add_feature_keeps_room_to_grow(self):
         self.assertLessEqual(_length(_reattached_text(ADD_FEATURE)), CEILING - ADD_FEATURE_ROOM)
+
+    def test_manage_project_keeps_room_to_grow(self):
+        self.assertLessEqual(_length(_reattached_text(MANAGE_PROJECT)), CEILING - MANAGE_PROJECT_ROOM)
 
     def test_a_skill_at_the_ceiling_is_named(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -1123,14 +1127,18 @@ class TestPlanFormat(unittest.TestCase):
     def test_the_cold_read_returns_the_groups_and_the_reply_pastes_them(self):
         section = _section(MANAGE_PROJECT, "## When to call the planner agent")
         brief = _paragraph(MANAGE_PROJECT, "The brief gives the draft and the planner's open questions").split('*"', 1)[-1].split('"*', 1)[0]
-        for words in ("the planner's questions", "**the maintainer's**, most costly first", "**answered**", "**minor**", "each with no suggested answer", "nothing important left"):
+        for words in ("the planner's questions", "**the maintainer's**, most costly first", "**answered**", "**minor**", "each with no suggested answer", "nothing important left", "**minor** (any guess will do: the designer's)", "only when neither the planner nor you has one, exactly 'nothing important left'"):
             with self.subTest(words=words):
                 self.assertIn(words, brief)
         reply = _paragraph(MANAGE_PROJECT, "**Bring the open questions to the maintainer**")
-        for words in ("as returned", "**For you**", "ranked as it ranked them", "**Settled without you**"):
+        for words in ("as returned", "**For you**", "ranked as it ranked them", "**Settled without you**", "then the planner's **Lint findings**"):
             with self.subTest(words=words):
                 self.assertIn(words, reply)
         self.assertNotIn("you sort every returned question yourself", section)
+
+    def test_a_renamed_plan_keeps_its_was_note(self):
+        text = _reattached_text(MANAGE_PROJECT)
+        self.assertIn("When you rename a plan, keep ``(was `<old file name>`)`` in its status file row, so `<old name>-N` Needs still find it.", text)
 
     def test_a_new_step_gets_interfaces_and_review_focus(self):
         section = _section(MANAGE_PROJECT, "## Adding a plan step")
@@ -1173,6 +1181,10 @@ class TestSessionDiagnosis(unittest.TestCase):
             with self.subTest(words=words):
                 self.assertIn(words, section)
         self.assertNotIn("**Report** the likeliest cause, then", section)
+
+    def test_a_time_or_branch_is_matched_against_the_extract_header_lines(self):
+        section = _section(MANAGE_PROJECT, "## Diagnosing one session")
+        self.assertIn("match each file's `session:`, `branch:` and `time:` lines", section)
 
     def test_citations_carry_the_whole_session_id(self):
         section = _section(MANAGE_PROJECT, "## Diagnosing one session")

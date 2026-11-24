@@ -90,25 +90,36 @@ class TestSummary(unittest.TestCase):
         a = by_label["case-a"]
         self.assertEqual((a.runs, a.finished, a.passed, a.score), (3, 2, 1, 1.5))
         b = by_label["case-b"]
-        self.assertEqual((b.runs, b.finished, b.passed, b.score), (3, 1, 1, 2.0))
-        self.assertEqual((total.runs, total.finished, total.passed, total.score), (6, 3, 2, 3.5))
+        self.assertEqual((b.runs, b.finished, b.passed, b.score), (3, 1, 1, 1.0))
+        self.assertEqual((total.runs, total.finished, total.passed, total.score), (6, 3, 2, 2.5))
 
     def test_table_rows(self):
         data = fixture()
         a = self.line_for(data, "case-a")
-        for text in ("2 of 3 66.7%", "1 of 3 33.3%", "50.0%"):
+        for text in ("2 of 3 66.7%", "1 of 3 33.3%", "75.0%"):
             self.assertIn(text, a)
         b = self.line_for(data, "case-b")
-        for text in ("1 of 3 33.3%", "66.7%"):
+        for text in ("1 of 3 33.3%", "100.0%"):
             self.assertIn(text, b)
         total = self.line_for(data, "total")
-        for text in ("3 of 6 50.0%", "2 of 6 33.3%", "58.3%"):
+        for text in ("3 of 6 50.0%", "2 of 6 33.3%", "83.3%"):
             self.assertIn(text, total)
 
     def test_error_with_score_one_is_neither_finished_nor_passed(self):
         data = result([case("solo", [run(True, 1, "exit 1: boom")])])
         line = self.line_for(data, "solo")
         self.assertEqual(line.count("0 of 1 0.0%"), 2)
+        self.assertTrue(line.endswith("none finished"))
+
+    def test_graders_are_the_mean_of_the_finished_runs(self):
+        data = result([case("mix", [run(True, 1), run(False, 0.5), run(True, 1, LIMIT_A)])])
+        self.assertTrue(self.line_for(data, "mix").endswith("75.0%"))
+        self.assertTrue(self.line_for(data, "total").endswith("75.0%"))
+
+    def test_graders_say_none_finished_when_every_run_errored(self):
+        data = result([case("down", [run(True, 1, LIMIT_A), run(False, 0, LIMIT_B)])])
+        self.assertTrue(self.line_for(data, "down").endswith("none finished"))
+        self.assertTrue(self.line_for(data, "total").endswith("none finished"))
 
     def test_case_with_no_runs(self):
         data = fixture()

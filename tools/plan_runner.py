@@ -8,6 +8,7 @@ import os
 import re
 import secrets
 import shutil
+import signal
 import subprocess
 import sys
 from pathlib import Path
@@ -38,6 +39,10 @@ LIMIT_TEXT = 120
 COST_NOT_READ = "cost not read"
 GIT_SECONDS = 30
 CI_SECONDS = 60
+SESSION_SECONDS = 4 * 3600
+KILL_SECONDS = 30
+CRASH_TEXT = LIMIT_TEXT
+CRASH_LINE = re.compile(r"error|exception|fatal", re.I)
 
 
 def _load(name: str, path: Path):
@@ -79,6 +84,8 @@ class SessionResult(NamedTuple):
     raw_ok: bool
     subtype: str | None = None
     limit: str | None = None
+    timed_out: float | None = None
+    crash: str | None = None
 
 
 class StepRow(NamedTuple):
@@ -249,11 +256,24 @@ def limit_message(text: object) -> str | None:
     return None
 
 
+def crash_text(returncode: int, errors: str) -> str | None:
+    if returncode == 0:
+        return None
+    text = f"exit {returncode}"
+    lines = [" ".join(line.split()) for line in (errors or "").splitlines() if line.strip()]
+    if not lines:
+        return text
+    line = next((line for line in lines if CRASH_LINE.search(line)), lines[-1])
+    if len(line) > CRASH_TEXT:
+        line = line[:CRASH_TEXT - 3] + "..."
+    return f"{text}: {line}"
+
+
 def read_result(text: str, returncode: int, errors: str = "") -> SessionResult:
     data = _last_object(text)
     if data is None:
         found = limit_message(errors) if returncode != 0 else None
-        return SessionResult(None, None, [], True, False, None, found)
+        return SessionResult(None, None, [], True, False, None, found, None, crash_text(returncode, errors))
     cost = data.get("total_cost_usd")
     if isinstance(cost, bool) or not isinstance(cost, (int, float)):
         cost = None
@@ -276,18 +296,49 @@ def read_result(text: str, returncode: int, errors: str = "") -> SessionResult:
                          subtype if isinstance(subtype, str) and subtype else None, found)
 
 
-def run_session(argv: list[str], project: Path, env: dict) -> SessionResult:
+def kill_tree(process) -> None:
+    if os.name == "nt":
+        try:
+            subprocess.run(["taskkill", "/F", "/T", "/PID", str(process.pid)], capture_output=True,
+                           stdin=subprocess.DEVNULL, timeout=GIT_SECONDS)
+        except (OSError, subprocess.SubprocessError):
+            pass
+    else:
+        try:
+            os.killpg(process.pid, signal.SIGKILL)
+        except OSError:
+            pass
     try:
-        result = subprocess.run(argv, cwd=str(project), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
-                                env=env)
+        process.kill()
     except OSError:
-        return SessionResult(None, None, [], True, False)
-    errors = result.stderr or ""
+        pass
+
+
+def run_session(argv: list[str], project: Path, env: dict, seconds: float = SESSION_SECONDS) -> SessionResult:
+    options = {} if os.name == "nt" else {"start_new_session": True}
+    try:
+        process = subprocess.Popen(argv, cwd=str(project), stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
+                                   stderr=subprocess.PIPE, text=True, encoding="utf-8", errors="replace",
+                                   env=env, **options)
+    except OSError as error:
+        return SessionResult(None, None, [], True, False, crash=f"could not start: {error}")
+    try:
+        output, errors = process.communicate(timeout=seconds)
+    except subprocess.TimeoutExpired:
+        kill_tree(process)
+        try:
+            process.communicate(timeout=KILL_SECONDS)
+        except (subprocess.SubprocessError, OSError, ValueError):
+            pass
+        return SessionResult(None, None, [], True, False, timed_out=seconds)
+    except KeyboardInterrupt:
+        kill_tree(process)
+        raise
+    errors = errors or ""
     if errors:
         sys.stderr.write(errors)
         sys.stderr.flush()
-    return read_result(result.stdout or "", result.returncode, errors)
+    return read_result(output or "", process.returncode, errors)
 
 
 def row_state(root: Path, plan: str, number: int) -> str | None:
@@ -356,11 +407,35 @@ def ci_conclusion(project: Path, head: str) -> str:
 
 def session_trouble(result: SessionResult) -> str:
     if not result.raw_ok:
-        return "; the session's result could not be read"
+        return "; the session's result could not be read" + (f" ({result.crash})" if result.crash else "")
     if result.is_error:
         ended = result.subtype if result.subtype and result.subtype != "success" else "an error"
         return f"; the session ended with {ended}"
     return ""
+
+
+def _foreign_clause(project: Path, layout) -> str:
+    foreign = foreign_changes(project, layout)
+    if foreign:
+        return ("; it left changes beyond the status and plan files: " + ", ".join(foreign)
+                + " (the next run refuses until they are dealt with)")
+    return ""
+
+
+def _duration(seconds: float) -> str:
+    total = int(round(seconds))
+    if total >= 3600 and total % 3600 == 0:
+        count, unit = total // 3600, "hour"
+    elif total >= 60 and total % 60 == 0:
+        count, unit = total // 60, "minute"
+    else:
+        count, unit = total, "second"
+    return f"{count} {unit}" + ("" if count == 1 else "s")
+
+
+def timeout_stop(project: Path, layout, number: int, seconds: float) -> str:
+    return (f"step {number}'s session ran past the session timeout ({_duration(seconds)}) and was ended; "
+            "its row was left as it was" + _foreign_clause(project, layout))
 
 
 def limit_stop(project: Path, root: Path, layout, plan: str, number: int, message: str) -> str:
@@ -376,11 +451,7 @@ def limit_stop(project: Path, root: Path, layout, plan: str, number: int, messag
             why = f"{head}; its row could not be marked: set it to stopped by hand"
     else:
         why = f"{head}; its row was left as it was"
-    foreign = foreign_changes(project, layout)
-    if foreign:
-        why += ("; it left changes beyond the status and plan files: " + ", ".join(foreign)
-                + " (the next run refuses until they are dealt with)")
-    return why
+    return why + _foreign_clause(project, layout)
 
 
 def step_outcome(project: Path, root: Path, layout, plan: str, number: int, result: SessionResult,
@@ -388,6 +459,8 @@ def step_outcome(project: Path, root: Path, layout, plan: str, number: int, resu
     session_start = _session_start()
     if result.limit:
         return "stopped", limit_stop(project, root, layout, plan, number, result.limit)
+    if result.timed_out is not None:
+        return "stopped", timeout_stop(project, layout, number, result.timed_out)
     if result.denials:
         return "stopped", "the session met permission asks it could not answer: " + ", ".join(result.denials)
     state = row_state(root, plan, number)
@@ -447,7 +520,8 @@ def say_now(line: str) -> None:
 def run_plan(project: Path, steps: int | None, dollars: float | None, commit_flag: bool, model: str | None,
              mode: str | None, claude: object, ci: Callable[[Path, str], str] = ci_conclusion,
              token: str | None = None, rows: list | None = None,
-             say: Callable[[str], None] = None) -> tuple[list[StepRow], str, int]:
+             say: Callable[[str], None] = None,
+             session_seconds: float = SESSION_SECONDS) -> tuple[list[StepRow], str, int]:
     session_start = _session_start()
     say = say or say_now
     rows = [] if rows is None else rows
@@ -469,13 +543,15 @@ def run_plan(project: Path, steps: int | None, dollars: float | None, commit_fla
             if any(row.cost is None for row in rows):
                 return rows, "a session's cost was not read, so the dollar limit can't be kept", 1
             spent = spent_of(rows)
-            if spent >= dollars:
+            left = dollars - spent
+            if spent >= dollars or _money(left) == "0.00":
                 return rows, f"the dollar limit (${_money(dollars)}) is reached: ${_money(spent)} spent", 0
-            budget = dollars - spent
+            budget = left
         before = head_of(project)
         say(f"Running step {step.number} {step.title} ({step.plan}) with {step.run}...")
         argv = claude_argv(claude, model, budget, mode)
-        result = run_session(argv, project, session_env(project, token if commit_flag else None))
+        result = run_session(argv, project, session_env(project, token if commit_flag else None),
+                             session_seconds)
         outcome, why = step_outcome(project, found.root, layout, step.plan, step.number, result, ci)
         row = StepRow(step.plan, step.number, step.title, outcome, why, commits_since(project, before),
                       result.cost, result.session_id)

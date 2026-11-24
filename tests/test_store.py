@@ -188,5 +188,48 @@ class TestHookGate(unittest.TestCase):
         self.assertNotIn("$(", guard.split(GATE_TEST)[0])
 
 
+@unittest.skipUnless(shutil.which("sh"), "needs sh")
+class TestHookGateShell(StoreCase):
+    def commands(self):
+        hooks = json.loads((ROOT / "hooks" / "hooks.json").read_text(encoding="utf-8"))["hooks"]
+        return [
+            hooks["PreToolUse"][0]["hooks"][0]["command"],
+            hooks["SessionStart"][0]["hooks"][0]["command"],
+        ]
+
+    def run_gate(self, project: Path) -> list[str]:
+        outputs = []
+        for command in self.commands():
+            gate = command.split(GATE_TEST)[0] + GATE_TEST + " echo gated; fi"
+            env = dict(os.environ, CLAUDE_PROJECT_DIR=str(project))
+            done = subprocess.run(["sh", "-c", gate], capture_output=True, text=True, env=env)
+            outputs.append(done.stdout.strip())
+        return outputs
+
+    def test_the_gate_reads_a_crlf_gitdir_and_commondir(self):
+        wt = self.base / "wt"
+        admin = self.main / ".git" / "worktrees" / "wt"
+        admin.mkdir(parents=True)
+        (admin / "commondir").write_bytes(b"../..\r\n")
+        wt.mkdir()
+        (wt / ".git").write_bytes(b"gitdir: " + admin.as_posix().encode() + b"\r\n")
+        pointer = self.main / ".git" / "devflow-store"
+        pointer.write_bytes(self.store.as_posix().encode() + b"\r\n")
+        self.assertEqual(self.run_gate(wt), ["gated", "gated"])
+        pointer.unlink()
+        self.assertEqual(self.run_gate(wt), ["", ""])
+
+    def test_the_gate_reads_a_relative_gitdir(self):
+        admin = self.main / ".git" / "worktrees" / "rel"
+        admin.mkdir(parents=True)
+        (admin / "commondir").write_bytes(b"../..\n")
+        (self.main / ".git" / "devflow-store").write_bytes(self.store.as_posix().encode() + b"\n")
+        wt = self.base / "rel"
+        wt.mkdir()
+        for ending in (b"\n", b"\r\n"):
+            (wt / ".git").write_bytes(b"gitdir: ../main/.git/worktrees/rel" + ending)
+            self.assertEqual(self.run_gate(wt), ["gated", "gated"])
+
+
 if __name__ == "__main__":
     unittest.main()
