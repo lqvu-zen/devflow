@@ -339,8 +339,18 @@ def changed_paths(repo: str | Path, commit: str,
     return result
 
 
+def skill_path(repo: str | Path, skill: str) -> str:
+    root = f"skills/{skill}/SKILL.md"
+    if (Path(repo) / root).is_file():
+        return root
+    found = sorted((Path(repo) / "plugins").glob(f"*/skills/{skill}/SKILL.md"))
+    if found:
+        return found[0].relative_to(repo).as_posix()
+    return root
+
+
 def frontmatter_changed(repo: str | Path, commit: str, skill: str) -> bool:
-    relative = f"skills/{skill}/SKILL.md"
+    relative = skill_path(repo, skill)
     path = Path(repo) / relative
     if not path.is_file():
         return True
@@ -364,7 +374,7 @@ def reason_for(repo: str | Path, case: Case, record: dict | None, depends: dict,
             return f"{path} since {commit[:7]}"
     for skill in case_skill_frontmatters(case):
         if frontmatter_changed(repo, commit, skill):
-            return f"skills/{skill}/SKILL.md front matter since {commit[:7]}"
+            return f"{skill_path(repo, skill)} front matter since {commit[:7]}"
     if release and case.suite == "trigger":
         return "release"
     return None
@@ -484,7 +494,7 @@ def record(repo: str | Path, result_paths: list[str | Path]
                 continue
             moved = next((path for path in sorted(dirty) if reaches(case, path, depends)), None)
             if moved is None:
-                moved = next((f"skills/{skill}/SKILL.md front matter"
+                moved = next((f"{skill_path(repo, skill)} front matter"
                               for skill in case_skill_frontmatters(case)
                               if frontmatter_changed(repo, head, skill)), None)
             if moved:

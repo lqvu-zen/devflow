@@ -86,6 +86,41 @@ MANAGER_PLAN_EDIT_RULE = (
 LF_ONLY = re.compile(rb"(?<!\r)\n")
 
 
+def _plugin_dirs(root: Path) -> list[Path]:
+    plugins = root / "plugins"
+    if not plugins.is_dir():
+        return []
+    return sorted(path for path in plugins.iterdir() if path.is_dir())
+
+
+def _skill_roots(root: Path = ROOT) -> list[Path]:
+    roots = [root / "skills"]
+    roots += [plugin / "skills" for plugin in _plugin_dirs(root) if (plugin / "skills").is_dir()]
+    return roots
+
+
+def _skill_mds(root: Path = ROOT) -> list[Path]:
+    found: list[Path] = []
+    for skills_dir in _skill_roots(root):
+        found += sorted(skills_dir.glob("*/SKILL.md"))
+    return found
+
+
+def _agent_files(root: Path = ROOT) -> list[Path]:
+    found = sorted((root / "agents").glob("*.md"))
+    for plugin in _plugin_dirs(root):
+        found += sorted((plugin / "agents").glob("*.md"))
+    return found
+
+
+def _across_roots(check, root: Path = ROOT) -> list[str]:
+    errors: list[str] = []
+    for skills_dir in _skill_roots(root):
+        prefix = skills_dir.relative_to(root).as_posix() + "/"
+        errors += [prefix + message for message in check(skills_dir)]
+    return sorted(errors)
+
+
 def _reattached_text(path: Path) -> str:
     with path.open(encoding="utf-8", newline="") as handle:
         lines = handle.read().splitlines(keepends=True)
@@ -133,8 +168,8 @@ def _subsection(path: Path, prefix: str) -> str:
 
 class TestSkillSize(unittest.TestCase):
     def test_every_skill_is_under_the_ceiling(self):
-        self.assertTrue(list(SKILLS.glob("*/SKILL.md")))
-        self.assertEqual(_too_long(SKILLS), [])
+        self.assertTrue(_skill_mds())
+        self.assertEqual(_across_roots(_too_long), [])
 
     def test_add_feature_keeps_room_to_grow(self):
         self.assertLessEqual(_length(_reattached_text(ADD_FEATURE)), CEILING - ADD_FEATURE_ROOM)
@@ -155,6 +190,75 @@ class TestSkillSize(unittest.TestCase):
             found = _too_long(skills)
         self.assertEqual(len(found), 1)
         self.assertTrue(found[0].startswith("big:"), found)
+
+
+class TestPluginSkillRoots(unittest.TestCase):
+    def _root(self, temp: str) -> Path:
+        root = Path(temp)
+        valid = "d" * 300
+        _skill(root / "skills", "ok", f"name: ok\r\ndescription: {valid}\r\n")
+        return root
+
+    def test_a_bad_plugin_skill_fails_the_front_matter_lint(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            _skill(root / "plugins" / "x" / "skills", "y", "name: other\r\ndescription: " + "d" * 300 + "\r\n")
+            found = _across_roots(_front_matter_errors, root)
+        self.assertEqual(found, ["plugins/x/skills/y: name is 'other', not the folder name"])
+
+    def test_a_plugin_skill_over_the_ceiling_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            _write(
+                root / "plugins" / "x" / "skills" / "big" / "SKILL.md",
+                "---\r\nname: big\r\n---\r\n" + "x" * (CEILING - 2) + "\r\n",
+            )
+            found = _across_roots(_too_long, root)
+        self.assertEqual(len(found), 1)
+        self.assertTrue(found[0].startswith("plugins/x/skills/big:"), found)
+
+    def test_a_plugin_skill_citing_a_missing_heading_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            plugin_skills = root / "plugins" / "x" / "skills"
+            _skill(plugin_skills, "y", "name: y\r\n", "Paste the **Ship it** section.\r\n")
+            found = _across_roots(lambda directory: _citation_errors(directory, TEMPLATES), root)
+        self.assertEqual(found, ["plugins/x/skills/y: cites the 'Ship it' section, which no template has"])
+
+    def test_forbidden_content_in_a_plugin_skill_is_named_and_its_vendor_is_skipped(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            plugin_skills = root / "plugins" / "x" / "skills"
+            _write(plugin_skills / "y" / "SKILL.md", "Use $ARGUMENTS here.\r\n")
+            _write(plugin_skills / "y" / "vendor" / "test-x.md", "$1\r\n")
+            found = _across_roots(_forbidden_content, root)
+        self.assertEqual(found, ["plugins/x/skills/y/SKILL.md:1: $ARGUMENTS is an argument token"])
+
+    def test_an_lf_file_in_a_plugin_skill_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            plugin_skills = root / "plugins" / "x" / "skills"
+            _write(plugin_skills / "y" / "SKILL.md", "a\nb\n")
+            _write(plugin_skills / "y" / "vendor" / "x.md", "a\n")
+            found = _across_roots(_lf_files, root)
+        self.assertEqual(found, ["plugins/x/skills/y/SKILL.md: LF line endings"])
+
+    def test_plugin_skills_and_agents_are_found(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            _skill(root / "plugins" / "x" / "skills", "y", "name: y\r\n")
+            _write(root / "agents" / "a.md", "a\r\n")
+            _write(root / "plugins" / "x" / "agents" / "b.md", "b\r\n")
+            skills = [path.relative_to(root).as_posix() for path in _skill_mds(root)]
+            agents = [path.relative_to(root).as_posix() for path in _agent_files(root)]
+        self.assertEqual(skills, ["skills/ok/SKILL.md", "plugins/x/skills/y/SKILL.md"])
+        self.assertEqual(agents, ["agents/a.md", "plugins/x/agents/b.md"])
+
+    def test_no_plugins_folder_means_the_root_only(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = self._root(temp)
+            self.assertEqual(_skill_roots(root), [root / "skills"])
+            self.assertEqual(_agent_files(root), [])
 
 
 class TestStopRules(unittest.TestCase):
@@ -484,8 +588,8 @@ def _section_of(path: Path, lead_in: str) -> str | None:
 
 class TestFrontMatter(unittest.TestCase):
     def test_every_skill_has_a_name_and_a_description(self):
-        self.assertTrue(list(SKILLS.glob("*/SKILL.md")))
-        self.assertEqual(_front_matter_errors(SKILLS), [])
+        self.assertTrue(_skill_mds())
+        self.assertEqual(_across_roots(_front_matter_errors), [])
 
     def test_a_broken_front_matter_is_named(self):
         valid = "d" * 300
@@ -553,11 +657,11 @@ class TestFrontMatter(unittest.TestCase):
 
 class TestProfileHeadings(unittest.TestCase):
     def test_every_cited_heading_is_in_the_template(self):
-        self.assertEqual(_citation_errors(SKILLS, TEMPLATES), [])
+        self.assertEqual(_across_roots(lambda directory: _citation_errors(directory, TEMPLATES)), [])
 
     def test_the_skills_cite_every_template_heading(self):
         cited: set[str] = set()
-        for path in SKILLS.glob("*/SKILL.md"):
+        for path in _skill_mds():
             profile_cited, section_only = _profile_citations(path)
             cited |= profile_cited | section_only
         self.assertEqual(set(_profile_sections(TEMPLATES)) - cited, set())
@@ -623,8 +727,8 @@ class TestProfileHeadings(unittest.TestCase):
 
 class TestSkillFiles(unittest.TestCase):
     def test_no_skill_has_argument_tokens_plugin_cd_or_dev_files(self):
-        self.assertTrue(_skill_files(SKILLS))
-        self.assertEqual(_forbidden_content(SKILLS), [])
+        self.assertTrue(any(_skill_files(directory) for directory in _skill_roots()))
+        self.assertEqual(_across_roots(_forbidden_content), [])
 
     def test_forbidden_content_is_named_and_vendor_is_skipped(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -670,7 +774,7 @@ class TestSkillFiles(unittest.TestCase):
         )
 
     def test_every_skill_file_has_crlf_endings(self):
-        self.assertEqual(_lf_files(SKILLS), [])
+        self.assertEqual(_across_roots(_lf_files), [])
 
     def test_an_lf_file_is_named(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -716,7 +820,7 @@ class TestSkillFiles(unittest.TestCase):
 
 class TestCrossSkillCitations(unittest.TestCase):
     def test_every_cited_heading_of_another_skill_exists(self):
-        self.assertEqual(_cross_citation_errors(SKILLS), [])
+        self.assertEqual(_across_roots(_cross_citation_errors), [])
 
     def test_a_missing_heading_of_another_skill_is_named(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -808,8 +912,8 @@ def _section(path: Path, heading: str) -> str:
 
 
 def _high_designer_lines() -> list[str]:
-    paths = sorted(SKILLS.glob("*/SKILL.md")) + [ROOT / "README.md", ROOT / "CLAUDE.md"]
-    paths += sorted((ROOT / "agents").glob("*.md"))
+    paths = _skill_mds() + [ROOT / "README.md", ROOT / "CLAUDE.md"]
+    paths += _agent_files()
     found = []
     for path in paths:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
@@ -823,7 +927,7 @@ ABOVE_THE_CAP = re.compile(r"\bhigh effort\b|\bat high\b|\bopus, high\b|\(high\b
 
 
 def _above_the_cap_lines() -> list[str]:
-    paths = sorted(SKILLS.glob("*/SKILL.md")) + sorted((ROOT / "agents").glob("*.md"))
+    paths = _skill_mds() + _agent_files()
     paths += [ROOT / "README.md", ROOT / "CLAUDE.md", ROOT / ".claude" / "devflow.md"]
     paths += sorted((ROOT / "templates").glob("*.md")) + [ROOT / "docs" / "BEHAVIOUR.md"]
     found = []
@@ -853,7 +957,7 @@ class TestModelRules(unittest.TestCase):
         self.assertIn("report", BOARD_RULE)
 
     def test_the_old_pin_only_rule_is_gone(self):
-        for path in sorted(SKILLS.glob("*/SKILL.md")):
+        for path in _skill_mds():
             with self.subTest(path.parent.name):
                 self.assertNotIn(OLD_MODEL_RULE, path.read_text(encoding="utf-8"))
         for path in (ROOT / "CLAUDE.md", ROOT / ".claude" / "devflow.md"):
@@ -923,7 +1027,7 @@ class TestAttributionRule(unittest.TestCase):
                 self.assertEqual(path.read_text(encoding="utf-8").count(ATTRIBUTION_RULE), 1)
 
     def test_no_skill_keeps_the_old_wording(self):
-        for path in SKILLS.glob("*/SKILL.md"):
+        for path in _skill_mds():
             text = path.read_text(encoding="utf-8")
             for old in OLD_ATTRIBUTION_RULES:
                 with self.subTest(skill=path.parent.name, old=old):

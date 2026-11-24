@@ -19,6 +19,7 @@
 - Skills: `add-feature` and `fix-bug` now wait for the maintainer's yes before the code commit. After the review they show the changed files, the diff stat and the reviewer's verdict and suggestions, mark the step's Status row as waiting, and commit only on a yes in that session; changes asked for go back through the implementer and the reviewer. Only the maintainer's own words naming the commit ("commit without asking me") skip the wait; a continue prompt, `/devflow:next-step`, a plan step or an earlier approval never does. The claim, Status-row and Tried commits and `release`'s version commits are unchanged. Eval: `add-feature/waits-for-review-before-commit` (the three-run WSL pass is still to be recorded).
 - CI check: `attribution` no longer fails a message that only quotes "Generated with Claude Code" or a `Jean-Claude` co-author. It fails a line that starts with the footer (the robot emoji or "Generated with") and a `Co-Authored-By:` line naming Claude as a word or `noreply@anthropic.com`; a human co-author at anthropic.com now passes. Copy `tools/devflow_checks.py` into your project again to get it (README, How a project plugs in).
 - Evals: `tools/eval_select.py select` lists the `add-feature` and `fix-bug` cases after a change to `tools/plan_runner.py`.
+- Evals: `tools/eval_select.py` finds a skill under `plugins/<name>/skills/` as well as `skills/`; a case for such a skill loads its plugin through its `plugins:` front matter.
 
 ## 0.3.0
 

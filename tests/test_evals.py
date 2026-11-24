@@ -391,6 +391,59 @@ class _SelectRepo(unittest.TestCase):
 
 
 class TestSelect(_SelectRepo):
+    def _plugin_files(self) -> dict[str, str]:
+        depends = depends_for_tests()
+        depends["skills"]["y"] = ["plugins/x/skills/y/"]
+        return {
+            "plugins/x/.claude-plugin/plugin.json": '{"name": "x"}\n',
+            "plugins/x/skills/y/SKILL.md": skill_file("y", "yes", "body one"),
+            "evals/depends.json": json.dumps(depends),
+            "evals/cases/trigger/y-1-fires/prompt.md":
+                "---\nname: trigger-y-1-fires\ntags: [trigger]\nruns: 1\nplugins: [., plugins/x]\n---\n\nDo it.\n",
+            "evals/cases/trigger/y-1-fires/graders/a.md": grader("type: llm"),
+            "evals/cases/y/plain/prompt.md":
+                "---\nname: y-plain\ntags: [behaviour]\nruns: 1\nplugins: [., plugins/x]\n---\n\nDo it.\n",
+            "evals/cases/y/plain/graders/a.md": grader("type: llm"),
+        }
+
+    def _record_plugin_cases(self) -> None:
+        recorded = self.repo.commit("Plugin", self._plugin_files())
+        passes = {name: self.c1 for name in BEHAVIOUR + [
+            "trigger-release-1-fires", "trigger-add-feature-5-near-miss"]}
+        passes.update({"trigger-y-1-fires": recorded, "y-plain": recorded})
+        self.write_passes(passes)
+
+    def test_skill_path_prefers_the_root_and_falls_back(self):
+        self.repo.commit("Plugin", self._plugin_files())
+        self.assertEqual("skills/release/SKILL.md", ev.skill_path(self.repo_path, "release"))
+        self.assertEqual("plugins/x/skills/y/SKILL.md", ev.skill_path(self.repo_path, "y"))
+        self.assertEqual("skills/gone/SKILL.md", ev.skill_path(self.repo_path, "gone"))
+        self.repo.commit("Shadow", {"skills/y/SKILL.md": skill_file("y", "root", "body")})
+        self.assertEqual("skills/y/SKILL.md", ev.skill_path(self.repo_path, "y"))
+
+    def test_a_plugin_skills_trigger_case_is_listed_when_its_front_matter_changes(self):
+        self._record_plugin_cases()
+        self.assertEqual([], self.names("trigger"))
+        self.repo.commit("Description", {
+            "plugins/x/skills/y/SKILL.md": skill_file("y", "changed", "body one")})
+        self.assertEqual(["trigger-y-1-fires"], self.names("trigger"))
+        reason = self.reasons("trigger")["trigger-y-1-fires"]
+        self.assertTrue(reason.startswith("plugins/x/skills/y/SKILL.md front matter since "), reason)
+        cases = ev.find_cases(self.repo_path, json.loads((self.tmp / "evals" / "depends.json").read_text()))
+        lines = [line for line in ev.commands(ev.select(self.repo_path), cases) if "--tag trigger" in line]
+        self.assertEqual(
+            ['claude plugin eval . --tag trigger --case "trigger-y-1-fires" --ablation none --runs 1 '
+             '--trust-plugin --no-publish -j 2'],
+            lines)
+
+    def test_a_plugin_skills_behaviour_case_is_listed_when_its_folder_changes(self):
+        self._record_plugin_cases()
+        self.assertEqual([], self.names("behaviour"))
+        self.repo.commit("Body", {
+            "plugins/x/skills/y/SKILL.md": skill_file("y", "yes", "body two")})
+        self.assertEqual(["y-plain"], self.names("behaviour"))
+        self.assertEqual([], self.names("trigger"))
+
     def test_a_prompt_without_front_matter_names_its_path(self):
         self.repo.write({"evals/cases/fix-bug/plain/prompt.md": "Do it.\n"})
         with self.assertRaises(ValueError) as caught:
@@ -690,9 +743,31 @@ class TestRecord(_SelectRepo):
         self.assertEqual(self.c1, stored["release-plain"]["commit"])
 
 
+def _write_file(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(text.encode("utf-8"))
+
+
 def covered(path: str, entries: list[str]) -> bool:
     return any(path.startswith(entry) if entry.endswith("/") else path == entry
                for entry in entries)
+
+
+def plugin_case_problems(root: Path, depends: dict) -> list[str]:
+    problems = []
+    for case in ev.find_cases(root, depends):
+        fields, _ = ev.frontmatter((case.folder / "prompt.md").read_text(encoding="utf-8"))
+        declared = {item.strip() for item in fields.get("plugins", "").strip("[]").split(",")}
+        for target in (case.skill, case.points_at):
+            if not target:
+                continue
+            parts = ev.skill_path(root, target).split("/")
+            if parts[0] != "plugins":
+                continue
+            wanted = {".", f"plugins/{parts[1]}"}
+            if not wanted <= declared:
+                problems.append(f"{case.rel}: loads {target} from plugins/{parts[1]} but prompt.md has no plugins: key naming . and plugins/{parts[1]}")
+    return sorted(set(problems))
 
 
 class TestEvalFiles(unittest.TestCase):
@@ -700,31 +775,59 @@ class TestEvalFiles(unittest.TestCase):
     def setUpClass(cls):
         cls.depends = json.loads((ROOT / "evals" / "depends.json").read_text(encoding="utf-8"))
         cls.cases = ev.find_cases(ROOT, cls.depends)
-        cls.agents = sorted(p.stem for p in (ROOT / "agents").glob("*.md"))
+        cls.agents = {p.stem: ("devflow", f"agents/{p.name}") for p in (ROOT / "agents").glob("*.md")}
+        for manifest in sorted((ROOT / "plugins").glob("*/.claude-plugin/plugin.json")):
+            plugin = manifest.parent.parent
+            namespace = json.loads(manifest.read_text(encoding="utf-8"))["name"]
+            for agent in sorted((plugin / "agents").glob("*.md")):
+                cls.agents[agent.stem] = (namespace, agent.relative_to(ROOT).as_posix())
 
     def test_depends_names_what_each_skill_cites(self):
         problems = []
         for skill, entries in self.depends["skills"].items():
-            text = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
-            for agent in self.agents:
-                if re.search(rf"devflow:{re.escape(agent)}\b", text) \
-                        and not covered(f"agents/{agent}.md", entries):
-                    problems.append(f"{skill} calls devflow:{agent} but depends lacks agents/{agent}.md")
+            skill_file_path = ev.skill_path(ROOT, skill)
+            text = (ROOT / skill_file_path).read_text(encoding="utf-8")
+            plugin_root = "/".join(skill_file_path.split("/")[:2]) if skill_file_path.startswith("plugins/") else None
+            for agent, (namespace, rel) in sorted(self.agents.items()):
+                if re.search(rf"\b{re.escape(namespace)}:{re.escape(agent)}\b", text) \
+                        and not covered(rel, entries):
+                    problems.append(f"{skill} calls {namespace}:{agent} but depends lacks {rel}")
             for cited in set(re.findall(r"skills/[A-Za-z0-9_./-]*[A-Za-z0-9_]", text)):
-                if (ROOT / cited).exists() and not covered(cited, entries):
-                    problems.append(f"{skill} cites {cited} but depends lacks it")
+                options = [cited] + ([f"{plugin_root}/{cited}"] if plugin_root else [])
+                found = next((option for option in options if (ROOT / option).exists()), None)
+                if found and not covered(found, entries):
+                    problems.append(f"{skill} cites {found} but depends lacks it")
             named = set(re.findall(r"references/([a-z-]+\.md)", text))
             named |= set(re.findall(r"\b((?:build|motion|core)\.md)", text))
+            review_folder = ev.skill_path(ROOT, "review-ui").rsplit("/", 1)[0]
             for name in sorted(named):
-                cited = f"skills/review-ui/references/{name}"
+                cited = f"{review_folder}/references/{name}"
                 if (ROOT / cited).exists() and not covered(cited, entries):
                     problems.append(f"{skill} cites references/{name} but depends lacks {cited}")
         self.assertEqual([], problems)
 
+    def test_a_plugin_case_declares_the_folders_it_loads(self):
+        self.assertEqual([], plugin_case_problems(ROOT, self.depends))
+
+    def test_a_plugin_case_without_a_plugins_key_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _write_file(root / "plugins" / "x" / "skills" / "y" / "SKILL.md", skill_file("y", "d", "b"))
+            _write_file(root / "skills" / "z" / "SKILL.md", skill_file("z", "d", "b"))
+            declared = "---\nname: trigger-y-1-fires\nplugins: [., plugins/x]\n---\n\nDo it.\n"
+            bare = "---\nname: trigger-y-2-fires\n---\n\nDo it.\n"
+            root_only = "---\nname: trigger-z-1-fires\n---\n\nDo it.\n"
+            _write_file(root / "evals" / "cases" / "trigger" / "y-1-fires" / "prompt.md", declared)
+            _write_file(root / "evals" / "cases" / "trigger" / "y-2-fires" / "prompt.md", bare)
+            _write_file(root / "evals" / "cases" / "trigger" / "z-1-fires" / "prompt.md", root_only)
+            found = plugin_case_problems(root, {})
+        self.assertEqual(1, len(found), found)
+        self.assertTrue(found[0].startswith("evals/cases/trigger/y-2-fires:"), found)
+
     def test_depends_names_each_plugin_tool_a_skill_runs(self):
         problems = []
         for skill, entries in self.depends["skills"].items():
-            text = (ROOT / "skills" / skill / "SKILL.md").read_text(encoding="utf-8")
+            text = (ROOT / ev.skill_path(ROOT, skill)).read_text(encoding="utf-8")
             for cited in sorted(set(re.findall(r"<plugin>/(tools/[A-Za-z0-9_]+\.py)", text))):
                 if not covered(cited, entries):
                     problems.append(f"{skill} runs {cited} but depends lacks it")
