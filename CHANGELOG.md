@@ -20,6 +20,9 @@
 - CI check: `attribution` no longer fails a message that only quotes "Generated with Claude Code" or a `Jean-Claude` co-author. It fails a line that starts with the footer (the robot emoji or "Generated with") and a `Co-Authored-By:` line naming Claude as a word or `noreply@anthropic.com`; a human co-author at anthropic.com now passes. Copy `tools/devflow_checks.py` into your project again to get it (README, How a project plugs in).
 - Evals: `tools/eval_select.py select` lists the `add-feature` and `fix-bug` cases after a change to `tools/plan_runner.py`.
 - Evals: `tools/eval_select.py` finds a skill under `plugins/<name>/skills/` as well as `skills/`; a case for such a skill loads its plugin through its `plugins:` front matter.
+- Session start: `--next-step` no longer offers a step stopped at its design Gate until the Gate is cleared, then prints `Design: <path>` for the saved design; a Gate reading 'not yet cleared <date>' no longer counts as cleared.
+- Skills: at a design-stop Gate, `add-feature` and `fix-bug` save the design in `<plans folder>/designs/` and build it once the Gate is cleared, with no new designer.
+- Evals: the `no-code-commit` graders catch a commit after a newline in a multi-line command and `git commit -am`.
 
 ## 0.3.0
 

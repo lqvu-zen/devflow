@@ -398,7 +398,7 @@ def _readable(path: str | None, md: str | None) -> PlanView | None:
     return view if view.order and view.states else None
 
 
-_CLEARED = re.compile(r"(?<![\w-])(?<!not )cleared\s+\d{4}-\d{2}-\d{2}", re.IGNORECASE)
+_CLEARED = re.compile(r"(?:^|[.;!?]\s+|\*\*\s*)cleared\s+\d{4}-\d{2}-\d{2}", re.IGNORECASE)
 _IN_STEP = re.compile(r"(?<!not )\bat the design stop\b|(?<!not )\bbefore (?:the )?implementation\b", re.IGNORECASE)
 
 
@@ -407,6 +407,16 @@ def _open_gate(view: PlanView, number: int) -> str | None:
     if gate is None or _CLEARED.search(gate) or _IN_STEP.search(gate):
         return None
     return gate
+
+
+def _held_gate(view: PlanView, number: int) -> str | None:
+    gate = step_field(view.sections.get(number, ""), "Gate")
+    if gate is None or _CLEARED.search(gate) or not _IN_STEP.search(gate):
+        return None
+    row = view.states.get(number, ("", ""))[1].strip().lower()
+    if row.startswith("stopped") and "retake it" not in row:
+        return gate
+    return None
 
 
 def _not_done(states: dict[int, tuple[str, str]], number: int) -> bool:
@@ -470,7 +480,9 @@ def blockers(view: PlanView, number: int, other: PlanView | None,
     reasons: list[str] = []
     if is_claimed(view.states.get(number, ("", ""))[1]):
         reasons.append("is claimed by another tab")
-    if _open_gate(view, number) is not None:
+    if _held_gate(view, number) is not None:
+        reasons.append("is stopped at its design Gate")
+    elif _open_gate(view, number) is not None:
         reasons.append("is at an uncleared Gate")
     row = view.who.get(number)
     reason = runner(*row)[1] if row else "has no Who does what row"
@@ -520,12 +532,17 @@ class Choice(NamedTuple):
 
 
 GATE_ACTION = "the maintainer does what the Gate line says, then runs /devflow:next-step again"
+DESIGN_ACTION = ("the maintainer answers the design the step's Tried line names: /devflow:manage-project "
+                 "appends `Cleared YYYY-MM-DD HH:MM: <answer>.` to the Gate, or sets the row back to — to have "
+                 "it designed again; then run /devflow:next-step again")
 IN_PROGRESS_ACTION = "the steps in progress land first"
 
 
 def next_action(reason: str) -> str:
     if reason.startswith("is at an uncleared Gate"):
         return GATE_ACTION
+    if reason.startswith("is stopped at its design Gate"):
+        return DESIGN_ACTION
     if reason.startswith("is done by hand"):
         return "the maintainer does it by hand, as the plan says"
     if reason.startswith("is the project manager's") or reason.startswith("has no Who does what row"):
@@ -554,7 +571,7 @@ def _stop(view: PlanView, number: int | None, stop: str, action: str,
     if number is not None:
         title, state = view.states[number]
         note = state.strip() if has_note(state) else ""
-        gate = _open_gate(view, number)
+        gate = _open_gate(view, number) or _held_gate(view, number)
     return Choice(view.path, number, title, note, None, stop, action, gate, why, skipped or [], False)
 
 
@@ -772,6 +789,21 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
     return "\n".join(lines)
 
 
+def design_file(plan: str, number: int, layout: Layout = DEFAULT_LAYOUT) -> str:
+    return f"{layout.plans_dir}/designs/{Path(plan).stem}-step-{number}.md"
+
+
+def _approved_design(project: Path, choice: Choice, layout: Layout) -> str | None:
+    md = _read(project / choice.plan)
+    if md is None or choice.number is None:
+        return None
+    gate = step_field(step_sections(md).get(choice.number, ""), "Gate")
+    if gate is None or not _CLEARED.search(gate):
+        return None
+    path = design_file(choice.plan, choice.number, layout)
+    return path if (project / path).is_file() else None
+
+
 def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
     status_md = _read(project / layout.status_file)
     plan = current_plan(status_md, layout) if status_md else None
@@ -795,6 +827,9 @@ def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]
         lines.append(f"Step: {choice.number} {choice.title}")
         if choice.note:
             lines.append(f"Last state: {choice.note}")
+        design = _approved_design(project, choice, layout)
+        if design:
+            lines.append(f"Design: {design}")
         lines.append(f"Run: /devflow:{choice.run}")
         return lines
     if choice.number is not None:

@@ -50,7 +50,7 @@ Behaviour map: <IDs to add or update, and their surfaces>.
 **Needs** <step numbers>.
 **Escalate:** <only for an area Escalate names>.
 **Model:** <optional; one line per role, as `designer: Sonnet, medium; a one-line wording fix`. Any role may move up; only the designer, implementer and tester may move down, and never a fix-bug diagnosis below Opus, medium. Overrides the board and Escalate for this step>.
-**Gate:** <only when the maintainer must do or decide something: what they do or decide. When what they approve is the step's own design, add "at the design stop" and a session starts the step and stops there; without those words the step waits until the Gate is cleared. A cleared Gate gets `Cleared YYYY-MM-DD HH:MM: <answer>.` appended>.
+**Gate:** <only when the maintainer must do or decide something: what they do or decide. When what they approve is the step's own design, add "at the design stop" and a session starts the step and stops there; without those words the step waits until the Gate is cleared. A cleared Gate gets `Cleared YYYY-MM-DD HH:MM: <answer>.` appended; a step stopped there waits for that line, and its design is kept in `<plans folder>/designs/`>.
 **Done when** <what a test proves>; <every surface>; the new map entries with their tests; <for each Review Focus item the step could cause, "a test pins R1: <the failure mode>">.
 **Tried:** <optional; written by a coding session that stopped. One clause per approach: what it was and why it failed (output: <path>); a later stop adds to the end>.
 

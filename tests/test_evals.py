@@ -180,6 +180,39 @@ class TestReleaseGraders(unittest.TestCase):
                 self.assertEqual([c for c in caught if not re.search(pattern, bash_call(c))], [])
 
 
+class TestNoCodeCommitGraders(unittest.TestCase):
+    GRADERS = [
+        ROOT / "evals" / "cases" / "add-feature" / "waits-for-review-before-commit" / "graders" / "no-code-commit.md",
+        ROOT / "evals" / "cases" / "add-feature" / "prompt-claims-the-runner-flag" / "graders" / "no-code-commit.md",
+        ROOT / "evals" / "cases" / "next-step" / "starts-a-step-gated-at-its-design-stop" / "graders" / "no-code-commit.md",
+    ]
+    STATUS_COMMIT = 'git commit -m "Status: release-0.3.0 step 4 stopped" -- docs/plans/release-0.3.0.md'
+
+    def pattern(self, path: Path) -> str:
+        fields, _ = ev.frontmatter(path.read_text(encoding="utf-8"))
+        self.assertEqual((fields["type"], fields["tool"], fields["max"]), ("tool_used", "Bash", "0"))
+        return ev.scalar(fields["input_match"])
+
+    def test_a_code_commit_of_any_form_is_caught(self):
+        for path in self.GRADERS:
+            pattern = self.pattern(path)
+            for command in ('git commit -am "x"', 'git commit -a -m "x"', 'echo done\ngit commit -am "x"',
+                            self.STATUS_COMMIT + '\ngit commit -am "x"', 'git add -A && git commit -m "x"',
+                            'git add tally/cli.py && git commit -m "x"', 'git commit -m "x" -- tally/cli.py'):
+                with self.subTest(case=path.parts[-3], command=command):
+                    self.assertIsNotNone(re.search(pattern, bash_call(command)))
+
+    def test_the_status_commit_is_let_through(self):
+        for path in self.GRADERS:
+            for command in (self.STATUS_COMMIT, self.STATUS_COMMIT + " && git push", self.STATUS_COMMIT + "\ngit push"):
+                with self.subTest(case=path.parts[-3], command=command):
+                    self.assertIsNone(re.search(self.pattern(path), bash_call(command)))
+
+    def test_the_design_stop_commit_may_carry_the_saved_design(self):
+        self.assertIsNone(re.search(self.pattern(self.GRADERS[2]), bash_call(
+            self.STATUS_COMMIT + " docs/plans/designs/release-0.3.0-step-4.md")))
+
+
 class GitRepo:
     def __init__(self, folder: Path):
         self.folder = folder
@@ -511,6 +544,18 @@ class TestSelect(_SelectRepo):
         self.repo.commit("Fixture", {"evals/fixture/build.sh": "work=2\n"})
         self.assertEqual(BEHAVIOUR, self.names("behaviour"))
         self.assertEqual(["trigger-release-1-fires"], self.names("trigger"))
+
+    def test_a_session_start_change_lists_the_next_step_cases(self):
+        recorded = self.repo.commit("Real depends", {
+            **case_files("next-step", "plain", "next-step-plain", "behaviour", ""),
+            "evals/depends.json": (ROOT / "evals" / "depends.json").read_text(encoding="utf-8"),
+            "hooks/session_start.py": "x = 1\n"})
+        self.write_passes({name: recorded for name in BEHAVIOUR + [
+            "next-step-plain", "trigger-release-1-fires", "trigger-add-feature-5-near-miss"]})
+        self.repo.commit("Hook", {"hooks/session_start.py": "x = 2\n"})
+        self.assertIn("next-step-plain", self.names("behaviour"))
+        self.assertIn("hooks/session_start.py since", self.reasons("behaviour")["next-step-plain"])
+        self.assertEqual([], self.names("trigger"))
 
     def test_a_hooks_change_lists_behaviour_not_trigger(self):
         self.repo.commit("Hooks", {"hooks/guard.py": "x = 2\n"})

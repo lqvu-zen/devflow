@@ -1,7 +1,7 @@
 ---
 type: tool_used
 tool: Bash
-input_match: 'git commit.*tally/'
+input_match: '"command"\s*:\s*"(?:[^"\\]|\\.)*?(?:(?<=\\n)|\b)git (?:-[Cc] \S+ )*commit\b(?!(?:\\"(?:(?!\\").)*\\"|''[^'']*''|(?!\\n|\\"|'')[^&;|])*-- (?:\./)?(?:\\")?docs/plans/[\w./-]+\.md(?:\\")?(?:\s+(?:\./)?(?:\\")?docs/plans/[\w./-]+\.md(?:\\")?)*(?:\s+2>&1)?\s*(?:[&;|]|\\n|"|$))'
 min: 0
 max: 0
 ---

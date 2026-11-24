@@ -25,6 +25,7 @@ python <plugin>/hooks/session_start.py --next-step
 - `Why:` and `Skipped:` (only on the next plan): why no step of the current plan can start, and the next plan's steps passed over.
 - `Step:` the step's number and title, and `Last state:` its row's note, if any.
 - `Gate:` the text of a Gate that keeps the step from starting.
+- `Design:` the approved design a session saved at the step's design stop, once its Gate is cleared.
 - Then either `Run: /devflow:add-feature` or `Run: /devflow:fix-bug`, or `Stop: <reason>. Next: <what happens next>.`
 
 Take what it prints as it is. Never pick another step, and never re-read the plan to second-guess it. If the command fails or prints neither a `Run:` nor a `Stop:` line, show the user its output and stop.
@@ -38,7 +39,7 @@ Edit nothing, claim nothing, commit nothing, and start no skill and no agent. A 
 ## 3. On a Run line
 
 1. Say which step you are taking and from which plan. When the plan is the next plan, give the `Why:` and `Skipped:` lines, and say that the step ships with the current release and that the project manager moves it into the current plan when it lands.
-2. Call the Skill tool with the skill the `Run:` line names (`add-feature` or `fix-bug`) and the arguments `Do step N of <plan>.`, with N and the plan path from the `Step:` and `Plan:` lines. When the step comes from the next plan, add `Taken from the next plan: <the Why line>.`
+2. Call the Skill tool with the skill the `Run:` line names (`add-feature` or `fix-bug`) and the arguments `Do step N of <plan>.`, with N and the plan path from the `Step:` and `Plan:` lines. When the step comes from the next plan, add `Taken from the next plan: <the Why line>.` When the output has a `Design:` line, add `The approved design is <path>.`
 3. Follow that skill to its end. It claims the step (as in `add-feature`'s "Before you start, and where you stop") and updates its Status row when the step is done or stopped. You never edit the plan or the status file yourself.
 
 ## Rules

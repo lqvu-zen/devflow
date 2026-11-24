@@ -74,7 +74,7 @@ A change touches a UI surface when it edits one that **Design system** lists und
 
 **Status and plan edits.** Uncommitted changes to the status file or the plans folder belong to `manage-project`. Commit them with your next change; never revert them.
 
-**Stop at a `**Gate:**` line.** When the plan step carries one, do the work up to the gate, then stop and tell the maintainer in plain words what they have to do (name the version, sign, install a build, tick a checklist, approve a list) before anything is committed, pushed or published past it. Never decide a gate's question yourself.
+**Stop at a `**Gate:**` line.** When the plan step carries one, do the work up to the gate, then stop and tell the maintainer in plain words what they have to do (name the version, sign, install a build, tick a checklist, approve a list) before anything is committed, pushed or published past it. Never decide a gate's question yourself. At a design-stop Gate, save the design as `<plans folder>/designs/<plan name>-step-N.md`, named in Tried; once the Gate is cleared, build it as the Cleared answer says: no new designer.
 
 ## The workflow
 

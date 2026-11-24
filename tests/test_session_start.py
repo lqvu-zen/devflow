@@ -478,6 +478,12 @@ BLOCKED = with_states(CURRENT, {1: "done: fixed", 2: "in progress (2026-10-22 09
                                 3: "in progress (2026-10-22 09:00)", 5: "in progress (2026-10-22 09:40)"})
 GATE = ("Ada chooses the error wording and signs it off before anything is committed.")
 DESIGN_GATE = "Ada approves the error wording the designer proposes, at the design stop, before implementation."
+STOPPED_AT_DESIGN = "stopped (2026-11-24 10:00): at the design stop, waiting for Ada's answer; see Tried"
+DESIGN_FILE = "docs/plans/designs/release-0.3.0-step-4.md"
+HELD = "step 4 is stopped at its design Gate"
+DESIGN_ACTION = ("the maintainer answers the design the step's Tried line names: /devflow:manage-project "
+                 "appends `Cleared YYYY-MM-DD HH:MM: <answer>.` to the Gate, or sets the row back to — to have "
+                 "it designed again; then run /devflow:next-step again")
 
 
 def view(path: str, md: str):
@@ -600,6 +606,66 @@ class TestNextStep(unittest.TestCase):
                       f"{DESIGN_GATE} Cleared 2026-10-21: approved."):
             plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}")
             self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None), [], words)
+
+    def design_gated(self, row4: str, gate: str = DESIGN_GATE) -> str:
+        return with_states(CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {gate}"),
+                           {1: "done", 2: "done", 3: "done", 4: row4})
+
+    def test_a_step_stopped_at_its_design_gate_is_not_offered_again(self):
+        plan = self.design_gated(STOPPED_AT_DESIGN)
+        choice = session_start.choose_step(view(CURRENT_PATH, plan), view(NEXT_PATH, NEXT))
+        self.assertEqual((choice.number, choice.run, choice.gate), (4, None, DESIGN_GATE))
+        self.assertEqual(choice.stop, HELD)
+        self.assertEqual(choice.next_action, DESIGN_ACTION)
+        self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None),
+                         ["is stopped at its design Gate"])
+
+    def test_a_rerun_does_not_start_a_fresh_designer_on_a_stopped_design(self):
+        for row in (STOPPED_AT_DESIGN, "stopped 2026-11-24: Gate, see Tried",
+                    "Stopped (2026-11-24 10:00): design ready for Ada; see Tried"):
+            plan = self.design_gated(row)
+            self.assertIsNone(session_start.choose_step(view(CURRENT_PATH, plan), None).run, row)
+            self.assertEqual(session_start.next_step_lines(self.project_with(plan, None)), [
+                f"Plan: {CURRENT_PATH}",
+                "Step: 4 Reject non-numbers",
+                f"Gate: {DESIGN_GATE}",
+                f"Stop: {HELD}. Next: {DESIGN_ACTION}.",
+            ], row)
+
+    def test_a_cleared_design_gate_offers_the_step_with_its_approved_design(self):
+        plan = self.design_gated(STOPPED_AT_DESIGN, f"{DESIGN_GATE} Cleared 2026-11-24 11:00: approved.")
+        choice = session_start.choose_step(view(CURRENT_PATH, plan), None)
+        self.assertEqual((choice.number, choice.run, choice.stop), (4, "add-feature", None))
+        project = self.project_with(plan, None)
+        (project / DESIGN_FILE).parent.mkdir(parents=True)
+        (project / DESIGN_FILE).write_text("# Design\n", encoding="utf-8")
+        self.assertEqual(session_start.next_step_lines(project), [
+            f"Plan: {CURRENT_PATH}",
+            "Step: 4 Reject non-numbers",
+            f"Last state: {STOPPED_AT_DESIGN}",
+            f"Design: {DESIGN_FILE}",
+            "Run: /devflow:add-feature",
+        ])
+
+    def test_a_design_gated_step_cut_off_or_reset_is_offered_again(self):
+        for row in ("stopped (2026-11-24 10:00): cut off by the usage limit; retake it", "—"):
+            plan = self.design_gated(row)
+            choice = session_start.choose_step(view(CURRENT_PATH, plan), None)
+            self.assertEqual((choice.number, choice.run), (4, "add-feature"), row)
+        project = self.project_with(self.design_gated("—"), None)
+        (project / DESIGN_FILE).parent.mkdir(parents=True)
+        (project / DESIGN_FILE).write_text("# Design\n", encoding="utf-8")
+        self.assertNotIn(f"Design: {DESIGN_FILE}", session_start.next_step_lines(project))
+
+    def test_not_yet_cleared_is_not_cleared(self):
+        for words in ("Ada writes the wording; not yet cleared 2026-11-24.",
+                      "Ada writes the wording. Not yet cleared 2026-11-24 10:00.",
+                      "Ada writes the wording, never cleared 2026-11-24."):
+            plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}")
+            self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None),
+                             ["is at an uncleared Gate"], words)
+        plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {GATE} Cleared 2026-11-24 10:00: yes.")
+        self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None), [])
 
     def test_the_flag_names_a_design_gated_step(self):
         plan = with_states(CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {DESIGN_GATE}"),

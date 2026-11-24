@@ -63,7 +63,7 @@ Every decision the maintainer makes goes into the status file's **Decision log**
 
 Things that are decisions: what goes in which release, dropping or parking an idea, naming, defaults, a process change, and "do it the better way" (record which way that was).
 
-An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date and let the maintainer decide it. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise.
+An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date and let the maintainer decide it. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise. An entry without a date needs nothing.
 
 ## Adding a plan step
 
@@ -74,7 +74,7 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
 3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence. When the step uses or makes a name another step relies on (a function, option, file, setting or map ID), add an `**Interfaces:**` line with the exact names and the step each comes from or goes to.
 4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated; when the plan has a **Review Focus** section, "a test pins R<n>: <the failure mode>" for each item the step's work could cause.
 5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation (the board's `implementer.escalate` model) for any area **Escalate** names. To move a role off the board for this step, propose a `**Model:** <role>: <Model>, <effort>; <why>` line, one role per line, with the reason: any role may move up; only the designer, implementer and tester may move down, and never `fix-bug`'s diagnosis below Opus, medium; it overrides **Escalate** for that step.
-6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on. When they approve the step's own design, say "at the design stop": the session starts and stops there; any other Gate is met before a session starts. Clearing appends `Cleared YYYY-MM-DD HH:MM: <answer>.`
+6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on. When they approve the step's own design, say "at the design stop": the session starts and stops there; any other Gate is met before a session starts. Clearing appends `Cleared YYYY-MM-DD HH:MM: <answer>.` A step stopped at its design waits for that line; to have it designed again, set its row back to `—`.
 7. **The plan's other sections updated to match:**
    - the **Goals** list, if it adds a goal;
    - the **Who does what** table;
@@ -82,7 +82,7 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
    - the **Order** section (bug fixes before features, the release test phase just before the release); a step to fix a flaky test goes first, ahead of bug fixes and features;
    - a new row in the **Status** table, `| N title | — |`.
 
-A new step has no `**Tried:**` line; coding sessions write it. When you edit an existing step, keep its Tried line exactly as it is.
+A new step has no `**Tried:**` line; coding sessions write it when they stop. When you edit an existing step, keep its Tried line exactly as it is.
 
 Then give the maintainer the paste-ready prompt for the coding session.
 
