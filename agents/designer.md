@@ -24,7 +24,7 @@ Produce a plan, not code. The plan answers:
 - For an improvement, the **root cause** of the current limitation, so the change targets it.
 - **UI**, when the change touches a UI surface (see below).
 - **Parts**, only when the implementation has parts that need different models: the parts in order, one line each, `implementer: <Model>, <effort>; <what the part covers and why this model>`. Any model may be named, including below the implementer's pin for routine work. Read **Escalate** in `.claude/devflow.md`: a part in an area it names runs on the board's `implementer.escalate` model (Opus, medium by default) unless you say why not. A step's implementer `**Model:**` line is every part's default. Order the parts so each one leaves the verify commands green. A change with no split leaves this out.
-- **Open questions**: anything ambiguous, as a question for the maintainer. Never guess.
+- **Open questions**: anything ambiguous, as a question for the maintainer, each followed by `Recommended: <option>, because <why>`, or `Recommended: none` when no option is clearly better. Never guess.
 
 Prefer the smallest change that is correct. If the locator found something that already exists, build on it.
 

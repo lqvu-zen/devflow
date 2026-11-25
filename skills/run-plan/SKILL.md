@@ -1,6 +1,6 @@
 ---
 name: run-plan
-description: 'Run several steps of the project''s plan unattended: start the plan runner (tools/plan_runner.py) in the background, one fresh headless session per step, and when it ends report its summary as printed: each step''s outcome, commits and cost, and why the run stopped. Reads a step limit, a dollar limit, a model and the permission mode from the user''s words, and passes --commit-without-asking only when the user''s own words in this session name the commit. Use when the user says "run the plan", "run the next 3 steps", "run the plan, 10 dollars max", "run the plan unattended" or "start the plan runner". Do NOT use for "continue the plan", "next step" or "what''s next, do it" (one step in this tab: use next-step), when the user names a step or describes a feature or bug (use add-feature or fix-bug), or asks where things stand or what is left (use manage-project).'
+description: 'Run several steps of the project''s plan unattended: start the plan runner (tools/plan_runner.py) in the background, one fresh headless session per step, and when it ends report its summary as printed: each step''s outcome, commits and cost, and why the run stopped. Reads a step limit, a dollar limit, a model and the permission mode from the user''s words, and passes --commit-without-asking only when the user''s own words in this session name the commit, and --decide-without-asking only when they say to decide without asking. Use when the user says "run the plan", "run the next 3 steps", "run the plan, 10 dollars max", "run the plan unattended" or "start the plan runner". Do NOT use for "continue the plan", "next step" or "what''s next, do it" (one step in this tab: use next-step), when the user names a step or describes a feature or bug (use add-feature or fix-bug), or asks where things stand or what is left (use manage-project).'
 ---
 
 # Running the plan
@@ -19,6 +19,8 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 - `--permission-mode default` only when they ask to be asked for permissions. Never pass `bypassPermissions`.
 
 **The commit flag.** Pass `--commit-without-asking` only when the maintainer's own words in this session name the commit ("commit without asking me"); a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does. Otherwise leave it off: each step then stops at its code commit, waiting for the maintainer's yes, and the run ends there.
+
+**The decide flag.** Pass `--decide-without-asking` only when the maintainer's own words in this session say to decide without asking ("decide without asking me"); a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does. It includes the commit flag. Otherwise leave it off.
 
 ## 2. Start it
 

@@ -42,6 +42,16 @@ Edit nothing, claim nothing, commit nothing, and start no skill and no agent. A 
 2. Call the Skill tool with the skill the `Run:` line names (`add-feature` or `fix-bug`) and the arguments `Do step N of <plan>.`, with N and the plan path from the `Step:` and `Plan:` lines. When the step comes from the next plan, add `Taken from the next plan: <the Why line>.` When the output has a `Design:` line, add `The approved design is <path>.`
 3. Follow that skill to its end. It claims the step (as in `add-feature`'s "Before you start, and where you stop") and updates its Status row when the step is done or stopped. You never edit the plan or the status file yourself.
 
+## Deciding without asking
+
+The mode is on only when the maintainer's own words in this session say to decide without asking ("decide without asking me"), or when `python <plugin>/tools/plan_runner.py --deciding`, run alone, prints `deciding` (the plan runner's `--decide-without-asking`). A continue prompt, `/devflow:next-step` alone, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does. Check before section 3 and say whether it is on; put nothing about it in the skill's arguments. `add-feature` and `fix-bug` follow this section whenever it is on.
+
+While it is on, the session takes, in the maintainer's place: the design stop (the design as returned, no turn ended to ask); a Gate that says "at the design stop" or "before implementation" (the design saved as at that Gate, then built); each of the designer's open questions (the option on its `Recommended:` line); the code-commit yes.
+
+It still stops, as written, at the stop rules, a red CI run, a question whose line is `Recommended: none` or missing, a question a Standing rule or a Gate other than a design-stop Gate gives the maintainer (the version number, a human action), any other Gate, a release, and any question of the session's own. At a design-stop Gate it stops as that Gate says; elsewhere its row says the question, ending "see Tried".
+
+Write each decision taken in the step's Status row, as its last clause before any "see Tried": `decided without asking: (1) <question> → <answer taken>; (2) …`, one numbered clause each, the design stop and the commit yes included, with `/` for any `|`. List them in the report too.
+
 ## Rules
 
 - Never do a step by hand: no edits, agents or commits outside the skill you run.

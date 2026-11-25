@@ -46,11 +46,7 @@ If `.claude/devflow.md` is missing, stop and tell the user to run `/devflow:setu
 
 The map lists each behaviour, **every surface** it appears on, and the test that guards it (or **untested**).
 
-- **Locate (step 2):** the locator returns the map rows for the area(s) the change touches, verbatim, with their IDs.
-- **Design (step 3):** paste those rows into the brief; the plan lists **every surface** the change touches and how each is kept working.
-- **Implement (step 4):** the implementer adds or updates the entries (a new behaviour gets a new one) and checks every surface listed.
-- **Review (step 5):** each listed surface is checked, not only the one in the task, and the map is updated; a surface left unchecked, or a missing entry, is a blocker.
-- **Commit (step 6):** `docs/BEHAVIOUR.md` goes in the same commit as the change.
+Step 2's locator returns the area's rows verbatim, with their IDs; the design lists **every surface** the change touches; the implementer adds or updates the entries (a new behaviour gets a new one) and checks every surface; the reviewer treats an unchecked surface or a missing entry as a blocker; the map goes in the change's commit.
 
 If the project has no map yet, say so in the report and suggest `/devflow:setup` to start one; don't block the feature on it.
 
@@ -75,6 +71,8 @@ A change touches a UI surface when it edits one that **Design system** lists und
 **Status and plan edits.** Uncommitted changes to the status file or the plans folder belong to `manage-project`. Commit them with your next change; never revert them.
 
 **Stop at a `**Gate:**` line.** When the plan step carries one, do the work up to the gate, then stop and tell the maintainer in plain words what they have to do (name the version, sign, install a build, tick a checklist, approve a list) before anything is committed, pushed or published past it. Never decide a gate's question yourself. At a design-stop Gate, save the design as `<plans folder>/designs/<plan name>-step-N.md`, named in Tried; once the Gate is cleared, build it as the Cleared answer says: no new designer.
+
+**Deciding without asking.** When `next-step`'s "Deciding without asking" (`skills/next-step/SKILL.md`) turns it on, follow it: it takes the design stop, a design-stop Gate, the designer's recommended answers and the commit yes, writing each in the Status row.
 
 ## The workflow
 
@@ -135,7 +133,7 @@ If the reviewer reports BLOCKERS, fix them or delegate back to the implementer v
 
 ### 6. Commit and push
 
-**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait, and so does the plan runner's `--commit-without-asking` when `python <plugin>/tools/plan_runner.py --waived`, run alone, prints `waived`; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does.
+**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait, and so do deciding without asking and the plan runner's `--commit-without-asking` when `python <plugin>/tools/plan_runner.py --waived`, run alone, prints `waived`; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does.
 
 Match the commit style (`git log --oneline -5`). Stage only the relevant files, by path; never what **Edit bounds** says is never staged, and never `git add -A`. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any. Push to the main branch when the project's rules or the user's standing preferences say so; otherwise ask.
 

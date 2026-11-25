@@ -108,6 +108,10 @@ if spec.get("waived"):
     done = subprocess.run([sys.executable, os.environ["FAKE_RUNNER"], "--waived"], capture_output=True,
                           text=True)
     record["waived"] = [done.returncode, done.stdout.strip()]
+if spec.get("deciding"):
+    done = subprocess.run([sys.executable, os.environ["FAKE_RUNNER"], "--deciding"], capture_output=True,
+                          text=True)
+    record["deciding"] = [done.returncode, done.stdout.strip()]
 if "row" in spec:
     plan = os.path.join("docs", "plans", "release-x.md")
     with open(plan, encoding="utf-8", newline="") as handle:
@@ -719,6 +723,136 @@ class TestWaiver(RunnerCase):
             done = subprocess.run([sys.executable, str(RUNNER_PATH), "--waived"], capture_output=True, text=True,
                                   env=env, cwd=self.project)
             self.assertEqual((done.returncode, done.stdout.strip()), expected)
+
+
+class TestDecideWithoutAsking(RunnerCase):
+    DECIDED_ROW = ("done: abc first; decided without asking: (1) design stop → design as returned; "
+                   "(2) wording → Recommended A; (3) code commit yes → committed")
+
+    def test_the_flag_gives_deciding_and_waived_and_the_token_is_gone_after(self):
+        self.calls([{"row": {"1": "done"}, "waived": True, "deciding": True}])
+        code, out = self.main("--steps", "1", "--decide-without-asking")
+        record = self.records()[0]
+        self.assertEqual(record["deciding"], [0, "deciding"])
+        self.assertEqual(record["waived"], [0, "waived"])
+        folder = self.project / ".git" / plan_runner.WAIVER_DIR
+        self.assertFalse((folder / record["token"]).exists())
+        self.assertIn("Plan runner: --commit-without-asking on; --decide-without-asking on; 1 step;", out)
+
+    def test_the_commit_flag_alone_is_waived_but_not_deciding(self):
+        self.calls([{"row": {"1": "done"}, "waived": True, "deciding": True}])
+        code, out = self.main("--steps", "1", "--commit-without-asking")
+        record = self.records()[0]
+        self.assertEqual(record["waived"], [0, "waived"])
+        self.assertEqual(record["deciding"], [1, "not deciding"])
+        self.assertIn("Plan runner: --commit-without-asking on; 1 step;", out)
+        self.assertNotIn("--decide-without-asking", out)
+
+    def test_no_flag_gives_neither_and_the_first_line_is_unchanged(self):
+        self.calls([{"row": {"1": "done"}, "waived": True, "deciding": True}])
+        code, out = self.main("--steps", "1")
+        record = self.records()[0]
+        self.assertEqual(record["deciding"], [1, "not deciding"])
+        self.assertEqual(record["waived"], [1, "not waived"])
+        self.assertIn("Plan runner: --commit-without-asking off; 1 step;", out)
+
+    def test_a_claimed_token_or_a_token_file_without_the_key_is_not_deciding(self):
+        common = self.project / ".git"
+        token, path = plan_runner.make_waiver(common, decide=True)
+        self.assertTrue(plan_runner.deciding(self.project, {plan_runner.WAIVER_ENV: token}))
+        for claimed in ("b" * 32, "../" + token, token.upper(), token + "0", "", "deciding"):
+            with self.subTest(claimed=claimed):
+                self.assertFalse(plan_runner.deciding(self.project, {plan_runner.WAIVER_ENV: claimed}))
+        self.assertFalse(plan_runner.deciding(self.project, {}))
+        plan_runner.drop_waiver(path)
+        self.assertFalse(plan_runner.deciding(self.project, {plan_runner.WAIVER_ENV: token}))
+        plain, plain_path = plan_runner.make_waiver(common)
+        self.addCleanup(plan_runner.drop_waiver, plain_path)
+        self.assertFalse(plan_runner.deciding(self.project, {plan_runner.WAIVER_ENV: plain}))
+        bare = common / plan_runner.WAIVER_DIR / ("d" * 32)
+        self.addCleanup(lambda: bare.exists() and bare.unlink())
+        for content in ("{}", "not json", json.dumps({"decide": "true"})):
+            with self.subTest(content=content):
+                bare.write_text(content, encoding="utf-8")
+                self.assertFalse(plan_runner.deciding(self.project, {plan_runner.WAIVER_ENV: "d" * 32}))
+
+    def test_the_check_command_prints_its_verdict_and_wants_to_be_alone(self):
+        token, path = plan_runner.make_waiver(self.project / ".git", decide=True)
+        self.addCleanup(plan_runner.drop_waiver, path)
+        env = dict(os.environ)
+        for value, expected in ((token, (0, "deciding")), ("c" * 32, (1, "not deciding"))):
+            env[plan_runner.WAIVER_ENV] = value
+            done = subprocess.run([sys.executable, str(RUNNER_PATH), "--deciding"], capture_output=True,
+                                  text=True, env=env, cwd=self.project)
+            self.assertEqual((done.returncode, done.stdout.strip()), expected)
+        self.assertEqual(self.main("--deciding", "--steps", "1")[0], 2)
+        self.assertEqual(self.records(), [])
+
+    def test_a_done_row_lists_its_decisions_live_and_in_the_summary(self):
+        self.calls([{"row": {"1": self.DECIDED_ROW}}])
+        said = []
+        rows, reason, code = plan_runner.run_plan(self.project, 1, None, True, None, None, self.claude,
+                                                  ci=green, say=said.append)
+        expected = ["  - decided (1) design stop → design as returned",
+                    "  - decided (2) wording → Recommended A",
+                    "  - decided (3) code commit yes → committed"]
+        self.assertEqual(said[2:5], expected)
+        self.assertEqual(rows[0].decisions, tuple(line[len("  - decided "):] for line in expected))
+        lines = plan_runner.summary(rows, reason, True, 0.25, True)
+        self.assertEqual(lines[1:5], [plan_runner.row_line(rows[0])] + expected)
+        self.assertTrue(lines[0].startswith("Plan runner: --commit-without-asking on; --decide-without-asking on;"))
+
+    def test_a_row_with_no_decisions_lists_none(self):
+        self.calls([{"row": {"1": "done: abc first"}}])
+        rows, reason, code = self.run_plan(steps=1)
+        self.assertEqual(rows[0].decisions, ())
+        self.assertEqual(len(plan_runner.summary(rows, reason, False, 0.25)), 3)
+
+    def test_a_stopped_row_lists_its_decisions_without_see_tried_and_the_run_stops_naming_the_step(self):
+        self.calls([{"row": {"1": "stopped (2026-11-25 10:00): question without a recommendation; "
+                                  "decided without asking: (1) design stop → as returned; "
+                                  "(2) wording → A, see Tried"}},
+                    {"row": {"2": "done"}}])
+        rows, reason, code = self.run_plan()
+        self.assertEqual(len(self.records()), 1)
+        self.assertEqual(rows[0].decisions, ("(1) design stop → as returned", "(2) wording → A"))
+        self.assertTrue(reason.startswith("step 1 ended `stopped"), reason)
+        self.assertEqual(code, 1)
+        lines = plan_runner.summary(rows, reason, True, 0.25, True)
+        self.assertIn("  - decided (2) wording → A", lines)
+        self.assertFalse([line for line in lines if line.startswith("  - decided") and "see Tried" in line])
+
+    def test_decisions_in_reads_the_clause_and_splits_on_numbers_only(self):
+        self.assertEqual(plan_runner.decisions_in("done: x"), ())
+        self.assertEqual(plan_runner.decisions_in(None), ())
+        self.assertEqual(plan_runner.decisions_in("done; decided without asking: (1) a; b → c; (2) d → e."),
+                         ("(1) a; b → c", "(2) d → e."))
+        self.assertEqual(plan_runner.decisions_in("stopped: q; decided without asking: (1) a → b; see Tried"),
+                         ("(1) a → b",))
+
+    def test_an_uncleared_human_action_gate_stops_the_run_and_the_session_never_starts(self):
+        self.reset(gate=True)
+        self.calls([{"row": {"1": "done"}}])
+        code, out = self.main("--steps", "3", "--decide-without-asking")
+        self.assertEqual(self.records(), [])
+        self.assertIn("Stopped: step 1 is at an uncleared Gate.", out)
+        self.assertTrue(out.startswith("Plan runner: --commit-without-asking on; --decide-without-asking on;"))
+
+    def test_red_ci_stops_the_run_naming_ci(self):
+        self.calls([{"row": {"1": self.DECIDED_ROW}}, {"row": {"2": "done"}}])
+        rows, reason, code = self.run_plan(flag=True, ci=lambda project, head: "failure")
+        self.assertEqual(len(self.records()), 1)
+        self.assertIn("CI on HEAD", reason)
+        self.assertEqual(code, 1)
+
+    def test_a_second_blockers_stopped_row_stops_the_run_naming_the_step(self):
+        self.calls([{"row": {"1": "stopped (2026-11-25 10:00): blockers after the second review, "
+                                  "decided without asking: (1) design stop → as returned; see Tried"}},
+                    {"row": {"2": "done"}}])
+        rows, reason, code = self.run_plan(flag=True)
+        self.assertEqual(len(self.records()), 1)
+        self.assertTrue(reason.startswith("step 1 ended `stopped"), reason)
+        self.assertEqual(rows[0].decisions, ("(1) design stop → as returned",))
 
 
 if __name__ == "__main__":

@@ -24,6 +24,12 @@ PROMPT = "/devflow:next-step"
 COMMIT_FLAG = "--commit-without-asking"
 WAIVED_FLAG = "--waived"
 WAIVED_TEXT = "waived"
+DECIDE_FLAG = "--decide-without-asking"
+DECIDING_FLAG = "--deciding"
+DECIDING_TEXT = "deciding"
+DECIDED = re.compile(r"decided without asking:\s*(.+)", re.I)
+DECISION_SPLIT = re.compile(r";\s*(?=\(\d+\)\s)")
+SEE_TRIED = re.compile(r"[;,.]?\s*see Tried\W*$", re.I)
 WAIVER_ENV = "DEVFLOW_COMMIT_WITHOUT_ASKING"
 WAIVER_DIR = "devflow-runner"
 TOKEN = re.compile(r"[0-9a-f]{32}")
@@ -97,6 +103,7 @@ class StepRow(NamedTuple):
     commits: list[str]
     cost: float | None
     session: str | None = None
+    decisions: tuple[str, ...] = ()
 
 
 def _git(project: Path, *args: str) -> str | None:
@@ -485,6 +492,18 @@ def step_outcome(project: Path, root: Path, layout, plan: str, number: int, resu
     return "done", None
 
 
+def decisions_in(state: str | None) -> tuple[str, ...]:
+    found = DECIDED.search(state or "")
+    if not found:
+        return ()
+    text = SEE_TRIED.sub("", found.group(1).strip()).strip()
+    return tuple(part.strip() for part in DECISION_SPLIT.split(text) if part.strip())
+
+
+def decision_lines(row: StepRow) -> list[str]:
+    return [f"  - decided {decision}" for decision in row.decisions]
+
+
 def commits_since(project: Path, before: str) -> list[str]:
     if not before:
         return []
@@ -554,22 +573,31 @@ def run_plan(project: Path, steps: int | None, dollars: float | None, commit_fla
                              session_seconds)
         outcome, why = step_outcome(project, found.root, layout, step.plan, step.number, result, ci)
         row = StepRow(step.plan, step.number, step.title, outcome, why, commits_since(project, before),
-                      result.cost, result.session_id)
+                      result.cost, result.session_id,
+                      decisions_in(row_state(found.root, step.plan, step.number)))
         rows.append(row)
         say(row_line(row))
+        for line in decision_lines(row):
+            say(line)
         taken.add((step.plan, step.number))
         if why is not None:
             return rows, why, 1
 
 
-def summary(rows: Sequence[StepRow], reason: str, flag: bool, spent: float | None) -> list[str]:
+def summary(rows: Sequence[StepRow], reason: str, flag: bool, spent: float | None,
+            decide: bool = False) -> list[str]:
     count = f"{len(rows)} step" + ("" if len(rows) == 1 else "s")
     unread = any(row.cost is None for row in rows)
     money = COST_NOT_READ if spent is None else f"${_money(spent)} spent"
     if spent is not None and unread:
         money += f" ({COST_NOT_READ} for some steps)"
-    lines = [f"Plan runner: {COMMIT_FLAG} {'on' if flag else 'off'}; {count}; {money}"]
-    lines += [row_line(row) for row in rows]
+    flags = f"{COMMIT_FLAG} {'on' if flag else 'off'}"
+    if decide:
+        flags += f"; {DECIDE_FLAG} on"
+    lines = [f"Plan runner: {flags}; {count}; {money}"]
+    for row in rows:
+        lines.append(row_line(row))
+        lines += decision_lines(row)
     lines.append(f"Stopped: {reason.rstrip('.')}.")
     if rows and rows[-1].outcome != "done" and rows[-1].session:
         lines.append(f"To answer step {rows[-1].number}'s session: claude --resume {rows[-1].session}")
@@ -580,13 +608,13 @@ def waiver_folder(common: Path) -> Path:
     return Path(common) / WAIVER_DIR
 
 
-def make_waiver(common: Path) -> tuple[str, Path]:
+def make_waiver(common: Path, decide: bool = False) -> tuple[str, Path]:
     token = secrets.token_hex(16)
     folder = waiver_folder(common)
     folder.mkdir(parents=True, exist_ok=True)
     path = folder / token
     started = datetime.datetime.now(datetime.timezone.utc).isoformat(timespec="seconds")
-    path.write_text(json.dumps({"pid": os.getpid(), "started": started}), encoding="utf-8")
+    path.write_text(json.dumps({"pid": os.getpid(), "started": started, "decide": decide}), encoding="utf-8")
     return token, path
 
 
@@ -615,6 +643,19 @@ def waived(project: Path, env) -> bool:
         return False
 
 
+def deciding(project: Path, env) -> bool:
+    token = env.get(WAIVER_ENV) or ""
+    if not TOKEN.fullmatch(token):
+        return False
+    session_start = _session_start()
+    try:
+        common = session_start.devflow_store.common_dir(Path(project))
+        data = json.loads((waiver_folder(common) / token).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return isinstance(data, dict) and data.get("decide") is True
+
+
 def _project() -> Path:
     return Path(os.environ.get("CLAUDE_PROJECT_DIR") or os.getcwd())
 
@@ -625,6 +666,7 @@ def parser() -> argparse.ArgumentParser:
     made.add_argument("--steps", type=int, default=None)
     made.add_argument("--dollars", type=float)
     made.add_argument(COMMIT_FLAG, dest="commit", action="store_true")
+    made.add_argument(DECIDE_FLAG, dest="decide", action="store_true")
     made.add_argument("--model")
     made.add_argument("--permission-mode", dest="mode", choices=MODES, default=DEFAULT_MODE)
     made.add_argument("--claude", default="claude")
@@ -643,6 +685,13 @@ def main(argv: list[str] | None = None, claude: object = None,
         ok = waived(_project(), os.environ)
         print(WAIVED_TEXT if ok else f"not {WAIVED_TEXT}")
         return 0 if ok else 1
+    if DECIDING_FLAG in args:
+        if args != [DECIDING_FLAG]:
+            print(f"usage: plan_runner.py {DECIDING_FLAG} (alone)", file=sys.stderr)
+            return 2
+        ok = deciding(_project(), os.environ)
+        print(DECIDING_TEXT if ok else f"not {DECIDING_TEXT}")
+        return 0 if ok else 1
     made = parser()
     if "--permission-mode" in args or any(a.startswith("--permission-mode=") for a in args):
         if "bypassPermissions" in args or "--permission-mode=bypassPermissions" in args:
@@ -659,6 +708,7 @@ def main(argv: list[str] | None = None, claude: object = None,
     if options.dollars is not None and not options.dollars > 0:
         print("plan_runner.py: --dollars must be more than 0", file=sys.stderr)
         return 2
+    options.commit = options.commit or options.decide
     session_start = _session_start()
     project = _project()
     try:
@@ -681,7 +731,7 @@ def main(argv: list[str] | None = None, claude: object = None,
     token = None
     try:
         if options.commit:
-            token, waiver = make_waiver(session_start.devflow_store.common_dir(project))
+            token, waiver = make_waiver(session_start.devflow_store.common_dir(project), decide=options.decide)
         try:
             rows, reason, code = run_plan(project, options.steps, options.dollars, options.commit, model,
                                           options.mode, command, ci, token, rows)
@@ -690,7 +740,7 @@ def main(argv: list[str] | None = None, claude: object = None,
     finally:
         drop_waiver(waiver)
     spent = None if rows and all(row.cost is None for row in rows) else spent_of(rows)
-    for line in summary(rows, reason, options.commit, spent):
+    for line in summary(rows, reason, options.commit, spent, options.decide):
         print(line)
     return code
 

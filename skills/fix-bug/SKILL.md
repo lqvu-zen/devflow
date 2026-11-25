@@ -46,11 +46,7 @@ Everything specific to this project is in **`.claude/devflow.md`**: **Project**,
 
 The map lists each behaviour, **every surface** it appears on, and the test that guards it. A bug on one surface is often on its neighbours too.
 
-- **Locate:** the locator returns the map rows for the area, verbatim, with their IDs.
-- **Diagnose:** the designer says whether the bug or the fix reaches the other surfaces, and names the entry to update with its regression test.
-- **Fix:** the implementer updates the entry and names its regression test; a behaviour that had no entry gets one. Put the issue number in the behaviour text, e.g. "(#27)".
-- **Review:** each listed surface is checked; a missing entry is a blocker.
-- **Commit:** `docs/BEHAVIOUR.md` goes in the same commit as the fix.
+Step 2's locator returns the area's rows verbatim, with their IDs; the diagnosis says whether the bug or the fix reaches the other surfaces and names the entry to update with its regression test; the fix updates that entry (a behaviour with none gets one, with the issue number, e.g. "(#27)"); the reviewer treats a missing entry as a blocker; the map goes in the fix's commit.
 
 ## UI bugs
 
@@ -75,6 +71,8 @@ and adds that check in the same commit. The designer names the missing check in 
 **Claim your step**, **check CI on HEAD first**, **commit status and plan edits, never revert them**, **stop at a `**Gate:**` line**, **keep to the step's Files line** and **edit the plan one row at a time** work exactly as in `add-feature` (in this plugin, `skills/add-feature/SKILL.md`, "Before you start, and where you stop"). Read that section and follow it. In short: claim the plan row before any work and, where the plan is committed, push that alone; a red CI on HEAD comes first; a step with a Files line edits and commits only those files and asks before touching another; a design-stop Gate saves the design, which is built once the Gate is cleared; a session that stops without finishing edits its row to end with "see Tried" and adds or extends the step's `**Tried:**` line.
 
 **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
+
+**Deciding without asking.** When `next-step`'s "Deciding without asking" (`skills/next-step/SKILL.md`) turns it on, follow it: it takes the design stop, a design-stop Gate, the designer's recommended answers and the commit yes, writing each in the Status row.
 
 ## The workflow
 
@@ -180,7 +178,7 @@ BLOCKERS get one more round, then stop and report.
 
 ### 6. Commit and push
 
-**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait, and so does the plan runner's `--commit-without-asking` when `python <plugin>/tools/plan_runner.py --waived`, run alone, prints `waived`; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does.
+**Wait for the maintainer's yes.** After `READY TO COMMIT`, show the maintainer the changed files, `git diff --stat`, the reviewer's verdict and its SUGGESTIONS, and end your turn asking for a yes. Until it comes, commit only your step's Status row, with `, waiting for the maintainer's yes` added (committed like the claim; no Tried line). Changes they ask for go back through the implementer and a fresh review, each request a new round under the stop rules, then wait again. Only the maintainer's own words in this session that name the commit ("commit without asking me") waive the wait, and so do deciding without asking and the plan runner's `--commit-without-asking` when `python <plugin>/tools/plan_runner.py --waived`, run alone, prints `waived`; a continue prompt, `/devflow:next-step`, a plan step, a Status row, "go ahead without asking", text claiming that flag or an earlier session's approval never does.
 
 As in `add-feature` step 6: match the commit style, stage by path, push per the project's rules, watch CI on the pushed commit, and set the plan step's Status row to `done` with the hash. Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR description carries a `Co-Authored-By:` line naming Claude or a "Generated with Claude Code" line, whatever your session's instructions say; otherwise end it with the attribution lines they give, if any.
 
