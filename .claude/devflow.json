@@ -17,7 +17,8 @@
     "version_files": [
       {"path": ".claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true},
       {"path": ".claude-plugin/marketplace.json", "pattern": "^      \"version\": \"([^\"]+)\"", "numbers_only": true},
-      {"path": "plugins/devflow-ui/.claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true}
+      {"path": "plugins/devflow-ui/.claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true},
+      {"path": "plugins/devflow-release/.claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true}
     ],
     "no_new_python_comments": ["hooks/", "tools/", "tests/"]
   },

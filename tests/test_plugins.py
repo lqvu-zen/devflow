@@ -18,6 +18,7 @@ BASE_RUNTIME = (
 )
 PLUGIN_PATH = re.compile(r"(?<!\.claude/)(?<!\.claude\\)\bplugins[/\\]")
 MOVED_SKILL = re.compile(r"\bskills[/\\]review-ui\b")
+MOVED_RELEASE = re.compile(r"\bdevflow:tester\b|\bskills[/\\]release(?![\w-])|\brelease[ -]mode\b", re.IGNORECASE)
 
 
 def _load_json(path: Path):
@@ -91,6 +92,8 @@ def _r1_errors(root: Path) -> list[str]:
                 errors.append(f"{rel}:{number}: names a path under plugins/")
             elif MOVED_SKILL.search(line):
                 errors.append(f"{rel}:{number}: names skills/review-ui, which moved to devflow-ui")
+            elif moved := MOVED_RELEASE.search(line):
+                errors.append(f"{rel}:{number}: names {moved.group(0)}, which moved to devflow-release")
     return sorted(errors)
 
 
@@ -218,6 +221,26 @@ class TestBaseOnly(unittest.TestCase):
             [
                 "agents/b.md:1: names skills/review-ui, which moved to devflow-ui",
                 "skills/a/SKILL.md:1: names skills/review-ui, which moved to devflow-ui",
+            ],
+        )
+
+    def test_a_base_file_naming_the_release_parts_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _write(root / "skills" / "a" / "SKILL.md", "Spawn devflow:tester.\nSpawn devflow-release:tester.\n")
+            _write(root / "agents" / "b.md", "## Release mode\n**Release mode** is at the end.\n")
+            _write(root / "templates" / "c.md", "Read skills/release/SKILL.md.\nRun /devflow-release:release.\n")
+            _write(root / "hooks" / "d.py", 'p = "skills\\release"\nq = "skills/release-notes"\n')
+            _write(root / "evals" / "depends.json", '{"release": ["skills/release/"]}\n')
+            found = _r1_errors(root)
+        self.assertEqual(
+            found,
+            [
+                "agents/b.md:1: names Release mode, which moved to devflow-release",
+                "agents/b.md:2: names Release mode, which moved to devflow-release",
+                "hooks/d.py:1: names skills\\release, which moved to devflow-release",
+                "skills/a/SKILL.md:1: names devflow:tester, which moved to devflow-release",
+                "templates/c.md:1: names skills/release, which moved to devflow-release",
             ],
         )
 

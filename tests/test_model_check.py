@@ -4,6 +4,9 @@ import contextlib
 import io
 import json
 import os
+import re
+import shlex
+import shutil
 import sys
 import tempfile
 import time
@@ -705,7 +708,7 @@ class TestDomainPins(BoardFixture):
         self.session = folder / "rc.jsonl"
         _write_jsonl(self.session, [_call("y1", "tester")])
         _subagent(folder / "rc" / "subagents", "y1",
-                  {"agentType": "devflow:tester", "toolUseId": "y1", "finished": True},
+                  {"agentType": "devflow-release:tester", "toolUseId": "y1", "finished": True},
                   [_reply("r-y1", "claude-haiku-5-5", "low")])
 
     def test_the_domain_folder_gives_the_tester_its_pin(self):
@@ -755,16 +758,58 @@ class TestEscalatedWithoutABoard(Fixture):
         self.assertEqual(rows(output)["implementer"][4:], ["opus, medium (default)", "ok"])
 
 
+RELEASE_PLUGIN = ROOT / "plugins" / "devflow-release"
+RELEASE_SKILL = RELEASE_PLUGIN / "skills" / "release" / "SKILL.md"
+RELEASE_BOARD = re.compile(r"`python <base>/tools/model_check\.py (--board[^`]*)`")
+
+
+def real_pins() -> dict:
+    return model_check.load_all_pins(model_check.PINS_DIR, sorted(ROOT.glob("plugins/*/agents")))
+
+
+class TestReleaseBoard(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.base = Path(self.temp.name)
+        self.project = self.base / "project"
+        (self.project / ".claude").mkdir(parents=True)
+        shutil.copyfile(ROOT / ".claude" / "devflow.json", self.project / ".claude" / "devflow.json")
+        self.root = self.base / "projects"
+        self.root.mkdir()
+
+    def tearDown(self):
+        self.temp.cleanup()
+
+    def skills_command(self) -> list[str]:
+        match = RELEASE_BOARD.search(RELEASE_SKILL.read_text(encoding="utf-8"))
+        self.assertIsNotNone(match)
+        return [part.replace("<plugin>", str(RELEASE_PLUGIN)) for part in shlex.split(match.group(1))]
+
+    def board(self, argv: list[str]) -> dict[str, list[str]]:
+        code, output = run([*argv, str(self.project), "--projects-root", str(self.root)])
+        self.assertEqual(code, 0, output)
+        return board_table(output)
+
+    def test_the_skills_command_shows_the_testers_pin(self):
+        table = self.board(self.skills_command())
+        self.assertEqual(table["tester"][1:5], ["sonnet", "medium", "pin", "nothing"])
+
+    def test_base_only_the_tester_is_not_installed(self):
+        table = self.board(["--board"])
+        self.assertEqual(table["tester"][1:5], ["-", "-", "not installed", "nothing"])
+
+
 class TestRealPins(unittest.TestCase):
     def test_reads_the_real_pins(self):
-        pins = model_check.load_pins(model_check.PINS_DIR)
+        pins = real_pins()
         self.assertEqual((pins["designer"].model, pins["designer"].effort), ("opus", "medium"))
         self.assertEqual((pins["reviewer"].model, pins["reviewer"].effort), ("opus", "medium"))
         self.assertEqual((pins["planner"].model, pins["planner"].effort), ("opus", "medium"))
         self.assertEqual((pins["locator"].model, pins["locator"].effort), ("haiku", None))
+        self.assertEqual((pins["tester"].model, pins["tester"].effort), ("sonnet", "medium"))
 
     def test_the_shipped_boards_are_all_default_and_parse_clean(self):
-        pins = model_check.load_pins(model_check.PINS_DIR)
+        pins = real_pins()
         for path in (ROOT / "templates" / "devflow.json", ROOT / ".claude" / "devflow.json"):
             with self.subTest(path.name):
                 config = json.loads(path.read_text(encoding="utf-8"))
@@ -779,7 +824,7 @@ class TestRealPins(unittest.TestCase):
                         self.assertEqual(row.passes, "nothing", row.key)
 
     def test_no_default_is_above_opus_medium(self):
-        pins = model_check.load_pins(model_check.PINS_DIR)
+        pins = real_pins()
         items = [(f"pin {role}", expect) for role, expect in pins.items()]
         items += [(f"phase {key}", expect) for key, (_, expect) in model_check.PHASES.items()]
         items += [(f"general {key}", expect) for key, expect in model_check.GENERAL.items()]

@@ -19,7 +19,8 @@ MANAGE_PROJECT_ROOM = 300
 STOP_RULES = "**Stop rules in the loop.**"
 ADD_FEATURE = SKILLS / "add-feature" / "SKILL.md"
 FIX_BUG = SKILLS / "fix-bug" / "SKILL.md"
-RELEASE = SKILLS / "release" / "SKILL.md"
+RELEASE_PLUGIN = ROOT / "plugins" / "devflow-release"
+RELEASE = RELEASE_PLUGIN / "skills" / "release" / "SKILL.md"
 MANAGE_PROJECT = SKILLS / "manage-project" / "SKILL.md"
 REVIEW_LIMIT = "A reviewer's BLOCKERS"
 TEMPLATES = ROOT / "templates"
@@ -564,6 +565,8 @@ def _cross_citation_errors(skills_dir: Path) -> list[str]:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for by_path, cited, names in _cross_citations(line):
                 target = skills_dir / cited / "SKILL.md"
+                if not target.is_file() and skills_dir.parent.parent.name == "plugins":
+                    target = ROOT / "skills" / cited / "SKILL.md"
                 if not target.is_file():
                     if by_path:
                         errors.append(f"{skill}:{number}: cites skills/{cited}/SKILL.md, which doesn't exist")
@@ -848,6 +851,78 @@ class TestCrossSkillCitations(unittest.TestCase):
             ],
         )
 
+    def test_a_plugin_skill_citing_a_base_skill_reads_the_base(self):
+        with tempfile.TemporaryDirectory() as temp:
+            skills = Path(temp) / "plugins" / "x" / "skills"
+            _skill(
+                skills,
+                "c",
+                "name: c\r\n",
+                f"As in `add-feature`'s \"{BEFORE_YOU_START}\" (`<base>/skills/add-feature/SKILL.md`).\r\n"
+                "As in `fix-bug` (\"No such heading\"; `<base>/skills/fix-bug/SKILL.md`).\r\n",
+            )
+            found = _cross_citation_errors(skills)
+        self.assertEqual(found, ["c:5: cites fix-bug's \"No such heading\", which fix-bug has no heading for"])
+
+
+BASE_REF = re.compile(
+    r"(?:(<base>|\$DEVFLOW_ROOT|<plugin>)/)?\b((?:tools|agents|skills|hooks|templates|references)(?:/[\w.-]+)*/?)"
+)
+OLD_TESTER = re.compile(r"\bdevflow:tester\b")
+BASE_SECTION = "## The base plugin"
+
+
+def _r2_errors(text: str, base_root: Path, plugin_root: Path) -> list[str]:
+    errors = []
+    for number, line in enumerate(text.splitlines(), 1):
+        for match in BASE_REF.finditer(line):
+            prefix, path = match.group(1), match.group(2)
+            if prefix is None:
+                if "/" in path:
+                    errors.append(f"{number}: names {path} without <base> or <plugin>")
+            elif prefix == "<plugin>":
+                if not (plugin_root / path).exists():
+                    errors.append(f"{number}: names <plugin>/{path}, which this plugin lacks")
+            elif not (base_root / path).exists():
+                errors.append(f"{number}: names {prefix}/{path}, which the base lacks")
+        if OLD_TESTER.search(line):
+            errors.append(f"{number}: names devflow:tester, which is devflow-release:tester")
+    return errors
+
+
+class TestReleaseReachesTheBase(unittest.TestCase):
+    def test_the_release_skill_names_base_files_only_through_the_base(self):
+        self.assertEqual(_r2_errors(RELEASE.read_text(encoding="utf-8"), ROOT, RELEASE_PLUGIN), [])
+
+    def test_a_path_that_does_not_reach_the_base_is_named(self):
+        text = (
+            "Run `python tools/model_check.py --board`.\n"
+            "As in this plugin's `skills/add-feature/SKILL.md`.\n"
+            "Run `<base>/tools/nothing.py`.\n"
+            "Paste `<plugin>/agents/x.md`.\n"
+            "Spawn `devflow:tester`.\n"
+            "Paste `<base>/agents/reviewer.md`.\n"
+            "Run `$DEVFLOW_ROOT/tools/model_check.py`.\n"
+            "Paste `<plugin>/references/release-review.md`.\n"
+            "Spawn `devflow-release:tester` with --extra-agents and the guard hooks.\n"
+        )
+        self.assertEqual(
+            _r2_errors(text, ROOT, RELEASE_PLUGIN),
+            [
+                "1: names tools/model_check.py without <base> or <plugin>",
+                "2: names skills/add-feature/SKILL.md without <base> or <plugin>",
+                "3: names <base>/tools/nothing.py, which the base lacks",
+                "4: names <plugin>/agents/x.md, which this plugin lacks",
+                "5: names devflow:tester, which is devflow-release:tester",
+            ],
+        )
+
+    def test_the_skill_stops_without_a_base(self):
+        section = _section(RELEASE, BASE_SECTION)
+        for phrase in ("devflow base:", "$DEVFLOW_ROOT", "stop", ".claude/devflow.json", "/devflow:setup"):
+            with self.subTest(phrase):
+                self.assertIn(phrase, section)
+
 
 class TestSharedRules(unittest.TestCase):
     def test_each_shared_rule_sits_under_its_heading(self):
@@ -877,12 +952,19 @@ MODEL_RULES = (
     "**If the `devflow:*` agent types aren't listed**",
     "**Check the models.**",
 )
-BOARD_RULE = (
+BOARD_PATH = (
     "**The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up "
-    "from this skill's base directory) prints each role's model and effort, where each comes from, and "
+    "from this skill's base directory) "
+)
+BOARD_TAIL = (
+    "prints each role's model and effort, where each comes from, and "
     "what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing "
     "where it shows nothing), and report each line it marks `floor` or `ignored`."
 )
+RELEASE_BOARD_PATH = (
+    "**The model board.** `python <base>/tools/model_check.py --board --extra-agents <plugin>/agents` "
+)
+BOARD_RULE = BOARD_PATH + BOARD_TAIL
 OLD_MODEL_RULE = "Don't pass `model`"
 OLD_ESCALATE_RULE = "except to escalate"
 DESIGNER_CALL = 'subagent_type: "devflow:designer"'
@@ -948,10 +1030,15 @@ class TestModelRules(unittest.TestCase):
                 self.assertEqual(paragraph, _paragraph(FIX_BUG, lead_in))
 
     def test_the_board_rule_is_the_same_words_in_every_delegating_skill(self):
-        for path in (ADD_FEATURE, FIX_BUG, RELEASE, MANAGE_PROJECT):
+        for path, head in (
+            (ADD_FEATURE, BOARD_PATH),
+            (FIX_BUG, BOARD_PATH),
+            (RELEASE, RELEASE_BOARD_PATH),
+            (MANAGE_PROJECT, BOARD_PATH),
+        ):
             with self.subTest(path.parent.name):
                 paragraph = _paragraph(path, "**The model board.**")
-                self.assertTrue(paragraph.startswith(BOARD_RULE), paragraph)
+                self.assertTrue(paragraph.startswith(head + BOARD_TAIL), paragraph)
 
     def test_the_board_rule_names_the_floor_and_the_report(self):
         self.assertIn("`floor`", BOARD_RULE)

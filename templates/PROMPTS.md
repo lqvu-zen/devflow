@@ -151,7 +151,7 @@ Don't change code.
 
 **Tester agent on a release candidate** (coding tab):
 ```
-Run devflow:tester on the {vX.Y.Z-rcN} artifacts, following Try it in
+Run devflow-release:tester on the {vX.Y.Z-rcN} artifacts, following Try it in
 .claude/devflow.md: every change since {last tag}, each relevant download.
 Report PASS or FAIL per flow, with screenshots for failures.
 ```
@@ -171,7 +171,7 @@ promotion.
 ```
 /devflow:release Start the release candidate for {X.Y.Z}: the gate from the
 Release section of .claude/devflow.md, then publish v{X.Y.Z}-rc1 as a GitHub
-pre-release, then run devflow:tester. Give me the manual checklist. Stop
+pre-release, then run devflow-release:tester. Give me the manual checklist. Stop
 there; don't promote.
 ```
 

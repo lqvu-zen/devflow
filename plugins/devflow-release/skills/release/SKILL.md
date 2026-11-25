@@ -5,9 +5,13 @@ description: 'Cut a release the devflow way, through a release candidate: ask th
 
 # Releasing
 
-Every release goes out in two parts. **A. A release candidate**: the artifacts are built, pass the release gate, are published as a **pre-release** `vX.Y.Z-rcN`, are tested by the `devflow:tester` agent, and are used by the maintainer on real work until they have ticked their checklist. **B. Promotion**: the same commit, with only the version changed, is rebuilt, checked again, release-reviewed and published as `vX.Y.Z`. Bugs that a build-and-ship-in-an-hour release lets through tend to surface in the candidate phase.
+Every release goes out in two parts. **A. A release candidate**: the artifacts are built, pass the release gate, are published as a **pre-release** `vX.Y.Z-rcN`, are tested by the `devflow-release:tester` agent, and are used by the maintainer on real work until they have ticked their checklist. **B. Promotion**: the same commit, with only the version changed, is rebuilt, checked again, release-reviewed and published as `vX.Y.Z`. Bugs that a build-and-ship-in-an-hour release lets through tend to surface in the candidate phase.
 
 Releasing is **not a design problem**. It's a deterministic runbook, so there is no design subagent here, and you run the steps inline. The safety comes from **hard gates**: CI green on the commit you build, the build succeeding, the release gate passing, the tester reporting `TESTER: PASS`, every box of the maintainer's checklist ticked, and the release review printing `READY TO PUBLISH`. Stop and report at any gate that fails rather than publishing. (Drafting release notes from the commit log is the one step you may hand to a cheap Haiku or Sonnet subagent.)
+
+## The base plugin
+
+This skill runs the base `devflow` plugin's tools and agents. `<base>` is the path on the `devflow base:` line of this session's session-start summary, or `$DEVFLOW_ROOT` in Bash; `<plugin>` is this plugin's folder, two folders up from this skill's base directory. Quote either path where it holds a space. If the conversation has no `devflow base:` line and `echo "$DEVFLOW_ROOT"` prints nothing, stop before anything else and tell the maintainer: the base `devflow` plugin isn't loaded, or this project has no `.claude/devflow.json`; install `devflow`, run `/devflow:setup`, and start a new session. Don't look for the base anywhere else.
 
 ## The project profile
 
@@ -43,7 +47,7 @@ Where `.claude/devflow.json` sets `"attribution": "none"`, no commit or PR descr
 
 ## A. Release candidate
 
-**Claim your step before anything else**, when the release is a plan step: as in `add-feature` (this plugin's `skills/add-feature/SKILL.md`, "Before you start, and where you stop").
+**Claim your step before anything else**, when the release is a plan step: as in `add-feature`'s "Before you start, and where you stop" (`<base>/skills/add-feature/SKILL.md`).
 
 **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
 
@@ -56,7 +60,7 @@ git status --porcelain && gh run list -L 3 --json conclusion,status,headSha,disp
   --jq '.[] | "\(.status)\t\(.conclusion // "-")\t\(.headSha[0:7])\t\(.displayTitle)"'
 ```
 
-The tree must be clean and HEAD must have a **successful** run. Wait for a run still in progress (`gh run watch <id> --exit-status`). Triage a red run as in `fix-bug` ("When the bug is a red CI run") before treating it as a blocker; a flaky run is rerun once with `gh run rerun <id> --failed`, and if it goes green you carry on with your task and tell the maintainer that the flaky test's fix is the next step, first in Order. If the candidate commit's CI went green only on a rerun, the release report says so. Any other failure is a stop.
+The tree must be clean and HEAD must have a **successful** run. Wait for a run still in progress (`gh run watch <id> --exit-status`). Triage a red run as in `fix-bug` ("When the bug is a red CI run"; `<base>/skills/fix-bug/SKILL.md`) before treating it as a blocker; a flaky run is rerun once with `gh run rerun <id> --failed`, and if it goes green you carry on with your task and tell the maintainer that the flaky test's fix is the next step, first in Order. If the candidate commit's CI went green only on a rerun, the release report says so. Any other failure is a stop.
 
 Then check the latest published tags (`gh release list -R <repo> -L 5`) and **ask the maintainer for the version number X.Y.Z, and wait for the answer** before changing anything. You may suggest one (patch for fixes, minor for notable features), but the maintainer names it. A bare "release" or "go ahead" is not approval of a version suggested earlier in the conversation. Work out N. Gather release notes; if the maintainer didn't give any, draft them from `git log <last final tag>..HEAD --oneline` and show them for approval. Notes are for users, not a changelog: say what changed for someone using the product, and flag anything that will behave differently.
 
@@ -95,14 +99,14 @@ gh release create vX.Y.Z-rcN <artifacts> -R <repo> --prerelease --latest=false \
 
 The guard hook asks the maintainer before any `gh release` write; that is expected. If **Stamp** is set, it first refuses to publish (`gh release create`, `upload`, a publishing `edit`, `gh api` writes) unless the stamp names the current HEAD and the current hash of the bound file; if it refuses, run A4 again, don't work around it. Record the time it was published.
 
-**The model board.** `python <plugin>/tools/model_check.py --board` (`tools/` is two folders up from this skill's base directory) prints each role's model and effort, where each comes from, and what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing where it shows nothing), and report each line it marks `floor` or `ignored`.
+**The model board.** `python <base>/tools/model_check.py --board --extra-agents <plugin>/agents` prints each role's model and effort, where each comes from, and what to pass; on every agent call pass exactly what its `pass` column shows for that role (nothing where it shows nothing), and report each line it marks `floor` or `ignored`.
 
 ### A6. Test the candidate (hard gate)
 
 Spawn the tester, which hasn't seen this session:
 
 ```
-Agent({ description: "Test vX.Y.Z-rcN", subagent_type: "devflow:tester", prompt: <brief> })
+Agent({ description: "Test vX.Y.Z-rcN", subagent_type: "devflow-release:tester", prompt: <brief> })
 ```
 
 The brief gives: the candidate version and tag; `git log <last final tag>..HEAD --oneline`; the paths of the built artifacts; and the whole release-gate output from A4. It reads `docs/BEHAVIOUR.md` and **Try it** itself. Its last line is `TESTER: PASS` or `TESTER: FAIL (n)`. **Any FAIL blocks promotion**: fix it, and start again from A2 with N+1.
@@ -155,9 +159,9 @@ Spawn a fresh reviewer:
 Agent({ description: "Release review vX.Y.Z", subagent_type: "devflow:reviewer", prompt: <brief> })
 ```
 
-(If `devflow:reviewer` isn't listed, use `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for the reviewer, and paste the plugin's `agents/reviewer.md` at the top of the brief.)
+(If `devflow:reviewer` isn't listed, use `subagent_type: "general-purpose"` with the `model` and `effort` the board command prints for the reviewer, and paste `<base>/agents/reviewer.md` at the top of the brief, before "Release mode.")
 
-The brief starts with **"Release mode."** and includes, verbatim: the version, the candidate tag it promotes, and the last released tag; the approved release notes; the **Lineup**; the build output and the whole gate output from B3; the tester's last report and the state of the checklist; the B1 diff (empty when every version file is numbers-only); and the release plan's final step with its "Done when" items, if there is one.
+The brief starts with **"Release mode."** and the whole of `<plugin>/references/release-review.md`, verbatim, then includes, verbatim: the version, the candidate tag it promotes, and the last released tag; the approved release notes; the **Lineup**; the build output and the whole gate output from B3; the tester's last report and the state of the checklist; the B1 diff (empty when every version file is numbers-only); and the release plan's final step with its "Done when" items, if there is one.
 
 If the reviewer reports BLOCKERS, fix them; a fix to anything outside `docs/` is a new candidate, from A2. A reviewer's BLOCKERS get one more round (fix, re-review). If the second review still has blockers, stop and report them; don't start a third round. Go on only on `READY TO PUBLISH`. Show the maintainer every **needs a human** item it listed that the checklist does not already cover, and **wait for them to confirm each one** before publishing.
 

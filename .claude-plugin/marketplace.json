@@ -18,6 +18,12 @@
       "source": "./plugins/devflow-ui",
       "description": "One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or a game UI: a prioritized report with file:line fixes. The web path needs Node 22+ and a Chrome-family browser.",
       "license": "MIT"
+    },
+    {
+      "name": "devflow-release",
+      "source": "./plugins/devflow-release",
+      "description": "Releases through a tested candidate: build, release gate, a pre-release vX.Y.Z-rcN tested by the tester agent and the maintainer, then promotion of the same commit after a release review. Needs the devflow plugin.",
+      "license": "MIT"
     }
   ]
 }

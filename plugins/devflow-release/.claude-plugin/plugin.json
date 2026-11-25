@@ -1,0 +1,9 @@
+{
+  "name": "devflow-release",
+  "description": "Cut a release through a tested candidate: build, pass the release gate, publish vX.Y.Z-rcN as a pre-release, have the tester agent and the maintainer test it, then promote the same commit after a fresh release review. Needs the devflow plugin.",
+  "author": {
+    "name": "Vu Le-Quang"
+  },
+  "license": "MIT",
+  "keywords": ["release", "release-candidate", "testing", "devflow"]
+}

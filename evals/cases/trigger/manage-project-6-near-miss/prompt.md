@@ -2,6 +2,7 @@
 name: trigger-manage-project-6-near-miss
 tags: [trigger, manage-project]
 runs: 1
+plugins: [., plugins/devflow-release]
 max_turns: 8
 timeout_seconds: 180
 allowed_tools: [Read, Glob, Grep, Skill]

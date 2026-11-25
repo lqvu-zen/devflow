@@ -15,10 +15,11 @@ The devflow skills and agents read this file for everything specific to this pro
 |---|---|
 | Plugin manifest and version | `.claude-plugin/plugin.json` |
 | Marketplace entry | `.claude-plugin/marketplace.json` |
-| Workflow skills | `skills/{setup,add-feature,fix-bug,release,manage-project,next-step}/SKILL.md` |
+| Workflow skills | `skills/{setup,add-feature,fix-bug,manage-project,next-step}/SKILL.md` |
 | UI review plugin `devflow-ui` (standalone, Node) | `plugins/devflow-ui/` (skill in `skills/review-ui/`; its `vendor/` is third-party) |
+| Release plugin `devflow-release` (candidate releases; devflow itself ships by hand) | `plugins/devflow-release/` (skill in `skills/release/`, the tester in `agents/tester.md`, the release review the skill pastes into the reviewer's brief in `references/release-review.md`) |
 | UI checklists the base passes to its agents (copies; `devflow-ui`'s are the master) | `references/ui/{core,build,motion}.md` |
-| Agents, with pinned model and effort | `agents/*.md` |
+| Agents, with pinned model and effort | `agents/*.md`; the tester is `devflow-release`'s `agents/tester.md` |
 | Hook registration | `hooks/hooks.json` |
 | Guard (PreToolUse) | `hooks/guard.py` |
 | Session-start summary | `hooks/session_start.py` |
@@ -110,7 +111,7 @@ Rules from the decision log that every session keeps (the project manager adds t
 
 - Few release plans: the current one and the next at most.
 - The version number is the maintainer's.
-- **devflow releases without a candidate** (2026-10-28): a `Release X.Y.Z` commit on `develop` that changes both version files, `main` fast-forwarded to it, which then gets the `vX.Y.Z` tag, and a GitHub release with notes, done by hand as the plan's release step. Don't run `/devflow:release` here: its runbook always cuts a candidate.
+- **devflow releases without a candidate** (2026-10-28): a `Release X.Y.Z` commit on `develop` that changes both version files, `main` fast-forwarded to it, which then gets the `vX.Y.Z` tag, and a GitHub release with notes, done by hand as the plan's release step. Don't run `/devflow-release:release` here: its runbook always cuts a candidate.
 - **Work lands on `develop`; `main` moves only at a release** (2026-11-19): every coding session commits and pushes to `develop`; `main`, what users install, moves only at a release, by a fast-forward to the `Release X.Y.Z` commit, which then gets the `vX.Y.Z` tag; evals run from a checkout frozen at one `develop` commit.
 - **The status file, plans, archive and prompt book stay local** (2026-10-28): `docs/STATUS.md`, `docs/plans/`, `docs/archive/` and `docs/PROMPTS.md` are gitignored. The project manager saves them and commits nothing; coding sessions never stage them.
 - Every escaped bug adds its check.

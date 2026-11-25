@@ -846,7 +846,9 @@ class TestEvalFiles(unittest.TestCase):
             named |= set(re.findall(r"\b((?:build|motion|core)\.md)", text))
             skill_folder = skill_file_path.rsplit("/", 1)[0]
             for name in sorted(named):
-                options = (f"{skill_folder}/references/{name}", f"references/ui/{name}")
+                options = [f"{skill_folder}/references/{name}"]
+                options += [f"{plugin_root}/references/{name}"] if plugin_root else []
+                options.append(f"references/ui/{name}")
                 cited = next((option for option in options if (ROOT / option).exists()), None)
                 if cited and not covered(cited, entries):
                     problems.append(f"{skill} cites references/{name} but depends lacks {cited}")
@@ -874,7 +876,7 @@ class TestEvalFiles(unittest.TestCase):
         problems = []
         for skill, entries in self.depends["skills"].items():
             text = (ROOT / ev.skill_path(ROOT, skill)).read_text(encoding="utf-8")
-            for cited in sorted(set(re.findall(r"<plugin>/(tools/[A-Za-z0-9_]+\.py)", text))):
+            for cited in sorted(set(re.findall(r"(?:<plugin>|<base>)/(tools/[A-Za-z0-9_]+\.py)", text))):
                 if not covered(cited, entries):
                     problems.append(f"{skill} runs {cited} but depends lacks it")
         self.assertEqual([], problems)
@@ -971,7 +973,7 @@ class TestNextStepByHandJudge(unittest.TestCase):
         self.assertIn("does not have to name Ada", self.rubric)
 
     def test_the_rubric_still_fails_a_reply_that_starts_the_release(self):
-        for phrase in ("starts the release", "tags", "builds or publishes", "says it will do the step", "offers to run `/devflow:release` itself"):
+        for phrase in ("starts the release", "tags", "builds or publishes", "says it will do the step", "offers to run `/devflow-release:release` (or `/devflow:release`) itself"):
             with self.subTest(phrase):
                 self.assertIn(phrase, self.rubric)
 

@@ -2,6 +2,7 @@
 name: trigger-add-feature-5-near-miss
 tags: [trigger, add-feature]
 runs: 1
+plugins: [., plugins/devflow-release]
 max_turns: 8
 timeout_seconds: 180
 allowed_tools: [Read, Glob, Grep, Skill]
