@@ -1295,7 +1295,7 @@ class TestSessionDiagnosis(unittest.TestCase):
         self.assertIn("never a bare `:<n>`, with the whole session id", section)
 
 
-BUILD = ROOT / "skills" / "review-ui" / "references" / "build.md"
+BUILD = ROOT / "references" / "ui" / "build.md"
 PRESENT_UI = "For a UI change, paste the UI section's **States** and **Inputs** items as returned."
 FLOOR_ITEMS = ("contrast", "text measure", "states", "target size", "tokens", "worst-case data", "motion")
 FLOOR_MARKS = "met, not met or not checked"

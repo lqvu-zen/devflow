@@ -1,0 +1,9 @@
+{
+  "name": "devflow-ui",
+  "description": "One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or a game UI, in one prioritized report with file:line fixes. Read-only. The web path needs Node 22+ and Chrome, Edge or Chromium.",
+  "author": {
+    "name": "Vu Le-Quang"
+  },
+  "license": "MIT",
+  "keywords": ["ui", "ux", "review", "accessibility", "wcag"]
+}

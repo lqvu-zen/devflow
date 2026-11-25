@@ -117,17 +117,22 @@ def _show(repo: str, commit: str, path: str) -> str | None:
     return git(repo, "show", f"{commit}:{path}")
 
 
+def _first_parent(repo: str, commit: str) -> str | None:
+    parents = git(repo, "rev-list", "--parents", "-n", "1", commit).split()[1:]
+    return parents[0] if parents else None
+
+
 def version_changes(repo: str, commit: str,
                     files: tuple[VersionFile, ...]) -> dict[str, tuple[str | None, str | None]]:
     paths = [f.path for f in files]
     touched = set(git(repo, "diff-tree", "--root", "--no-commit-id", "--name-only", "-r",
                       commit, "--", *paths).split())
-    parents = git(repo, "rev-list", "--parents", "-n", "1", commit).split()[1:]
+    parent = _first_parent(repo, commit)
     changes: dict[str, tuple[str | None, str | None]] = {}
     for file in files:
         if file.path not in touched:
             continue
-        old_text = _show(repo, parents[0], file.path) if parents else None
+        old_text = _show(repo, parent, file.path) if parent else None
         new_text = _show(repo, commit, file.path)
         old = version_of(old_text, file) if old_text is not None else None
         new = version_of(new_text, file) if new_text is not None else None
@@ -180,7 +185,11 @@ def version_problems_in(repo: str, commits: list[str],
             continue
         wanted = match.group(1) or match.group(2)
         numbers = re.sub(r"-rc\d+$", "", wanted)
+        parent = _first_parent(repo, commit)
         for file in files:
+            if _show(repo, commit, file.path) is None and (
+                    parent is None or _show(repo, parent, file.path) is None):
+                continue
             expected = numbers if file.numbers_only else wanted
             problem = _release_problem(repo, commit, label, file, expected, file.path in changes)
             if problem:

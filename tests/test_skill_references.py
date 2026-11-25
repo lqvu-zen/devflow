@@ -1,12 +1,30 @@
 from __future__ import annotations
 
 import re
+import shutil
+import tempfile
 import unittest
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-REFERENCES = ROOT / "skills" / "review-ui" / "references"
-CORE = "skills/review-ui/references/core.md"
+REFERENCES = ROOT / "references" / "ui"
+CORE = "references/ui/core.md"
+CORE_PHRASE = ("(`references/ui/core.md`, two folders up from this skill's base directory; "
+               "pass it as an absolute path)")
+MASTER = ROOT / "plugins" / "devflow-ui" / "skills" / "review-ui" / "references"
+COPIES = ("core.md", "build.md", "motion.md")
+
+
+def _copy_errors(base: Path, master: Path, names: tuple[str, ...] = COPIES) -> list[str]:
+    errors = []
+    for name in names:
+        copy, original = base / name, master / name
+        missing = [str(path) for path in (copy, original) if not path.is_file()]
+        if missing:
+            errors.append(f"{name}: missing {', '.join(missing)}")
+        elif copy.read_bytes() != original.read_bytes():
+            errors.append(f"{name}: {copy} differs from {original}")
+    return errors
 
 
 def _section(path: Path, heading: str) -> list[str]:
@@ -44,7 +62,7 @@ class TestUiBriefReferences(unittest.TestCase):
     def test_designer_and_reviewer_bullets_name_core(self):
         for label, (path, heading, role) in BULLETS.items():
             with self.subTest(label):
-                self.assertIn(CORE, _bullet(path, heading, role))
+                self.assertIn(CORE_PHRASE, _bullet(path, heading, role))
 
     def test_add_feature_designer_names_build_and_motion(self):
         bullet = _bullet(ADD_FEATURE, "## UI changes", "Designer")
@@ -59,7 +77,7 @@ class TestUiBriefReferences(unittest.TestCase):
     def test_core_path_in_bullets_resolves(self):
         for label, (path, heading, role) in BULLETS.items():
             with self.subTest(label):
-                cited = re.findall(r"`(skills/review-ui/references/[\w.-]+)`", _bullet(path, heading, role))
+                cited = re.findall(r"`(references/ui/[\w.-]+)`", _bullet(path, heading, role))
                 self.assertTrue(cited)
                 for rel in cited:
                     self.assertTrue((ROOT / rel).is_file(), rel)
@@ -92,6 +110,33 @@ class TestUiBriefReferences(unittest.TestCase):
         self.assertEqual(len(lines), 1)
         for needle in ("`motion.md`", "§5", "**(M)**", "**(T)**"):
             self.assertIn(needle, lines[0])
+
+
+class TestBaseCopies(unittest.TestCase):
+    def test_each_base_copy_is_byte_equal_to_devflow_uis(self):
+        self.assertEqual(_copy_errors(REFERENCES, MASTER), [])
+
+    def test_a_copy_that_differs_is_named(self):
+        tmp = Path(tempfile.mkdtemp(prefix="devflow-copies-"))
+        try:
+            base, master = tmp / "base", tmp / "master"
+            base.mkdir()
+            master.mkdir()
+            (master / "core.md").write_bytes(b"# Core\r\nOne rule.\r\n")
+            (base / "core.md").write_bytes(b"# Core\r\nOne other rule.\r\n")
+            (master / "build.md").write_bytes(b"# Build\r\nA floor.\r\n")
+            (base / "build.md").write_bytes(b"# Build\nA floor.\n")
+            (master / "motion.md").write_bytes(b"# Motion\r\n")
+            errors = _copy_errors(base, master)
+            self.assertEqual(len(errors), 3, errors)
+            for error, name in zip(errors, COPIES):
+                self.assertTrue(error.startswith(f"{name}: "), error)
+            self.assertIn("differs", errors[0])
+            self.assertIn("differs", errors[1])
+            self.assertIn("missing", errors[2])
+            self.assertIn(str(base / "motion.md"), errors[2])
+        finally:
+            shutil.rmtree(tmp, ignore_errors=True)
 
 
 if __name__ == "__main__":

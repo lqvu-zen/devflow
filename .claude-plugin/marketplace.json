@@ -12,6 +12,12 @@
       "description": "Locate, design, implement, review and commit through fresh agents; a behaviour map; claimable plan steps; a project manager; releases through a tested candidate; guard hooks.",
       "version": "0.3.0",
       "license": "MIT"
+    },
+    {
+      "name": "devflow-ui",
+      "source": "./plugins/devflow-ui",
+      "description": "One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or a game UI: a prioritized report with file:line fixes. The web path needs Node 22+ and a Chrome-family browser.",
+      "license": "MIT"
     }
   ]
 }

@@ -17,6 +17,7 @@ BASE_RUNTIME = (
     "tools/devflow_checks.py",
 )
 PLUGIN_PATH = re.compile(r"(?<!\.claude/)(?<!\.claude\\)\bplugins[/\\]")
+MOVED_SKILL = re.compile(r"\bskills[/\\]review-ui\b")
 
 
 def _load_json(path: Path):
@@ -88,6 +89,8 @@ def _r1_errors(root: Path) -> list[str]:
         for number, line in enumerate(data.decode("utf-8", errors="replace").splitlines(), 1):
             if PLUGIN_PATH.search(line):
                 errors.append(f"{rel}:{number}: names a path under plugins/")
+            elif MOVED_SKILL.search(line):
+                errors.append(f"{rel}:{number}: names skills/review-ui, which moved to devflow-ui")
     return sorted(errors)
 
 
@@ -199,6 +202,22 @@ class TestBaseOnly(unittest.TestCase):
                 "hooks/guard.py:1: names a path under plugins/",
                 "skills/a/SKILL.md:1: names a path under plugins/",
                 "tools/model_check.py:1: names a path under plugins/",
+            ],
+        )
+
+    def test_a_base_file_naming_the_moved_skill_is_named(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _write(root / "skills" / "a" / "SKILL.md", "Pass `skills/review-ui/references/core.md`.\n")
+            _write(root / "agents" / "b.md", "Run skills\\review-ui\\inspect-site.mjs\n")
+            _write(root / "templates" / "c.md", "Run /devflow-ui:review-ui and skills/review-uix.\n")
+            _write(root / "evals" / "depends.json", '{"review-ui": ["skills/review-ui/"]}\n')
+            found = _r1_errors(root)
+        self.assertEqual(
+            found,
+            [
+                "agents/b.md:1: names skills/review-ui, which moved to devflow-ui",
+                "skills/a/SKILL.md:1: names skills/review-ui, which moved to devflow-ui",
             ],
         )
 

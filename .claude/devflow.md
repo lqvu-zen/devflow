@@ -16,7 +16,8 @@ The devflow skills and agents read this file for everything specific to this pro
 | Plugin manifest and version | `.claude-plugin/plugin.json` |
 | Marketplace entry | `.claude-plugin/marketplace.json` |
 | Workflow skills | `skills/{setup,add-feature,fix-bug,release,manage-project,next-step}/SKILL.md` |
-| UI review skill (standalone, Node) | `skills/review-ui/` (`vendor/` is third-party) |
+| UI review plugin `devflow-ui` (standalone, Node) | `plugins/devflow-ui/` (skill in `skills/review-ui/`; its `vendor/` is third-party) |
+| UI checklists the base passes to its agents (copies; `devflow-ui`'s are the master) | `references/ui/{core,build,motion}.md` |
 | Agents, with pinned model and effort | `agents/*.md` |
 | Hook registration | `hooks/hooks.json` |
 | Guard (PreToolUse) | `hooks/guard.py` |
@@ -41,7 +42,7 @@ The invariants that make this project work. Most "looked fine, broke in practice
 - **The hooks do nothing without a devflow config, in the repo or in a linked store.** `hooks/hooks.json` gates each command on `.claude/devflow.json` or a store pointer (`devflow-store` in git's common dir), checked with shell builtins only, so installing the plugin for a user account is safe. Keep that gate in every hook added.
 - **The guard never lets a call through unchecked.** An exception, a broken config, missing `uv` or a guard that can't start produces an `ask` ("not checked"), never a silent allow. A deny is exit 2 with a reason on stderr; an ask is a JSON `permissionDecision: "ask"` on stdout.
 - **Every behaviour change in the guard or the checks has a matching test.** `tests/test_guard.py` runs it against an RYOS-shaped config, a Linux-style project and a minimal config; `tests/test_checks.py` uses real throwaway git repositories.
-- **`skills/review-ui/vendor/` is third-party code.** Update it only by re-copying from upstream and recording the commit in `skills/review-ui/SKILL.md`; never edit it in place.
+- **`plugins/devflow-ui/skills/review-ui/vendor/` is third-party code.** Update it only by re-copying from upstream and recording the commit in `plugins/devflow-ui/skills/review-ui/SKILL.md`; never edit it in place.
 - **CRLF line endings throughout** (`.gitattributes`, `.editorconfig`, commit `d30f107`).
 - **Don't touch the version.** It changes only in a release commit titled `Release X.Y.Z`, never per change, and never with a `-dev` suffix.
 - **No code comments** in new or changed code: not in Python (the `comments` CI check enforces it for `hooks/`, `tools/` and `tests/`), not in shell scripts, not in JSON or YAML. Names, structure and tests carry the intent; the why goes in the commit message and the docs.
@@ -64,9 +65,9 @@ Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_
 
 ## Edit bounds
 
-- **The implementer may edit:** `skills/` (except `skills/review-ui/vendor/`), `agents/`, `hooks/guard.py`, `hooks/session_start.py`, `tools/`, `templates/`, `tests/`, `evals/cases/`, `evals/fixture/`, `README.md`, the `Unreleased` section of `CHANGELOG.md`, `CLAUDE.md`, `docs/BEHAVIOUR.md`.
-- **Only when the plan names them:** `hooks/hooks.json`, `.github/workflows/`, `.gitignore`, `.gitattributes`, `.editorconfig`, `skills/review-ui/vendor/` (re-copied from upstream), `.claude/`.
-- **Never edited outside a release commit:** `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json`.
+- **The implementer may edit:** `skills/`, `plugins/` (except `plugins/devflow-ui/skills/review-ui/vendor/` and `plugins/*/.claude-plugin/plugin.json`), `references/`, `agents/`, `hooks/guard.py`, `hooks/session_start.py`, `tools/`, `templates/`, `tests/`, `evals/cases/`, `evals/fixture/`, `README.md`, the `Unreleased` section of `CHANGELOG.md`, `CLAUDE.md`, `docs/BEHAVIOUR.md`.
+- **Only when the plan names them:** `hooks/hooks.json`, `.github/workflows/`, `.gitignore`, `.gitattributes`, `.editorconfig`, `plugins/devflow-ui/skills/review-ui/vendor/` (re-copied from upstream), `.claude/`, a new plugin's `plugins/<name>/.claude-plugin/plugin.json` and its entry in `.claude-plugin/marketplace.json` (both with no `version`).
+- **Never edited outside a release commit:** `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `plugins/*/.claude-plugin/plugin.json`, except a new plugin's, above.
 - **Never staged:** `evals/results/`, `__pycache__/`, `docs/plans/`, `docs/STATUS.md`, `docs/archive/`, `docs/PROMPTS.md`, anything under `~/.claude/`.
 
 ## Escalate

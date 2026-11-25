@@ -842,12 +842,13 @@ class TestEvalFiles(unittest.TestCase):
                 found = next((option for option in options if (ROOT / option).exists()), None)
                 if found and not covered(found, entries):
                     problems.append(f"{skill} cites {found} but depends lacks it")
-            named = set(re.findall(r"references/([a-z-]+\.md)", text))
+            named = set(re.findall(r"references/(?:ui/)?([a-z-]+\.md)", text))
             named |= set(re.findall(r"\b((?:build|motion|core)\.md)", text))
-            review_folder = ev.skill_path(ROOT, "review-ui").rsplit("/", 1)[0]
+            skill_folder = skill_file_path.rsplit("/", 1)[0]
             for name in sorted(named):
-                cited = f"{review_folder}/references/{name}"
-                if (ROOT / cited).exists() and not covered(cited, entries):
+                options = (f"{skill_folder}/references/{name}", f"references/ui/{name}")
+                cited = next((option for option in options if (ROOT / option).exists()), None)
+                if cited and not covered(cited, entries):
                     problems.append(f"{skill} cites references/{name} but depends lacks {cited}")
         self.assertEqual([], problems)
 

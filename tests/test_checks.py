@@ -86,6 +86,17 @@ def setup_file(version: str) -> str:
     return f'setup(\n    name="App",\n        version="{version}",\n)\n'
 
 
+def manifest_file(version: str | None = None) -> str:
+    data = {"name": "x"}
+    if version is not None:
+        data["version"] = version
+    return json.dumps(data, indent=2) + "\n"
+
+
+PLUGIN = checks.VersionFile("plugins/x/.claude-plugin/plugin.json",
+                            re.compile(r'^  "version": "([^"]+)"', re.MULTILINE), True)
+
+
 class _RepoCase(unittest.TestCase):
     def setUp(self):
         self.tmp = Path(tempfile.mkdtemp(prefix="devflow-checks-"))
@@ -103,6 +114,9 @@ class _RepoCase(unittest.TestCase):
 
 
 class TestVersionCheck(_RepoCase):
+    def with_plugin(self) -> tuple[checks.VersionFile, ...]:
+        return self.config.version_files + (PLUGIN,)
+
     def problems(self, base: str | None = None, head: str = "HEAD",
                  files: tuple[checks.VersionFile, ...] | None = None) -> list[str]:
         repo = str(self.tmp)
@@ -187,15 +201,44 @@ class TestVersionCheck(_RepoCase):
         self.assertIn("leaves the version in app/__init__.py at 2.3.1, not 2.4.0", problems[0])
         self.assertIn("leaves the version in setup_freeze.py at 2.3.1, not 2.4.0", problems[1])
 
-    def test_a_listed_file_missing_at_the_release_fails(self):
+    def test_a_release_that_deletes_a_listed_file_fails(self):
+        self.repo.commit("Release 2.4.0", {"app/__init__.py": init_file("2.4.0"), "setup_freeze.py": None})
+        problems = self.problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn("has no setup_freeze.py", problems[0])
+        self.assertIn("2.4.0", problems[0])
+
+    def test_a_plugin_manifest_added_with_no_version_passes(self):
+        self.repo.commit("feat: a plugin", {PLUGIN.path: manifest_file()})
+        self.assertEqual(self.problems(files=self.with_plugin()), [])
+
+    def test_a_plugin_manifest_added_with_a_version_fails(self):
+        self.repo.commit("feat: a plugin", {PLUGIN.path: manifest_file("2.4.0")})
+        problems = self.problems(files=self.with_plugin())
+        self.assertEqual(len(problems), 1)
+        self.assertIn(f"changes the version in {PLUGIN.path} None -> 2.4.0", problems[0])
+
+    def test_an_older_release_without_the_listed_file_passes(self):
         self.repo.commit("Release 2.4.0", {
             "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0")})
-        files = self.config.version_files + (
-            checks.VersionFile("missing.py", re.compile(r'^v = "([^"]+)"', re.MULTILINE), True),)
-        problems = self.problems(files=files)
-        self.assertEqual(len(problems), 1)
-        self.assertIn("has no missing.py", problems[0])
-        self.assertIn("2.4.0", problems[0])
+        self.repo.commit("feat: a plugin", {PLUGIN.path: manifest_file()})
+        self.assertEqual(self.problems(files=self.with_plugin()), [])
+
+    def test_a_release_whose_plugin_manifest_lacks_the_version_fails(self):
+        self.repo.commit("feat: a plugin", {PLUGIN.path: manifest_file()})
+        base = self.repo.git("rev-parse", "HEAD")
+        release = {"app/__init__.py": init_file("2.5.0"), "setup_freeze.py": setup_file("2.5.0")}
+        cases = (
+            ({}, f"has no version in {PLUGIN.path} that its pattern matches; it should say 2.5.0"),
+            ({PLUGIN.path: manifest_file("2.4.0")}, f"sets the version in {PLUGIN.path} to 2.4.0, not 2.5.0"),
+        )
+        for extra, needle in cases:
+            with self.subTest(needle=needle):
+                self.repo.git("reset", "-q", "--hard", base)
+                self.repo.commit("Release 2.5.0", {**release, **extra})
+                problems = self.problems(base=base, files=self.with_plugin())
+                self.assertEqual(len(problems), 1)
+                self.assertIn(needle, problems[0])
 
     def test_a_listed_file_whose_pattern_never_matches_fails(self):
         self.repo.commit("Release 2.4.0", {
@@ -441,6 +484,19 @@ class TestAttributionWiring(unittest.TestCase):
         for path in (ROOT / "templates" / "devflow.json", ROOT / ".claude" / "devflow.json"):
             with self.subTest(path=str(path)):
                 self.assertEqual(json.loads(path.read_text(encoding="utf-8"))["attribution"], "none")
+
+
+class TestPluginManifestWiring(unittest.TestCase):
+    def test_the_repo_lists_each_plugin_manifest(self):
+        listed = {f.path: f for f in checks.checks_from(checks.load_config(str(ROOT))).version_files}
+        manifests = sorted(ROOT.glob("plugins/*/.claude-plugin/plugin.json"))
+        self.assertTrue(manifests)
+        for manifest in manifests:
+            path = manifest.relative_to(ROOT).as_posix()
+            with self.subTest(path=path):
+                self.assertIn(path, listed)
+                self.assertEqual(listed[path].pattern.pattern, '^  "version": "([^"]+)"')
+                self.assertTrue(listed[path].numbers_only)
 
 
 class TestBranchWiring(unittest.TestCase):
