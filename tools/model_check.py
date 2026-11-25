@@ -33,6 +33,7 @@ BOARD_KEYS = ("orchestrator", "locator", "designer", "designer.diagnosis", "impl
               "implementer.escalate", "reviewer", "planner", "tester", "manage-project.readers")
 STEP_HEADING = re.compile(r"^###\s+(\d{1,3})(?!\d)")
 SESSION_PASS = "session model, set with /model"
+NOT_INSTALLED = "not installed"
 
 
 class Expect(NamedTuple):
@@ -56,7 +57,9 @@ class Row(NamedTuple):
 
     @property
     def source(self) -> str:
-        return self.expect.source if self.expect else "no pin"
+        if self.expect:
+            return self.expect.source
+        return NOT_INSTALLED if self.agent else "no pin"
 
 
 @dataclass
@@ -95,6 +98,18 @@ def load_pins(agents_dir: Path) -> dict[str, Expect]:
         if "model" in fields:
             pins[path.stem] = Expect(family(fields["model"]), fields.get("effort"), "pin")
     return pins
+
+
+def load_all_pins(base_dir: Path, extra_dirs=()) -> dict[str, Expect]:
+    pins = load_pins(base_dir)
+    for folder in extra_dirs:
+        for role, expect in load_pins(Path(folder)).items():
+            pins.setdefault(role, expect)
+    return pins
+
+
+def missing_agents(pins: dict[str, Expect]) -> set[str]:
+    return {agent for agent in (agent_of(key) for key in BOARD_KEYS) if agent is not None and agent not in pins}
 
 
 def parse_model_line(text: str) -> tuple[str, Expect]:
@@ -219,7 +234,10 @@ def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=()) -> t
         current[role] = pins[role]
     entries, ignored = read_board(config)
     notes: list[tuple[str, str]] = [("ignored", text) for text in ignored]
+    absent = missing_agents(pins)
     for key, value in entries.items():
+        if agent_of(key) in absent:
+            continue
         try:
             expect = parse_board_value(value, defaults[key])
         except ValueError as error:
@@ -530,7 +548,7 @@ def agent_calls(session_jsonl: Path) -> list[Call]:
     return calls
 
 
-def judge(call: Call, expect: Expect | None) -> tuple[str, list[str]]:
+def judge(call: Call, expect: Expect | None, absent=frozenset()) -> tuple[str, list[str]]:
     notes: list[str] = []
     if not call.transcript:
         notes.append("no transcript")
@@ -542,7 +560,7 @@ def judge(call: Call, expect: Expect | None) -> tuple[str, list[str]]:
         if not call.finished:
             notes.append("not finished")
     if expect is None:
-        return "no pin", notes
+        return (NOT_INSTALLED if call.role in absent else "no pin"), notes
     if not call.models:
         return "not read", notes
     wrong_model = any(family(model) != expect.model for model in call.models)
@@ -559,9 +577,9 @@ def _passed(call: Call) -> str:
     return ", ".join(parts) or "nothing"
 
 
-def _expected(expect: Expect | None) -> str:
+def _expected(expect: Expect | None, absent_role: bool = False) -> str:
     if expect is None:
-        return "no pin"
+        return NOT_INSTALLED if absent_role else "no pin"
     return f"{shown(expect)} ({expect.source})"
 
 
@@ -577,7 +595,7 @@ def _expect_for(call: Call, expectations: dict[str, Expect], parts: tuple[Expect
 
 
 def format_session(path: Path, calls: list[Call], expectations: dict[str, Expect],
-                   parts: tuple[Expect, ...] = ()) -> tuple[list[str], int]:
+                   parts: tuple[Expect, ...] = (), absent=frozenset()) -> tuple[list[str], int]:
     parts = tuple(parts)
     lines = [f"session {Path(path).stem} ({path})"]
     lines.append("role | passed | ran on | effort | expected | verdict")
@@ -588,12 +606,12 @@ def format_session(path: Path, calls: list[Call], expectations: dict[str, Expect
         expect = _expect_for(call, expectations, parts, implementer_calls)
         if call.role == "implementer":
             implementer_calls += 1
-        verdict, notes = judge(call, expect)
+        verdict, notes = judge(call, expect, absent)
         if verdict == "MISMATCH":
             mismatches += 1
         ran = ", ".join(f"{model} ({count})" for model, count in sorted(call.models.items())) or "-"
         effort = ", ".join(sorted(call.efforts)) or "not recorded"
-        lines.append(f"{call.role} | {_passed(call)} | {ran} | {effort} | {_expected(expect)} | {verdict}")
+        lines.append(f"{call.role} | {_passed(call)} | {ran} | {effort} | {_expected(expect, call.role in absent)} | {verdict}")
         if notes:
             not_read.append(f"{call.role} (call {number}): {', '.join(notes)}")
         if call.role == "general-purpose":
@@ -685,7 +703,7 @@ def _validated(args: argparse.Namespace, pins: dict[str, Expect]) -> str | None:
 
 
 def _check(source: str, root: Path, args: argparse.Namespace, expectations: dict[str, Expect],
-           parts: tuple[Expect, ...]) -> int:
+           parts: tuple[Expect, ...], absent=frozenset()) -> int:
     sessions = sessions_of(source, root, args.count, args.exclude)
     if isinstance(sessions, str):
         print(f"model_check: {sessions}")
@@ -694,7 +712,7 @@ def _check(source: str, root: Path, args: argparse.Namespace, expectations: dict
     for index, path in enumerate(sessions):
         if index:
             print()
-        lines, mismatches = format_session(path, agent_calls(path), expectations, parts)
+        lines, mismatches = format_session(path, agent_calls(path), expectations, parts, absent)
         total += mismatches
         for line in lines:
             print(line)
@@ -717,10 +735,13 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--exclude", default="", help="session id to leave out")
     parser.add_argument("--projects-root", default=None)
     parser.add_argument("--agents", default=str(PINS_DIR))
+    parser.add_argument("--extra-agents", action="append", default=[],
+                        help="a domain plugin's agents folder, read after the base's; repeatable")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-    pins = load_pins(Path(args.agents))
+    pins = load_all_pins(Path(args.agents), args.extra_agents)
+    absent = missing_agents(pins)
     path = config_path(args.source, args.config).resolve()
     config, label = load_board_config(path)
     root = Path(args.projects_root) if args.projects_root else default_projects_root()
@@ -736,14 +757,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"model_check: board: {label}")
         for kind, text in notes:
             print(f"model_check: {kind}: {text}")
-        return _check(args.source, root, args, expectations, parts)
+        return _check(args.source, root, args, expectations, parts, absent)
     project = Path(args.source) if Path(args.source).is_dir() else path.parent.parent
     for line in format_board(label, rows, notes, open_step_lines(project, config), session_model(project, root)):
         print(line)
     if args.run is None:
         return 0
     print()
-    return _check(args.run, root, args, expectations, parts)
+    return _check(args.run, root, args, expectations, parts, absent)
 
 
 if __name__ == "__main__":

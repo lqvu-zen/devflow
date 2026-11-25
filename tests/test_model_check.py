@@ -694,6 +694,58 @@ class TestAgentsOffTheBoard(BoardFixture):
         self.assertEqual(code, 1, output)
 
 
+class TestDomainPins(BoardFixture):
+    def setUp(self):
+        super().setUp()
+        self.domain = self.base / "devflow-release" / "agents"
+        self.domain.mkdir(parents=True)
+        (self.agents / "tester.md").replace(self.domain / "tester.md")
+        (self.domain / "reviewer.md").write_text("---\r\nname: reviewer\r\nmodel: haiku\r\n---\r\n", encoding="utf-8")
+        folder = self.base / "sessions"
+        self.session = folder / "rc.jsonl"
+        _write_jsonl(self.session, [_call("y1", "tester")])
+        _subagent(folder / "rc" / "subagents", "y1",
+                  {"agentType": "devflow:tester", "toolUseId": "y1", "finished": True},
+                  [_reply("r-y1", "claude-haiku-5-5", "low")])
+
+    def test_the_domain_folder_gives_the_tester_its_pin(self):
+        self.write_board({"reviewer": "Sonnet, low"})
+        code, output = self.board("--extra-agents", str(self.domain))
+        table = board_table(output)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(table["tester"][1:5], ["sonnet", "medium", "pin", "nothing"])
+        self.assertEqual(table["reviewer"][1:4], ["opus", "high", "floor (board said sonnet, low)"])
+
+    def test_without_the_folder_the_tester_is_not_installed(self):
+        self.write_board({"tester": "Haiku", "reviewer": "Sonnet, low"})
+        code, output = self.board()
+        table = board_table(output)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(table["tester"][1:5], ["-", "-", "not installed", "nothing"])
+        self.assertEqual(table["reviewer"][1:4], ["opus", "high", "floor (board said sonnet, low)"])
+        self.assertIn("ignored: nothing", output)
+        self.assertNotIn("tester:", output)
+
+    def test_the_base_pin_wins_over_a_domain_pin_of_the_same_name(self):
+        self.write_board(None)
+        table = board_table(self.board("--extra-agents", str(self.domain))[1])
+        self.assertEqual(table["reviewer"][1:4], ["opus", "high", "pin"])
+        missing = self.base / "nowhere" / "agents"
+        table = board_table(self.board("--extra-agents", str(missing), "--extra-agents", str(self.domain))[1])
+        self.assertEqual(table["tester"][1:4], ["sonnet", "medium", "pin"])
+
+    def test_a_call_to_an_agent_not_installed_is_not_a_mismatch(self):
+        config = str(self.project / ".claude" / "devflow.json")
+        code, output = run([str(self.session), "--agents", str(self.agents), "--config", config])
+        self.assertEqual(rows(output)["tester"][4:], ["not installed", "not installed"])
+        self.assertIn("mismatches: 0", output)
+        self.assertEqual(code, 0, output)
+        code, output = run([str(self.session), "--agents", str(self.agents), "--config", config,
+                            "--extra-agents", str(self.domain)])
+        self.assertEqual(rows(output)["tester"][4:], ["sonnet, medium (board)", "MISMATCH"])
+        self.assertEqual(code, 1, output)
+
+
 class TestEscalatedWithoutABoard(Fixture):
     def test_an_escalated_implementer_on_the_default_is_ok(self):
         missing = str(self.base / "no-config.json")

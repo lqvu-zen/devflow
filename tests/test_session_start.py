@@ -27,6 +27,15 @@ def _load(name: str, path: Path):
 
 session_start = _load("devflow_session_start", SESSION_PATH)
 
+
+def hook_env(project: Path, scratch: Path) -> dict:
+    env = dict(os.environ)
+    env.pop("CLAUDE_ENV_FILE", None)
+    env.pop("CLAUDE_PLUGIN_ROOT", None)
+    env["CLAUDE_CONFIG_DIR"] = str(scratch / "claude-config")
+    env["CLAUDE_PROJECT_DIR"] = str(project)
+    return env
+
 PLAN = """# Release 2.4.0
 
 ## Steps
@@ -354,7 +363,7 @@ CURRENT = """# tally v0.3.0: median, JSON output and an empty-list fix
 | 3 JSON output | coding session | `/devflow:add-feature` |
 | 4 Reject non-numbers | coding session | `/devflow:add-feature` |
 | 5 Top N | coding session | `/devflow:add-feature` |
-| 6 Release 0.3.0 | coding session + maintainer | `/devflow:release`; the maintainer names the version |
+| 6 Release 0.3.0 | coding session + maintainer | `/devflow-release:release`; the maintainer names the version |
 
 ## Steps
 
@@ -524,15 +533,15 @@ class TestNextStep(unittest.TestCase):
 
     def test_who_does_what_names_the_skill(self):
         self.assertEqual(session_start.who_rows(CURRENT)[6],
-                         ("coding session + maintainer", "`/devflow:release`; the maintainer names the version"))
+                         ("coding session + maintainer", "`/devflow-release:release`; the maintainer names the version"))
         cases = [
             (("coding session", "`/devflow:fix-bug`"), ("fix-bug", None)),
             (("coding session", "`/devflow:add-feature`"), ("add-feature", None)),
             (("maintainer", "by hand, no candidate"), (None, "is done by hand")),
             (("project manager", "session review"), (None, "is the project manager's")),
             (("coding session", "`/devflow:manage-project`"), (None, "is the project manager's")),
-            (("coding session + maintainer", "`/devflow:release`; the maintainer names the version"),
-             (None, "runs with /devflow:release")),
+            (("coding session + maintainer", "`/devflow-release:release`; the maintainer names the version"),
+             (None, "runs with /devflow-release:release")),
             (("Ada", "she decides on the call"), (None, "waits on Ada")),
             (("maintainer", "`/devflow:add-feature`"), (None, "waits on maintainer")),
         ]
@@ -707,13 +716,37 @@ class TestNextStep(unittest.TestCase):
                                              "/devflow:next-step again")
 
     def test_stops_at_a_by_hand_step(self):
-        plan = with_states(CURRENT.replace("`/devflow:release`; the maintainer names the version",
+        plan = with_states(CURRENT.replace("`/devflow-release:release`; the maintainer names the version",
                                            "by hand, no candidate; the maintainer names the version"),
                            {n: "done" for n in range(1, 6)})
         choice = session_start.choose_step(view(CURRENT_PATH, plan), None)
         self.assertEqual((choice.number, choice.run), (6, None))
         self.assertEqual(choice.stop, f"no step of {CURRENT_PATH} can start: 6 is done by hand")
         self.assertEqual(choice.next_action, "the maintainer does it by hand, as the plan says")
+
+    def test_a_domain_skill_row_names_its_plugin(self):
+        self.assertEqual(session_start.runner("coding session", "`/devflow-release:release`"),
+                         (None, "runs with /devflow-release:release"))
+        self.assertEqual(session_start.runner("coding session", "`/devflow-ui:review-ui`"),
+                         (None, "runs with /devflow-ui:review-ui"))
+        self.assertEqual(session_start.runner("coding session", "`/devflow-x:fix-bug`"),
+                         (None, "runs with /devflow-x:fix-bug"))
+        plan = with_states(CURRENT, {n: "done" for n in range(1, 6)})
+        choice = session_start.choose_step(view(CURRENT_PATH, plan), None)
+        self.assertEqual((choice.number, choice.run), (6, None))
+        self.assertEqual(choice.stop, f"no step of {CURRENT_PATH} can start: 6 runs with /devflow-release:release")
+        self.assertEqual(choice.next_action, "the maintainer runs /devflow-release:release when ready")
+
+    def test_an_old_skill_name_names_its_new_home(self):
+        for old, new in (("/devflow:release", "/devflow-release:release"),
+                         ("/devflow:review-ui", "/devflow-ui:review-ui")):
+            self.assertEqual(session_start.runner("coding session + maintainer", f"`{old}`"),
+                             (None, f"moved to {new}"), old)
+            plan = with_states(CURRENT.replace("`/devflow-release:release`", f"`{old}`"),
+                               {n: "done" for n in range(1, 6)})
+            choice = session_start.choose_step(view(CURRENT_PATH, plan), None)
+            self.assertEqual(choice.stop, f"no step of {CURRENT_PATH} can start: 6 moved to {new}", old)
+            self.assertEqual(choice.next_action, f"the maintainer runs {new} when ready", old)
 
     def test_every_step_done(self):
         plan = with_states(CURRENT, {n: "done" for n in range(1, 7)})
@@ -726,7 +759,7 @@ class TestNextStep(unittest.TestCase):
         choice = session_start.choose_step(view(CURRENT_PATH, BLOCKED), view(NEXT_PATH, NEXT))
         self.assertEqual((choice.plan, choice.number, choice.title, choice.run, choice.fallback),
                          (NEXT_PATH, 3, "Sum of squares", "add-feature", True))
-        self.assertEqual(choice.why, ["4 is at an uncleared Gate", "6 runs with /devflow:release"])
+        self.assertEqual(choice.why, ["4 is at an uncleared Gate", "6 runs with /devflow-release:release"])
         self.assertEqual(choice.skipped, ["1 needs v0.3.0-4",
                                           f"2 overlaps step 2 of {CURRENT_PATH} in progress"])
         no_files = BLOCKED.replace("**Files:** `tally/core.py`, `tests/test_core.py`, `docs/BEHAVIOUR.md`.\n"
@@ -748,14 +781,14 @@ class TestNextStep(unittest.TestCase):
         self.assertEqual(session_start.blockers(nxt, 3, view(CURRENT_PATH, CURRENT)), ["needs v0.3.0-1"])
         gate_done = with_states(BLOCKED, {4: "done"})
         choice = session_start.choose_step(view(CURRENT_PATH, gate_done), nxt)
-        self.assertEqual((choice.plan, choice.number, choice.why), (NEXT_PATH, 1, ["6 runs with /devflow:release"]))
+        self.assertEqual((choice.plan, choice.number, choice.why), (NEXT_PATH, 1, ["6 runs with /devflow-release:release"]))
         self.assertEqual(session_start.blockers(nxt, 4, None), ["is done by hand", "needs 1, 2, 3"])
 
     def test_no_next_plan_stops_with_the_reasons(self):
         choice = session_start.choose_step(view(CURRENT_PATH, BLOCKED), None)
         self.assertEqual((choice.plan, choice.number, choice.run, choice.gate), (CURRENT_PATH, 4, None, GATE))
         self.assertEqual(choice.stop, f"no step of {CURRENT_PATH} can start: 4 is at an uncleared Gate; "
-                                      "6 runs with /devflow:release")
+                                      "6 runs with /devflow-release:release")
         self.assertEqual(choice.next_action, "the maintainer does what the Gate line says, then runs "
                                              "/devflow:next-step again")
         every = with_states(CURRENT, {n: "in progress (x)" for n in range(1, 7)})
@@ -768,13 +801,13 @@ class TestNextStep(unittest.TestCase):
         self.assertEqual(lines, [
             f"Plan: {CURRENT_PATH}",
             f"Next open step in Order: 3 Sum of squares, from the next plan {NEXT_PATH} (no step of "
-            f"{CURRENT_PATH} can start: 4 is at an uncleared Gate; 6 runs with /devflow:release)",
+            f"{CURRENT_PATH} can start: 4 is at an uncleared Gate; 6 runs with /devflow-release:release)",
             "In progress (claimed by another tab, don't take): 2 Median; 3 JSON output; 5 Top N",
         ])
         stuck = with_states(NEXT, {3: "in progress (2026-10-22 09:50)"})
         lines = session_start.plan_lines(CURRENT_PATH, BLOCKED, session_start.DEFAULT_LAYOUT, NEXT_PATH, stuck)
         self.assertEqual(lines[1], f"Next open step in Order: none can start in {CURRENT_PATH} or the next plan, "
-                                   f"{NEXT_PATH} (4 is at an uncleared Gate; 6 runs with /devflow:release; "
+                                   f"{NEXT_PATH} (4 is at an uncleared Gate; 6 runs with /devflow-release:release; "
                                    f"next plan: 1 needs v0.3.0-4; 2 overlaps step 2 of {CURRENT_PATH} in progress; "
                                    "4 is done by hand)")
 
@@ -813,7 +846,7 @@ class TestNextStep(unittest.TestCase):
     def test_the_flag_lines_for_a_fallback_and_a_stop(self):
         self.assertEqual(session_start.next_step_lines(self.project_with(BLOCKED)), [
             f"Plan: {NEXT_PATH} (the next plan)",
-            f"Why: no step of {CURRENT_PATH} can start: 4 is at an uncleared Gate; 6 runs with /devflow:release",
+            f"Why: no step of {CURRENT_PATH} can start: 4 is at an uncleared Gate; 6 runs with /devflow-release:release",
             f"Skipped: 1 needs v0.3.0-4; 2 overlaps step 2 of {CURRENT_PATH} in progress",
             "Step: 3 Sum of squares",
             "Run: /devflow:add-feature",
@@ -823,7 +856,7 @@ class TestNextStep(unittest.TestCase):
             "Step: 4 Reject non-numbers",
             f"Gate: {GATE}",
             f"Stop: no step of {CURRENT_PATH} can start: 4 is at an uncleared Gate; 6 runs with "
-            "/devflow:release. Next: the maintainer does what the Gate line says, then runs "
+            "/devflow-release:release. Next: the maintainer does what the Gate line says, then runs "
             "/devflow:next-step again.",
         ])
         self.assertEqual(session_start.next_step_lines(self.project_with("no plan here", None)), [
@@ -894,8 +927,7 @@ class TestMain(unittest.TestCase):
         shutil.rmtree(self.project, ignore_errors=True)
 
     def run_hook(self, input: str = "") -> subprocess.CompletedProcess:
-        env = dict(os.environ)
-        env["CLAUDE_PROJECT_DIR"] = str(self.project)
+        env = hook_env(self.project, self.project)
         return subprocess.run([sys.executable, str(SESSION_PATH)], capture_output=True, input=input,
                               text=True, encoding="utf-8", env=env, timeout=60)
 
@@ -944,8 +976,7 @@ class TestMain(unittest.TestCase):
                        cwd=self.project, check=True, capture_output=True)
         (self.project / ".claude").mkdir()
         (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "Notes"}), encoding="utf-8")
-        env = dict(os.environ)
-        env["CLAUDE_PROJECT_DIR"] = str(self.project)
+        env = hook_env(self.project, self.project)
         child = subprocess.Popen([sys.executable, str(SESSION_PATH)], stdin=subprocess.PIPE,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
                                  encoding="utf-8", env=env)
@@ -978,8 +1009,7 @@ class TestMain(unittest.TestCase):
             self.assertIn("usage: session_start.py [--next-step]", result.stderr, args)
 
     def run_next_step(self) -> subprocess.CompletedProcess:
-        env = dict(os.environ)
-        env["CLAUDE_PROJECT_DIR"] = str(self.project)
+        env = hook_env(self.project, self.project)
         return subprocess.run([sys.executable, str(SESSION_PATH), "--next-step"], capture_output=True, input="",
                               text=True, encoding="utf-8", env=env, timeout=60)
 
@@ -992,6 +1022,23 @@ class TestMain(unittest.TestCase):
         result = self.run_next_step()
         self.assertEqual((result.returncode, result.stderr), (0, ""))
         self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n")
+
+    def test_next_step_flag_names_a_domain_skill_and_a_moved_one(self):
+        (self.project / ".claude").mkdir()
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        (self.project / "docs" / "plans").mkdir(parents=True)
+        (self.project / "docs" / "STATUS.md").write_text(TWO_STATUS, encoding="utf-8")
+        cases = (("`/devflow-release:release`", "6 runs with /devflow-release:release",
+                  "/devflow-release:release"),
+                 ("`/devflow:release`", "6 moved to /devflow-release:release", "/devflow-release:release"),
+                 ("`/devflow:review-ui`", "6 moved to /devflow-ui:review-ui", "/devflow-ui:review-ui"))
+        for how, reason, skill in cases:
+            plan = with_states(CURRENT.replace("`/devflow-release:release`", how), {n: "done" for n in range(1, 6)})
+            (self.project / CURRENT_PATH).write_text(plan, encoding="utf-8")
+            result = self.run_next_step()
+            self.assertEqual((result.returncode, result.stderr), (0, ""), how)
+            self.assertIn(f"Stop: no step of {CURRENT_PATH} can start: {reason}. "
+                          f"Next: the maintainer runs {skill} when ready.\n", result.stdout, how)
 
     def test_next_step_flag_without_a_config(self):
         result = self.run_next_step()
@@ -1019,8 +1066,7 @@ class TestMain(unittest.TestCase):
         self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n")
 
     def run_in(self, project: Path, *args: str) -> subprocess.CompletedProcess:
-        env = dict(os.environ)
-        env["CLAUDE_PROJECT_DIR"] = str(project)
+        env = hook_env(project, self.project)
         env["DEVFLOW_HOME"] = str(self.project / "home")
         return subprocess.run([sys.executable, str(SESSION_PATH), *args], capture_output=True, input="",
                               text=True, encoding="utf-8", env=env, timeout=60)
@@ -1050,7 +1096,7 @@ class TestMain(unittest.TestCase):
         result = self.run_in(wt)
         self.assertEqual((result.returncode, result.stderr), (0, ""))
         lines = result.stdout.splitlines()
-        self.assertEqual(lines[:2], ["tally session start", self.store_line(store)])
+        self.assertEqual(lines[:3], ["tally session start", f"devflow base: {ROOT}", self.store_line(store)])
         self.assertIn("Uncommitted: none.", lines)
         self.assertIn("Next open step in Order: 2 Median", result.stdout)
         self.assertNotIn("Status and plan edits waiting", result.stdout)
@@ -1171,15 +1217,182 @@ class TestSessionHookCommand(unittest.TestCase):
         store = make_store(self.base / "home" / "projects" / "tally", {"name": "tally"})
         link(main / ".git", store)
         wt = worktree(main, self.base / "wt")
-        env = dict(os.environ)
-        env["CLAUDE_PROJECT_DIR"] = str(wt)
+        env = hook_env(wt, self.base)
         env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
         env["DEVFLOW_HOME"] = str(self.base / "home")
         result = subprocess.run(["sh", "-c", self.command], input="", capture_output=True, text=True,
                                 encoding="utf-8", env=env, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertTrue(result.stdout.startswith("tally session start\n"))
+        self.assertTrue(result.stdout.startswith(f"tally session start\ndevflow base: {os.path.abspath(ROOT)}\n"))
         self.assertIn(f"Store: local-only; devflow's files for this clone are in {store},", result.stdout)
+
+
+class TestBasePath(unittest.TestCase):
+    def setUp(self):
+        self.scratch = Path(tempfile.mkdtemp(prefix="devflow-base-"))
+        self.addCleanup(shutil.rmtree, self.scratch, ignore_errors=True)
+        self.project = self.scratch / "p"
+        (self.project / ".claude").mkdir(parents=True)
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        self.env_file = self.scratch / "env" / "session.sh"
+
+    def run_hook(self, *args: str, plugin_root: str | None = None, env_file: bool = False):
+        env = hook_env(self.project, self.scratch)
+        if plugin_root is not None:
+            env["CLAUDE_PLUGIN_ROOT"] = plugin_root
+        if env_file:
+            env["CLAUDE_ENV_FILE"] = str(self.env_file)
+        return subprocess.run([sys.executable, str(SESSION_PATH), *args], capture_output=True, input="",
+                              text=True, encoding="utf-8", env=env, timeout=60)
+
+    def base_lines(self, stdout: str) -> list[str]:
+        return [line for line in stdout.splitlines() if line.startswith("devflow base:")]
+
+    def test_prints_one_base_line_with_a_space_intact(self):
+        root = self.scratch / "plugin cache" / "devflow"
+        result = self.run_hook(plugin_root=str(root))
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(self.base_lines(result.stdout), [f"devflow base: {os.path.abspath(root)}"])
+        self.assertEqual(result.stdout.splitlines()[:2], ["tally session start", f"devflow base: {os.path.abspath(root)}"])
+
+    def test_the_base_is_absolute_and_holds_model_check(self):
+        for plugin_root in (None, str(ROOT)):
+            result = self.run_hook(plugin_root=plugin_root)
+            self.assertEqual((result.returncode, result.stderr), (0, ""), plugin_root)
+            lines = self.base_lines(result.stdout)
+            self.assertEqual(len(lines), 1, plugin_root)
+            base = lines[0][len("devflow base: "):]
+            self.assertTrue(os.path.isabs(base), base)
+            self.assertTrue((Path(base) / "tools" / "model_check.py").is_file(), base)
+
+    def test_env_file_gains_one_line(self):
+        root = self.scratch / "plugin cache" / "devflow"
+        self.env_file.parent.mkdir()
+        self.env_file.write_text("export OTHER_PLUGIN=1", encoding="utf-8")
+        for _ in range(2):
+            result = self.run_hook(plugin_root=str(root), env_file=True)
+            self.assertEqual((result.returncode, result.stderr), (0, ""))
+        lines = self.env_file.read_text(encoding="utf-8").splitlines()
+        expected = "DEVFLOW_ROOT='" + os.path.abspath(root).replace("\\", "/") + "'"
+        self.assertEqual(lines, ["export OTHER_PLUGIN=1", expected])
+        self.assertNotIn("\\", expected)
+
+    def test_env_file_line_quotes_a_quote(self):
+        self.assertEqual(session_start.env_file_line("C:\\it's here"), "DEVFLOW_ROOT='C:/it'\\''s here'")
+
+    def test_nothing_written_without_the_variable(self):
+        result = self.run_hook()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(len(self.base_lines(result.stdout)), 1)
+        self.assertEqual(sorted(path.name for path in self.scratch.iterdir()), ["p"])
+        self.assertEqual(sorted(path.name for path in (self.project / ".claude").iterdir()), ["devflow.json"])
+
+    def test_nothing_without_a_config(self):
+        (self.project / ".claude" / "devflow.json").unlink()
+        result = self.run_hook(env_file=True)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, "", ""))
+        self.assertFalse(self.env_file.exists())
+
+    def test_next_step_prints_no_base_line_and_writes_nothing(self):
+        result = self.run_hook("--next-step", env_file=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("devflow base:", result.stdout)
+        self.assertFalse(self.env_file.exists())
+
+
+DESIGNED = "# Profile\n\n## Design system\n\nTokens in `ui/tokens.css`.\n\n## Release\n\nBy hand, no candidate.\n"
+HINT_UI = ("Plugins: the profile has a Design system section but devflow-ui isn't installed; "
+           "run /plugin install devflow-ui@devflow.")
+HINT_RELEASE = ("Plugins: the profile has a Release section with candidates but devflow-release isn't installed; "
+                "run /plugin install devflow-release@devflow.")
+
+
+class TestPluginHint(unittest.TestCase):
+    def setUp(self):
+        self.scratch = Path(tempfile.mkdtemp(prefix="devflow-hint-"))
+        self.addCleanup(shutil.rmtree, self.scratch, ignore_errors=True)
+        self.project = self.scratch / "p"
+        (self.project / ".claude").mkdir(parents=True)
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        self.config = self.scratch / "claude-config"
+        self.config.mkdir()
+
+    def user_settings(self, plugins) -> None:
+        (self.config / "settings.json").write_text(json.dumps({"enabledPlugins": plugins}), encoding="utf-8")
+
+    def enabled(self):
+        original = os.environ.get("CLAUDE_CONFIG_DIR")
+        os.environ["CLAUDE_CONFIG_DIR"] = str(self.config)
+        try:
+            return session_start.enabled_plugins(self.project)
+        finally:
+            if original is None:
+                del os.environ["CLAUDE_CONFIG_DIR"]
+            else:
+                os.environ["CLAUDE_CONFIG_DIR"] = original
+
+    def test_profile_needs(self):
+        self.assertEqual(session_start.profile_needs(DESIGNED), [("devflow-ui", "a Design system section")])
+        self.assertEqual(session_start.profile_needs("# Profile\n\n## Design system\n\n\n## Release\n\nx\n"), [])
+        for release in ("Publish `v1.2.0-rcN` first.", "Candidates are `-rc2`.", "Run `/devflow-release:release`."):
+            self.assertEqual(session_start.profile_needs(f"## Release\n\n{release}\n"),
+                             [("devflow-release", "a Release section with candidates")], release)
+        self.assertEqual(session_start.profile_needs("## Release\n\ndevflow has no release candidates.\n"), [])
+
+    def test_plugin_hints(self):
+        base = {"devflow@devflow": True}
+        self.assertEqual(session_start.plugin_hints(DESIGNED, base), [HINT_UI])
+        self.assertEqual(session_start.plugin_hints(DESIGNED, {**base, "devflow-ui@devflow": True}), [])
+        self.assertEqual(session_start.plugin_hints(DESIGNED + "Publish `v1-rcN`.\n", base), [HINT_UI, HINT_RELEASE])
+        self.assertEqual(session_start.plugin_hints("## Release\n\nby hand\n", base), [])
+        self.assertEqual(session_start.plugin_hints(DESIGNED, None), [])
+        self.assertEqual(session_start.plugin_hints(DESIGNED, {}), [])
+        self.assertEqual(session_start.plugin_hints(DESIGNED, {"devflow@devflow": False}), [])
+
+    def test_enabled_plugins_merges_later_wins(self):
+        self.user_settings({"devflow@devflow": True, "devflow-ui@devflow": True})
+        (self.project / ".claude" / "settings.local.json").write_text(
+            json.dumps({"enabledPlugins": {"devflow-ui@devflow": False}}), encoding="utf-8")
+        self.assertEqual(self.enabled(), {"devflow@devflow": True, "devflow-ui@devflow": False})
+
+    def test_enabled_plugins_is_none_on_bad_settings(self):
+        (self.config / "settings.json").write_text("{not json", encoding="utf-8")
+        self.assertIsNone(self.enabled())
+        self.user_settings(["devflow@devflow"])
+        self.assertIsNone(self.enabled())
+        (self.config / "settings.json").unlink()
+        self.assertEqual(self.enabled(), {})
+
+    def run_hook(self) -> subprocess.CompletedProcess:
+        env = hook_env(self.project, self.scratch)
+        return subprocess.run([sys.executable, str(SESSION_PATH)], capture_output=True, input="",
+                              text=True, encoding="utf-8", env=env, timeout=60)
+
+    def hints(self) -> list[str]:
+        result = self.run_hook()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        return [line for line in result.stdout.splitlines() if line.startswith("Plugins:")]
+
+    def test_the_hint_once_and_only_when_needed(self):
+        profile = self.project / ".claude" / "devflow.md"
+        profile.write_text(DESIGNED, encoding="utf-8")
+        self.user_settings({"devflow@devflow": True})
+        self.assertEqual(self.hints(), [HINT_UI])
+        self.user_settings({"devflow@devflow": True, "devflow-ui@devflow": True})
+        self.assertEqual(self.hints(), [])
+        (self.project / ".claude" / "settings.local.json").write_text(
+            json.dumps({"enabledPlugins": {"devflow-ui@devflow": False}}), encoding="utf-8")
+        self.assertEqual(self.hints(), [HINT_UI])
+        profile.write_text("# Profile\n\n## Release\n\nBy hand.\n", encoding="utf-8")
+        self.assertEqual(self.hints(), [])
+
+    def test_no_hint_when_the_settings_cannot_tell(self):
+        (self.project / ".claude" / "devflow.md").write_text(DESIGNED, encoding="utf-8")
+        self.assertEqual(self.hints(), [])
+        self.user_settings({"other@market": True})
+        self.assertEqual(self.hints(), [])
+        (self.config / "settings.json").write_text("{not json", encoding="utf-8")
+        self.assertEqual(self.hints(), [])
 
 
 if __name__ == "__main__":

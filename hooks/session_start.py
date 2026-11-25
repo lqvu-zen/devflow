@@ -311,8 +311,10 @@ def who_rows(plan_md: str) -> dict[int, tuple[str, str]]:
     return rows
 
 
-_SKILL = re.compile(r"/devflow:([\w-]+)")
+_SKILL = re.compile(r"/(devflow(?:-\w+)?):([\w-]+)")
 RUN_SKILLS = ("fix-bug", "add-feature")
+MOVED = {("devflow", "release"): "/devflow-release:release",
+         ("devflow", "review-ui"): "/devflow-ui:review-ui"}
 
 
 def runner(who: str, how: str) -> tuple[str | None, str | None]:
@@ -322,12 +324,15 @@ def runner(who: str, how: str) -> tuple[str | None, str | None]:
     if "manage-project" in both or "project manager" in both:
         return None, "is the project manager's"
     skills = _SKILL.findall(how)
-    runnable = [s for s in skills if s in RUN_SKILLS]
+    runnable = [skill for plugin, skill in skills if plugin == "devflow" and skill in RUN_SKILLS]
     if runnable and "coding session" in who.lower():
         return runnable[0], None
-    others = [s for s in skills if s not in RUN_SKILLS]
+    others = [(plugin, skill) for plugin, skill in skills if plugin != "devflow" or skill not in RUN_SKILLS]
     if others:
-        return None, f"runs with /devflow:{others[0]}"
+        plugin, skill = others[0]
+        if (plugin, skill) in MOVED:
+            return None, f"moved to {MOVED[(plugin, skill)]}"
+        return None, f"runs with /{plugin}:{skill}"
     return None, f"waits on {who.strip() or 'someone'}"
 
 
@@ -549,6 +554,8 @@ def next_action(reason: str) -> str:
         return "run /devflow:manage-project"
     if reason.startswith("runs with "):
         return f"the maintainer runs {reason[len('runs with '):]} when ready"
+    if reason.startswith("moved to "):
+        return f"the maintainer runs {reason[len('moved to '):]} when ready"
     if reason.startswith("waits on "):
         return f"it {reason}"
     if reason.startswith("needs "):
@@ -697,6 +704,105 @@ def profile_line(project: Path, store: Path | None = None) -> str | None:
             "Run /devflow:setup to write it.")
 
 
+CANDIDATE = re.compile(r"-rc(?:N|\d+)\b|/devflow-release:release")
+
+
+def profile_needs(profile_md: str) -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    if any(line.strip() for line in _section(profile_md, "Design system").splitlines()):
+        found.append(("devflow-ui", "a Design system section"))
+    if CANDIDATE.search(_section(profile_md, "Release")):
+        found.append(("devflow-release", "a Release section with candidates"))
+    return found
+
+
+def _user_settings() -> Path:
+    config = os.environ.get("CLAUDE_CONFIG_DIR")
+    if config:
+        return Path(config) / "settings.json"
+    return Path.home() / ".claude" / "settings.json"
+
+
+def enabled_plugins(project: Path) -> dict[str, Any] | None:
+    try:
+        paths = [_user_settings(), project / ".claude" / "settings.json",
+                 project / ".claude" / "settings.local.json"]
+    except RuntimeError:
+        return None
+    merged: dict[str, Any] = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError):
+            return None
+        if not isinstance(data, dict):
+            return None
+        plugins = data.get("enabledPlugins", {})
+        if not isinstance(plugins, dict):
+            return None
+        merged.update(plugins)
+    return merged
+
+
+def plugin_hints(profile_md: str, enabled: Mapping[str, Any] | None) -> list[str]:
+    if enabled is None:
+        return []
+    markets = sorted(key.split("@", 1)[1] for key, on in enabled.items()
+                     if on is True and key.startswith("devflow@"))
+    if not markets:
+        return []
+    hints = []
+    for plugin, what in profile_needs(profile_md):
+        if not any(on is True and key.startswith(f"{plugin}@") for key, on in enabled.items()):
+            hints.append(f"Plugins: the profile has {what} but {plugin} isn't installed; "
+                         f"run /plugin install {plugin}@{markets[0]}.")
+    return hints
+
+
+def hint_lines(files: Path, project: Path) -> list[str]:
+    try:
+        profile_md = _read(files / ".claude" / "devflow.md")
+        if not profile_md:
+            return []
+        return plugin_hints(profile_md, enabled_plugins(project))
+    except Exception:
+        return []
+
+
+def base_path() -> str:
+    root = os.environ.get("CLAUDE_PLUGIN_ROOT")
+    if root:
+        return os.path.abspath(os.path.normpath(root))
+    return str(Path(__file__).resolve().parents[1])
+
+
+def base_line(base: str) -> str:
+    return f"devflow base: {base}"
+
+
+def env_file_line(base: str) -> str:
+    quoted = base.replace("\\", "/").replace("'", "'\\''")
+    return f"DEVFLOW_ROOT='{quoted}'"
+
+
+def write_env_file(path: str, line: str) -> None:
+    try:
+        target = Path(path)
+        try:
+            text = target.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            text = ""
+        if line in text.splitlines():
+            return
+        lead = "\n" if text and not text.endswith("\n") else ""
+        with open(target, "a", encoding="utf-8", newline="\n") as handle:
+            handle.write(f"{lead}{line}\n")
+    except (OSError, ValueError):
+        return
+
+
 TOOLS_DIR = Path(__file__).resolve().parents[1] / "tools"
 VIEW_PATH = TOOLS_DIR / "model_check.py"
 
@@ -759,11 +865,13 @@ def models_line(layout: Layout, plan_md: str | None, step: int | None = None,
 
 
 def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
-           session_id: str | None = None, store: Path | None = None) -> str:
+           session_id: str | None = None, store: Path | None = None, base: str | None = None) -> str:
     files = store or project
     state = upstream_state(run)
     _branch, upstream, ahead, _behind, head = state
     lines = [f"{layout.name} session start"]
+    if base is not None:
+        lines.append(base_line(base))
     if store is not None:
         lines.append(f"Store: local-only; devflow's files for this clone are in {store}, at their "
                      f"in-repo paths (.claude/devflow.md, .claude/devflow.json, docs/BEHAVIOUR.md, "
@@ -786,6 +894,8 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
     missing = profile_line(files, store)
     if missing:
         lines.append(missing)
+    if base is not None:
+        lines += hint_lines(files, project)
     return "\n".join(lines)
 
 
@@ -863,8 +973,12 @@ def main(argv: list[str] | None = None) -> int:
         else:
             session_id = session_model_id(hook_input())
             deadline = time.monotonic() + DEADLINE_SECONDS
+            base = base_path()
+            env_file = os.environ.get("CLAUDE_ENV_FILE")
+            if env_file:
+                write_env_file(env_file, env_file_line(base))
             text = report(runner_until(deadline, str(project)), project, Layout(found.config),
-                          session_id=session_id, store=found.store)
+                          session_id=session_id, store=found.store, base=base)
     except devflow_store.StoreError as error:
         print(f"Store: {error}. Run /devflow:setup to link this clone again.")
         return 1 if args else 0
