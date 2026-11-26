@@ -19,6 +19,10 @@ BASE_RUNTIME = (
 PLUGIN_PATH = re.compile(r"(?<!\.claude/)(?<!\.claude\\)\bplugins[/\\]")
 MOVED_SKILL = re.compile(r"\bskills[/\\]review-ui\b")
 MOVED_RELEASE = re.compile(r"\bdevflow:tester\b|\bskills[/\\]release(?![\w-])|\brelease[ -]mode\b", re.IGNORECASE)
+OLD_NAME = re.compile(r"(?<![\w-])/?devflow:(?:release|review-ui|tester)(?![\w-])")
+MOVED_NAME_SCAN = ("skills", "agents", "templates", "README.md", "CLAUDE.md")
+README_ROW = re.compile(r"^\| (Skill|Agent) \| `([^`]+)` \|", re.MULTILINE)
+README_TEMPLATE = re.compile(r"`([^`]+\.(?:md|json|yml))`")
 
 
 def _load_json(path: Path):
@@ -66,9 +70,9 @@ def _layout_errors(root: Path) -> list[str]:
     return sorted(errors)
 
 
-def _r1_files(root: Path) -> list[Path]:
+def _r1_files(root: Path, items: tuple[str, ...] = BASE_RUNTIME) -> list[Path]:
     found: list[Path] = []
-    for item in BASE_RUNTIME:
+    for item in items:
         path = root / item
         if path.is_file():
             found.append(path)
@@ -94,6 +98,52 @@ def _r1_errors(root: Path) -> list[str]:
                 errors.append(f"{rel}:{number}: names skills/review-ui, which moved to devflow-ui")
             elif moved := MOVED_RELEASE.search(line):
                 errors.append(f"{rel}:{number}: names {moved.group(0)}, which moved to devflow-release")
+    return sorted(errors)
+
+
+def _moved_name_errors(root: Path) -> list[str]:
+    errors: list[str] = []
+    for path in _r1_files(root, MOVED_NAME_SCAN):
+        data = path.read_bytes()
+        if b"\0" in data:
+            continue
+        rel = path.relative_to(root).as_posix()
+        for number, line in enumerate(data.decode("utf-8", errors="replace").splitlines(), 1):
+            for moved in OLD_NAME.finditer(line):
+                errors.append(f"{rel}:{number}: names {moved.group(0)}, the old name of a moved part")
+    return sorted(errors)
+
+
+def _folder_names(root: Path) -> dict[str, set[str]]:
+    skills = {f"/devflow:{p.parent.name}" for p in (root / "skills").glob("*/SKILL.md")}
+    agents = {f"devflow:{p.stem}" for p in (root / "agents").glob("*.md")}
+    for plugin in sorted(p for p in (root / "plugins").glob("*") if p.is_dir()):
+        skills |= {f"/{plugin.name}:{p.parent.name}" for p in plugin.glob("skills/*/SKILL.md")}
+        agents |= {f"{plugin.name}:{p.stem}" for p in plugin.glob("agents/*.md")}
+    templates = {p.name for p in (root / "templates").glob("*") if p.is_file()}
+    return {"Skill": skills, "Agent": agents, "Template": templates}
+
+
+def _readme_names(root: Path) -> dict[str, set[str]]:
+    text = (root / "README.md").read_text(encoding="utf-8")
+    found: dict[str, set[str]] = {"Skill": set(), "Agent": set(), "Template": set()}
+    for kind, name in README_ROW.findall(text):
+        found[kind].add(name)
+    for line in text.splitlines():
+        if line.startswith("| Templates |"):
+            found["Template"] |= set(README_TEMPLATE.findall(line))
+    return found
+
+
+def _readme_list_errors(root: Path) -> list[str]:
+    errors: list[str] = []
+    folders = _folder_names(root)
+    listed = _readme_names(root)
+    for kind in ("Skill", "Agent", "Template"):
+        for name in sorted(folders[kind] - listed[kind]):
+            errors.append(f"README.md: no {kind} row for {name}")
+        for name in sorted(listed[kind] - folders[kind]):
+            errors.append(f"README.md: {kind} row {name} has no folder")
     return sorted(errors)
 
 
@@ -241,6 +291,116 @@ class TestBaseOnly(unittest.TestCase):
                 "hooks/d.py:1: names skills\\release, which moved to devflow-release",
                 "skills/a/SKILL.md:1: names devflow:tester, which moved to devflow-release",
                 "templates/c.md:1: names skills/release, which moved to devflow-release",
+            ],
+        )
+
+
+class TestMovedNames(unittest.TestCase):
+    def test_no_base_text_names_a_moved_part_by_its_old_name(self):
+        self.assertEqual(_moved_name_errors(ROOT), [])
+
+    def test_an_old_name_is_named(self):
+        passing = (
+            "Run /devflow-release:release and devflow-release:tester.\n"
+            "Run /devflow-ui:review-ui, /devflow:review-web-ui and /devflow:release-notes.\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _write(root / "skills" / "a" / "SKILL.md", passing + "Run `/devflow:release` now.\n")
+            _write(root / "agents" / "b.md", passing + "Spawn devflow:tester.\n")
+            _write(root / "templates" / "c.md", passing + "Run /devflow:review-ui.\n")
+            _write(root / "README.md", passing + "| Skill | `/devflow:release` | x |\n")
+            _write(root / "CLAUDE.md", passing + "Not `/devflow:review-ui`.\n")
+            _write(root / "CHANGELOG.md", "/devflow:release\n")
+            _write(root / "docs" / "BEHAVIOUR.md", "/devflow:release\n")
+            _write(root / "evals" / "x", "/devflow:release\n")
+            _write(root / "tests" / "x.py", "/devflow:release\n")
+            _write(root / "hooks" / "session_start.py", "/devflow:release\n")
+            found = _moved_name_errors(root)
+        self.assertEqual(
+            found,
+            [
+                "CLAUDE.md:3: names /devflow:review-ui, the old name of a moved part",
+                "README.md:3: names /devflow:release, the old name of a moved part",
+                "agents/b.md:3: names devflow:tester, the old name of a moved part",
+                "skills/a/SKILL.md:3: names /devflow:release, the old name of a moved part",
+                "templates/c.md:3: names /devflow:review-ui, the old name of a moved part",
+            ],
+        )
+
+    def test_the_readme_gives_both_domain_installs(self):
+        text = (ROOT / "README.md").read_text(encoding="utf-8")
+        for needle in (
+            "/plugin install devflow-ui@devflow",
+            "/plugin install devflow-release@devflow",
+            '"devflow-ui@devflow"',
+            '"devflow-release@devflow"',
+            "two guards",
+        ):
+            self.assertIn(needle, text)
+
+    def test_the_templates_and_manage_project_say_the_way_without_devflow_release(self):
+        def read(rel: str) -> str:
+            return (ROOT / rel).read_text(encoding="utf-8")
+
+        section = read("templates/CLAUDE-section.md")
+        self.assertIn("`/devflow-release:release` with the `devflow-release` plugin, else by hand as **Release**", section)
+        plan = read("templates/plan.md")
+        self.assertIn("(with `devflow-release`; without it, by hand as **Release** says)", plan)
+        self.assertIn("Without the `devflow-release` plugin, the maintainer releases by hand as **Release**", plan)
+        self.assertIn("through the candidate phase with `devflow-release`, else by hand.", plan)
+        prompts = read("templates/PROMPTS.md")
+        self.assertIn("(coding tab; needs the `devflow-release` plugin)", prompts)
+        self.assertIn("These prompts need the `devflow-release` plugin", prompts)
+        self.assertIn("The UI review prompts need the `devflow-ui` plugin", prompts)
+        self.assertIn("where the `devflow-release` plugin is installed, `/devflow-release:release`", read("templates/STATUS.md"))
+        self.assertIn("without it the maintainer releases by hand as **Release** says", read("skills/manage-project/SKILL.md"))
+
+
+class TestReadmeLists(unittest.TestCase):
+    def _root(self, temp: str, rows: str) -> Path:
+        root = Path(temp)
+        _write(root / "skills" / "a" / "SKILL.md", "x")
+        _write(root / "skills" / "b" / "SKILL.md", "x")
+        _write(root / "agents" / "m.md", "x")
+        _write(root / "agents" / "n.md", "x")
+        _write(root / "plugins" / "p" / "skills" / "c" / "SKILL.md", "x")
+        _write(root / "plugins" / "p" / "agents" / "t.md", "x")
+        _write(root / "templates" / "one.md", "x")
+        _write(root / "templates" / "two.json", "x")
+        _write(root / "README.md", rows)
+        return root
+
+    def test_the_readme_lists_match_the_folders(self):
+        self.assertEqual(_readme_list_errors(ROOT), [])
+
+    def test_matching_rows_pass(self):
+        rows = (
+            "| Skill | `/devflow:a` | x |\n| Skill | `/devflow:b` | x |\n| Skill | `/p:c` | x |\n"
+            "| Agent | `devflow:m` | x |\n| Agent | `devflow:n` | x |\n| Agent | `p:t` | x |\n"
+            "| Templates | `templates/` | `one.md` and `two.json`. |\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            found = _readme_list_errors(self._root(temp, rows))
+        self.assertEqual(found, [])
+
+    def test_a_missing_or_extra_row_is_named(self):
+        rows = (
+            "| Skill | `/devflow:a` | x |\n| Skill | `/devflow:gone` | x |\n| Skill | `/p:c` | x |\n"
+            "| Agent | `devflow:m` | x |\n| Agent | `devflow:extra` | x |\n| Agent | `p:t` | x |\n"
+            "| Templates | `templates/` | `one.md` and `three.yml`. |\n"
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            found = _readme_list_errors(self._root(temp, rows))
+        self.assertEqual(
+            found,
+            [
+                "README.md: Agent row devflow:extra has no folder",
+                "README.md: Skill row /devflow:gone has no folder",
+                "README.md: Template row three.yml has no folder",
+                "README.md: no Agent row for devflow:n",
+                "README.md: no Skill row for /devflow:b",
+                "README.md: no Template row for two.json",
             ],
         )
 

@@ -149,7 +149,7 @@ Don't change code.
 
 ## 4. Testing
 
-**Tester agent on a release candidate** (coding tab):
+**Tester agent on a release candidate** (coding tab; needs the `devflow-release` plugin):
 ```
 Run devflow-release:tester on the {vX.Y.Z-rcN} artifacts, following Try it in
 .claude/devflow.md: every change since {last tag}, each relevant download.
@@ -167,25 +167,27 @@ promotion.
 
 ## 5. Releasing (coding tab)
 
+These prompts need the `devflow-release` plugin (`/plugin install devflow-release@devflow`). Without it there is no candidate: the maintainer releases by hand, as **Release** in `.claude/devflow.md` and the plan's release step say, and only the last prompt here applies.
+
 **Start a release candidate:**
 ```
-/devflow:release Start the release candidate for {X.Y.Z}: the gate from the
-Release section of .claude/devflow.md, then publish v{X.Y.Z}-rc1 as a GitHub
-pre-release, then run devflow-release:tester. Give me the manual checklist. Stop
-there; don't promote.
+/devflow-release:release Start the release candidate for {X.Y.Z}: the gate
+from the Release section of .claude/devflow.md, then publish v{X.Y.Z}-rc1 as
+a GitHub pre-release, then run devflow-release:tester. Give me the manual
+checklist. Stop there; don't promote.
 ```
 
 **Promote after the candidate days:**
 ```
-/devflow:release I've used v{X.Y.Z}-rc{N} for {days} days and ticked the
-checklist: {anything worth noting}. Promote the same commit to v{X.Y.Z}:
+/devflow-release:release I've used v{X.Y.Z}-rc{N} for {days} days and ticked
+the checklist: {anything worth noting}. Promote the same commit to v{X.Y.Z}:
 the gate, then the release review (READY TO PUBLISH), then publish.
 Close the issues the notes name.
 ```
 
 **A new candidate after a fix:**
 ```
-/devflow:release rc{N} had {problem}, now fixed in {commit}. Cut
+/devflow-release:release rc{N} had {problem}, now fixed in {commit}. Cut
 v{X.Y.Z}-rc{N+1} through the same flow.
 ```
 
@@ -201,23 +203,25 @@ choose.
 
 ## 6. Upkeep (coding tab unless noted)
 
+The UI review prompts need the `devflow-ui` plugin (`/plugin install devflow-ui@devflow`).
+
 **A UI review (web):**
 ```
-/devflow:review-ui Review {page or URL} at phone and desktop width.
+/devflow-ui:review-ui Review {page or URL} at phone and desktop width.
 Findings first; change nothing until I agree.
 ```
 
 **A UI review (desktop or mobile app):**
 ```
-/devflow:review-ui Review the {screen or dialog} of the {desktop | mobile} app,
-every state at every size the design system names. Take the screenshots the
+/devflow-ui:review-ui Review the {screen or dialog} of the {desktop | mobile}
+app, every state at every size the design system names. Take the screenshots the
 way See it working says, or use the ones in {folder}. Findings first; change
 nothing until I agree.
 ```
 
 **A UI review (game):**
 ```
-/devflow:review-ui Review the {HUD | menu | settings screen} at {resolutions},
+/devflow-ui:review-ui Review the {HUD | menu | settings screen} at {resolutions},
 with a controller and at TV distance. Take the screenshots the way See it
 working says, or use the ones in {folder}. Findings first; change nothing until
 I agree.

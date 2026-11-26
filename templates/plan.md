@@ -5,7 +5,7 @@ _Created <YYYY-MM-DD> by the project manager from <the brief / the maintainer's 
 ## Goals
 
 1. <Goal, in the user's terms.>
-2. Ship **X.Y.Z** through the release-candidate phase.
+2. Ship **X.Y.Z** through the release-candidate phase (with `devflow-release`; without it, by hand as **Release** says).
 
 ## Decisions
 
@@ -19,7 +19,7 @@ _Created <YYYY-MM-DD> by the project manager from <the brief / the maintainer's 
 |---|---|---|
 | 1 <title> | coding session | `/devflow:fix-bug` |
 | 2 <title> | coding session | `/devflow:add-feature` |
-| 3 Release X.Y.Z | coding session + maintainer | `/devflow:release`; the maintainer names the version |
+| 3 Release X.Y.Z | coding session + maintainer | `/devflow-release:release`; the maintainer names the version |
 
 ## Review Focus
 
@@ -58,12 +58,12 @@ Behaviour map: <IDs to add or update, and their surfaces>.
 
 **Files:** `.claude-plugin/plugin.json` or the project's version files, `README.md`, possibly the changelog.
 **Needs** every step above, plus green CI.
-Run `/devflow:release`. The maintainer names the version. The release gate passes; `vX.Y.Z-rc1` is published as a pre-release; the tester reports no FAIL; the maintainer ticks the checklist; the same commit is promoted after the release review prints `READY TO PUBLISH`.
+Run `/devflow-release:release`. The maintainer names the version. The release gate passes; `vX.Y.Z-rc1` is published as a pre-release; the tester reports no FAIL; the maintainer ticks the checklist; the same commit is promoted after the release review prints `READY TO PUBLISH`. Without the `devflow-release` plugin, the maintainer releases by hand as **Release** in `.claude/devflow.md` says: this step says how, and its Who does what row reads `maintainer` | `by hand; the maintainer names the version`.
 **Done when** vX.Y.Z is published with every artifact in the lineup, and the issues it fixes are closed with a link to the release.
 
 ## Order
 
-Bug fixes first: 1. Then 2. Then 3, the release, through the candidate phase.
+Bug fixes first: 1. Then 2. Then 3, the release: through the candidate phase with `devflow-release`, else by hand.
 
 ## Parallel lanes and merging
 

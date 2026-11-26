@@ -157,7 +157,7 @@ When the maintainer asks why one session went wrong. Read-only: no edits, and no
 
 ## Standing rules
 
-The **Standing rules** section of `.claude/devflow.md` and the status file holds the project's rules from its decision log. Keep them unless the maintainer changes them. Every project starts with: few release plans (the current and the next; new work joins one, never a third); the version number is the maintainer's (suggest one, never pick it); every release goes through the candidate phase (the release gate, a pre-release, the tester agent, the maintainer's checklist, then the same commit promoted); every escaped bug adds its check (a test, a map entry or a release-gate case); one fresh coding session per plan step.
+The **Standing rules** section of `.claude/devflow.md` and the status file holds the project's rules from its decision log. Keep them unless the maintainer changes them. Every project starts with: few release plans (the current and the next; new work joins one, never a third); the version number is the maintainer's (suggest one, never pick it); with `devflow-release`, every release goes through the candidate phase (the release gate, a pre-release, the tester agent, the maintainer's checklist, then the same commit promoted), and without it the maintainer releases by hand as **Release** says; every escaped bug adds its check (a test, a map entry or a release-gate case); one fresh coding session per plan step.
 
 ## How to talk to the maintainer
 

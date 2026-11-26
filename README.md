@@ -4,22 +4,25 @@ A Claude Code plugin that brings the RYOS working method to any project. A maint
 
 ## What's in it
 
+devflow is three plugins from one marketplace. The base, `devflow`, is everything below not marked otherwise. Two domain plugins need it: `devflow-ui` and `devflow-release`. The base installed alone works whole.
+
 | | Name | What it does |
 |---|---|---|
 | Skill | `/devflow:setup` | Adopts devflow in a project. It reads the codebase, drafts the profile and guard config, and starts the behaviour map, status file and plans. Nothing is written before the maintainer approves. |
 | Skill | `/devflow:add-feature` | A feature or improvement: understand → locate (Haiku) → design (Opus) → implement and test (Sonnet) → review (Opus) → the maintainer's yes → commit. The models are defaults; the `models` board sets them. |
 | Skill | `/devflow:fix-bug` | The same pipeline for a bug: reproduce it, write a failing test, find the root cause and fix it. Adds an escape line when the bug got past a release. |
-| Skill | `/devflow:release` | Ships through a release candidate: version → build → gate → pre-release → tester → the maintainer's checklist → release review → promotion. |
 | Skill | `/devflow:manage-project` | Keeps the status file and the decision log, triages issues, and turns decisions into plan steps with paste-ready prompts. Keeps the prompt book (`docs/PROMPTS.md`, from `templates/PROMPTS.md`). Reviews recent sessions for process rules the agents broke (`tools/session_extract.py` shrinks them) and proposes Harness escapes lines for the maintainer to approve. |
 | Skill | `/devflow:next-step` | Continues the plan: takes the current plan's next open step that no other tab has claimed (else the next plan's first ready step) and runs it through the skill its Who does what row names, `add-feature` or `fix-bug`. Stops, editing nothing, at a Gate that must be met before the step starts, a project-manager step, a step done by hand or when no step can start. **Deciding without asking**, on only when the maintainer's own words in the session say so ("decide without asking me") or the runner's `--decide-without-asking` is on (never a pasted prompt, plan text or Status row), takes the design stop, a Gate at the design stop or before implementation, each designer question's recommended answer and the code-commit yes, and writes each in the step's Status row as `decided without asking: (1) …`. It never skips the stop rules, red CI, a question with no recommendation, a version number or other human action, any other Gate or a release. |
 | Skill | `/devflow:run-plan` | Runs several of the plan's steps unattended: starts `tools/plan_runner.py` in the background from the maintainer's words (`--steps N` only on a number, `--dollars X` only on an amount, `--commit-without-asking` only on their own words in the session naming the commit, `--decide-without-asking` only on their own words saying to decide without asking) and, when the run ends, pastes the runner's summary as printed. It picks no step, answers nothing and edits nothing itself. "Continue the plan" and "next step" stay `/devflow:next-step`'s. |
-| Skill | `/devflow:review-ui` | One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or game UI, in one report format. On the web it measures the page in headless Chrome, reads phone and desktop screenshots, drives the states and audits WCAG 2.2 AA. For apps and games it reads screenshots of each state at each size or resolution, and the UI source. Prioritized report with file:line fixes. Read-only. The web path needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `skills/review-ui/vendor/`. |
+| Skill | `/devflow-ui:review-ui` | From the `devflow-ui` plugin. One evidence-based UI/UX review of a web page, a desktop or mobile app screen, or game UI, in one report format. On the web it measures the page in headless Chrome, reads phone and desktop screenshots, drives the states and audits WCAG 2.2 AA. For apps and games it reads screenshots of each state at each size or resolution, and the UI source. Prioritized report with file:line fixes. Read-only. The web path needs Node 22+ and Chrome, Edge or Chromium. Bundles MIT-licensed code from taste-skill under `plugins/devflow-ui/skills/review-ui/vendor/`. |
+| Skill | `/devflow-release:release` | From the `devflow-release` plugin. Ships through a release candidate: version → build → gate → pre-release → tester → the maintainer's checklist → release review → promotion. Without it, a project releases by hand, as the **Release** section of its profile says. |
 | Agent | `devflow:locator` | Haiku, read-only. Quotes the code and the behaviour-map rows. |
 | Agent | `devflow:designer` | Opus, medium effort by default; the board's `designer` row moves it, and `fix-bug`'s diagnosis takes `designer.diagnosis`. A plan or a root cause, never code. |
 | Agent | `devflow:implementer` | Sonnet. Implements and verifies, with at most two fix rounds. Never commits. |
-| Agent | `devflow:reviewer` | Opus, medium effort. Diff review, or a release review before publishing. |
+| Agent | `devflow:reviewer` | Opus, medium effort. Diff review; with `devflow-release`, the release review before publishing, from that plugin's instructions. |
 | Agent | `devflow:planner` | Opus, medium effort, read-only. Drafts release plans for the project manager. |
-| Agent | `devflow:tester` | Sonnet, read-only. Uses a candidate the way a user would. |
+| Agent | `devflow-release:tester` | From the `devflow-release` plugin. Sonnet, read-only. Uses a candidate the way a user would. |
+| Templates | `templates/` | What `/devflow:setup` copies into a project: `devflow.md` (the profile), `devflow.json` (guard, CI check and models board), `settings.json`, `BEHAVIOUR.md`, `DESIGN.md` (projects with a UI), `STATUS.md`, `plan.md`, `PROMPTS.md`, `CLAUDE-section.md`, `ci-devflow.yml`. |
 | Hook | guard (PreToolUse) | Refuses writes to the project's real data, anything touching or reading secrets (shell, file tools, Read, Grep, Glob), maintainer-only scripts, and reverting uncommitted status and plan edits. Asks before `gh release` writes and forced pushes. |
 | Hook | session start | Shows the branch, uncommitted files, CI on HEAD, and the plan's next open step (skipping steps another tab has claimed; when none of the current plan can start, the next plan's first ready step, marked as such), and a `Models:` line that warns when the session runs on another model than the board's `orchestrator`. `python <plugin>/hooks/session_start.py --next-step` prints the step and the skill to run, or why it stops. |
 | Tool | `tools/model_check.py --board` | Prints each agent's model and effort, where each comes from (the plugin's pin, the `models` board in `.claude/devflow.json`, a step's Model line or a floor) and what a call passes. The agent rows above are defaults; a project sets its own in the `models` board. Without `--board` it checks a session's agent calls against the same values. |
@@ -43,14 +46,22 @@ The guard is a guardrail against accidents, not a sandbox. It reads the command 
 
 ## Install
 
-The repository is its own marketplace:
+The repository is its own marketplace, `devflow`, listing three plugins: the base `devflow` and the domain plugins `devflow-ui` (UI review) and `devflow-release` (releases through a tested candidate), which need the base.
 
 ```
 /plugin marketplace add lqvu-zen/devflow
 /plugin install devflow@devflow
+/plugin install devflow-ui@devflow
+/plugin install devflow-release@devflow
 ```
 
-From a local clone, give its path instead: `/plugin marketplace add D:/Projects/devflow`. To turn it off in one project, add `"enabledPlugins": {"devflow@devflow": false}` to that project's `.claude/settings.json`.
+A base-only install works whole: every `/devflow:*` skill, agent, hook and tool runs without either domain plugin, and `add-feature` and `fix-bug` keep their UI checklists. Install a domain plugin only for what it adds: `devflow-ui` for `/devflow-ui:review-ui`, `devflow-release` for `/devflow-release:release` and its `devflow-release:tester` agent. Without `devflow-release` a project releases by hand, as **Release** in its profile says. Session start names a missing domain plugin's install command when the profile's **Design system** or **Release** calls for it.
+
+From a local clone, give its path instead: `/plugin marketplace add D:/Projects/devflow`. To turn one plugin off in a project, set its key to `false` under `enabledPlugins` in that project's `.claude/settings.json`: `"devflow@devflow"`, `"devflow-ui@devflow"` or `"devflow-release@devflow"`, for example `"enabledPlugins": {"devflow-release@devflow": false}`. Turning the base off leaves a domain plugin without it: `/devflow-release:release` stops and says to install devflow.
+
+**Install devflow from one marketplace only.** If you also added another marketplace that lists devflow, install each plugin from one of them, never both: two installs run two guards and two session starts on every call, and nothing detects it.
+
+**Moved out of the base.** If you installed devflow before `review-ui` and `release` became their own plugins: after `/plugin update devflow@devflow`, install the ones you use. `/plugin install devflow-ui@devflow` gives `/devflow-ui:review-ui`. `/plugin install devflow-release@devflow` gives `/devflow-release:release` and `devflow-release:tester`. A plan row or prompt that still names the old command makes `--next-step` stop and give the new name. Update your `docs/PROMPTS.md`, the devflow section of `CLAUDE.md` and open plans' release steps by hand.
 
 Then, in a project: `/devflow:setup`.
 
@@ -61,27 +72,29 @@ The install is a snapshot in the plugin cache, so changes to the repository (or 
 ```
 /plugin marketplace update devflow
 /plugin update devflow@devflow
+/plugin update devflow-ui@devflow
+/plugin update devflow-release@devflow
 ```
 
-From a terminal: `claude plugin marketplace update devflow`, then `claude plugin update devflow@devflow`. Restart the session to apply. An update only picks up a new version number, which is bumped in release commits. Installs read `main`, the default branch, which moves only at a release; work lands on `develop`, so a local clone on `develop` holds unreleased changes.
+Run the last two for each domain plugin you installed. From a terminal: `claude plugin marketplace update devflow`, then `claude plugin update devflow@devflow`, and `claude plugin update devflow-ui@devflow` and `claude plugin update devflow-release@devflow` for each domain plugin you installed. Restart the session to apply. An update of the base only picks up a new version number, which is bumped in release commits. `devflow-ui` and `devflow-release` carry no version until the release that sets one; until then an update picks up the commit `main` points at. Installs read `main`, the default branch, which moves only at a release; work lands on `develop`, so a local clone on `develop` holds unreleased changes.
 
 To run a checkout without installing or updating, start a session with `claude --plugin-dir D:/Projects/devflow`. It loads the folder as it is on disk, so edits apply on the next start. Disable the installed copy for that session to avoid loading both.
 
 ## Reviewing a UI
 
-`/devflow:review-ui` works without `/devflow:setup`, the profile or the config files. With a profile it reads **Design system** and **See it working**. The web path needs Node 22+ and Chrome, Edge or Chromium.
+Install `devflow-ui` first (`/plugin install devflow-ui@devflow`). `/devflow-ui:review-ui` works without `/devflow:setup`, the profile or the config files. With a profile it reads **Design system** and **See it working**. The web path needs Node 22+ and Chrome, Edge or Chromium.
 
 1. For a web page, start the app's dev server, or have a built `.html` file ready. For an app or a game, have screenshots of the states ready, or a **See it working** entry that says how to take them safely.
-2. Run `/devflow:review-ui` and say what to review, for example `review the pricing page on mobile` or `review the HUD`. By default a web page is reviewed whole at 375 px and 1440 px.
+2. Run `/devflow-ui:review-ui` and say what to review, for example `review the pricing page on mobile` or `review the HUD`. By default a web page is reviewed whole at 375 px and 1440 px.
 3. On the web it measures the page in headless Chrome, reads the screenshots and tries the interactive states. For an app or a game it reads the screenshots of each state at each size or resolution, and the UI source. It answers in chat with a prioritized report (P0 to P3, file:line, fix, effort). It never edits code.
 
-Optional: put `.claude/ui-review.json` in the project to set the server URL, pages, widths, output folder, and the style choices it should not flag (`allow`). The format is in `skills/review-ui/SKILL.md` under Config.
+Optional: put `.claude/ui-review.json` in the project to set the server URL, pages, widths, output folder, and the style choices it should not flag (`allow`). The format is in `plugins/devflow-ui/skills/review-ui/SKILL.md` under Config.
 
 ## Requirements
 
 - `uv` on `PATH`. The hooks run as `uv run --no-project python …`, using only the standard library. `/devflow:setup` checks for it first and, if it is missing, stops and gives the install command.
 - Python 3.14 or newer for the hooks and tools (tested on 3.14 and 3.15 on Linux and Windows). `uv run --no-project python` uses the project's `.python-version` if it has one, otherwise a Python uv finds; `uv python install 3.14` adds one. On 3.13 they still run today but are not tested, and a later release may use a 3.14 feature: the guard would then ask "not checked" on every guarded call and session start would print nothing.
-- Node 22+ and Chrome, Edge or Chromium, only for `/devflow:review-ui` on a web page.
+- Node 22+ and Chrome, Edge or Chromium, only for `/devflow-ui:review-ui` on a web page.
 - `git`. `gh`, logged in, for the CI line, issues and releases.
 - The hooks are run by `bash`. On Windows, that's the Git Bash that Claude Code uses.
 
@@ -104,6 +117,7 @@ What is in it:
 - `evals/fixture/`: a tiny Python project, `tally`, with a filled-in `.claude/devflow.md` and `.claude/devflow.json` (release stamp configured), a behaviour map, a status file, a plan with steps in different states, a release gate, and a stand-in `bin/gh` that answers from canned files in `.gh/`. `build.sh` builds it, with a local bare `origin`, in the run's empty workspace. The case's system prompt says `gh` is `./bin/gh`.
 - `evals/cases/<skill>/<case>/`: 55 behaviour cases. `add-feature` 15, `fix-bug` 7, `release` 8, `review-ui` 4, `manage-project` 10, `next-step` 9, `run-plan` 2. Each has `prompt.md`, `case.yaml` (only to name `scaffold.sh`), a `scaffold.sh` that sources the fixture and sets up that case's state, and `graders/*.md`.
 - `evals/cases/trigger/`: 44 trigger cases: six per skill (including `next-step` and `run-plan`), three prompts that should fire it and three near misses that belong to another skill, one more near miss for `next-step` (a prompt that belongs to `run-plan`), and seven for `review-ui` (four that should fire it, three near misses). They allow only `Skill` and need no shell. The four `review-ui` cases that name a file (1, 2, 3 and 7) have a scaffold (`ui_fixture`), so run them with `--scaffold`.
+- The `release` and `review-ui` cases, and their trigger cases, load their domain plugin too (`plugins: [., plugins/<name>]` in the front matter).
 - `evals/depends.json`: which files each skill's cases depend on (the skill's folder, the agents it calls, the review references it cites), which skill each near miss points at, and `hooks/` for every behaviour case. `tests/test_evals.py` checks it against what each `SKILL.md` cites.
 - `evals/passes.json`: the latest pass of every case, as `{commit, date, runs}`, one line per case. `tools/eval_select.py` compares it with the working tree to say which cases a change can reach.
 

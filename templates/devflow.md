@@ -113,5 +113,5 @@ Rules from the decision log that every session keeps (the project manager adds t
 
 - Few release plans: the current one and the next at most.
 - The version number is the maintainer's.
-- Every release goes through a release candidate.
+- Every release goes through a release candidate with `devflow-release`; without it, by hand as **Release** says.
 - Every escaped bug adds its check.

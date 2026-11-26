@@ -5,7 +5,7 @@ Kept by the project manager (`/devflow:manage-project`). **This file is the mast
 ## Roles
 
 - **<Maintainer> (maintainer):** decides, merges, picks version numbers, uses each release candidate, runs the manual checks, reviews the behaviour map.
-- **Coding sessions:** Claude Code running `/devflow:add-feature`, `/devflow:fix-bug` and `/devflow:release` with the `devflow:*` agents (locator, designer, implementer, reviewer, tester).
+- **Coding sessions:** Claude Code running `/devflow:add-feature` and `/devflow:fix-bug` with the `devflow:*` agents (locator, designer, implementer, reviewer), and, where the `devflow-release` plugin is installed, `/devflow-release:release` with its `devflow-release:tester` agent.
 - **Project manager:** `/devflow:manage-project`. Keeps this file, the decision log and the open items; checks GitHub issues; writes plan steps when the maintainer decides something. Never writes code; commits only its own doc files and never pushes.
 - **Planner:** the `devflow:planner` agent, called by the project manager for a whole plan or a big feature.
 
