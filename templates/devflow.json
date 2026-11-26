@@ -29,7 +29,8 @@
     "version_files": [
       {"path": "myapp/__init__.py", "pattern": "^__version__ = \"([^\"]+)\""}
     ],
-    "no_new_python_comments": ["myapp/"]
+    "no_new_python_comments": ["myapp/"],
+    "docs_routing": "CLAUDE.md"
   },
   "models": {
     "orchestrator": "default",

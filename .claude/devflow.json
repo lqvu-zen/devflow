@@ -20,7 +20,8 @@
       {"path": "plugins/devflow-ui/.claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true},
       {"path": "plugins/devflow-release/.claude-plugin/plugin.json", "pattern": "^  \"version\": \"([^\"]+)\"", "numbers_only": true}
     ],
-    "no_new_python_comments": ["hooks/", "tools/", "tests/"]
+    "no_new_python_comments": ["hooks/", "tools/", "tests/"],
+    "docs_routing": "CLAUDE.md"
   },
   "models": {
     "orchestrator": "default",

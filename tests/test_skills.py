@@ -1542,5 +1542,47 @@ class TestUiReport(unittest.TestCase):
         self.assertEqual(len(_floor_bullets()), len(FLOOR_ITEMS))
 
 
+ROUTING_NAME = "When to read an area's doc first"
+DOCS_ALLOWED = "the behaviour map, the area docs, and the plan's own Status row"
+DOCS_LINES_CLAUSE = "carry the implementer's `Docs-unaffected:` lines"
+AGENT_DOC_RULES = {
+    "locator.md": ("**Read the area docs first.**", ROUTING_NAME, "headed `<doc path> § <section>`"),
+    "designer.md": ("- **Docs**: each area doc the change reaches", "the doc correction in the fix plan",
+                    ROUTING_NAME),
+    "implementer.md": ("**Keep the area docs true.**", "- **Docs**: the area docs updated",
+                       "devflow_checks.py anchors"),
+    "reviewer.md": ("8. **Area docs**", ROUTING_NAME, "`Docs-unaffected: <doc>.md - <why>`"),
+}
+
+
+class TestKnowledgeDocsRules(unittest.TestCase):
+    def test_both_skills_allow_the_area_docs_beyond_the_files_line(self):
+        for path in (ADD_FEATURE, FIX_BUG):
+            with self.subTest(skill=path.parent.name):
+                self.assertIn(DOCS_ALLOWED.lower(), path.read_text(encoding="utf-8").lower())
+
+    def test_both_skills_carry_the_docs_unaffected_lines_into_the_commit(self):
+        for path in (ADD_FEATURE, FIX_BUG):
+            with self.subTest(skill=path.parent.name):
+                self.assertEqual(path.read_text(encoding="utf-8").count(DOCS_LINES_CLAUSE), 1)
+
+    def test_fix_bugs_diagnosis_asks_for_the_doc_correction(self):
+        self.assertIn("the doc correction if a wrong or missing doc contributed",
+                      FIX_BUG.read_text(encoding="utf-8"))
+
+    def test_each_agent_carries_its_rule(self):
+        for name, phrases in AGENT_DOC_RULES.items():
+            text = (ROOT / "agents" / name).read_text(encoding="utf-8")
+            for phrase in phrases:
+                with self.subTest(agent=name, phrase=phrase):
+                    self.assertIn(phrase, text)
+
+    def test_the_routing_section_has_one_name_everywhere(self):
+        for path in (TEMPLATES / "CLAUDE-section.md", TEMPLATES / "devflow.md", ROOT / "CLAUDE.md",
+                     TEMPLATES / "architecture" / "README.md"):
+            with self.subTest(path=path.name):
+                self.assertIn(ROUTING_NAME, path.read_text(encoding="utf-8"))
+
+
 if __name__ == "__main__":
     unittest.main()

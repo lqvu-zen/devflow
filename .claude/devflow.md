@@ -23,7 +23,7 @@ The devflow skills and agents read this file for everything specific to this pro
 | Hook registration | `hooks/hooks.json` |
 | Guard (PreToolUse) | `hooks/guard.py` |
 | Session-start summary | `hooks/session_start.py` |
-| CI check (version, comments) | `tools/devflow_checks.py` |
+| CI check (version, comments, attribution, anchors, docs) | `tools/devflow_checks.py` |
 | Session extract for the process-escape review | `tools/session_extract.py` |
 | Files setup copies into a project | `templates/` |
 | Unit tests | `tests/test_*.py` |
@@ -31,6 +31,7 @@ The devflow skills and agents read this file for everything specific to this pro
 | CI workflow | `.github/workflows/test.yml` |
 | Changelog | `CHANGELOG.md` |
 | Version | `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` |
+| Area docs (read first: the routing table in `CLAUDE.md`, "When to read an area's doc first") | `docs/architecture/` |
 
 ## Architecture rules
 
@@ -66,7 +67,7 @@ Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_
 
 ## Edit bounds
 
-- **The implementer may edit:** `skills/`, `plugins/` (except `plugins/devflow-ui/skills/review-ui/vendor/` and `plugins/*/.claude-plugin/plugin.json`), `references/`, `agents/`, `hooks/guard.py`, `hooks/session_start.py`, `tools/`, `templates/`, `tests/`, `evals/cases/`, `evals/fixture/`, `README.md`, the `Unreleased` section of `CHANGELOG.md`, `CLAUDE.md`, `docs/BEHAVIOUR.md`.
+- **The implementer may edit:** `skills/`, `plugins/` (except `plugins/devflow-ui/skills/review-ui/vendor/` and `plugins/*/.claude-plugin/plugin.json`), `references/`, `agents/`, `hooks/guard.py`, `hooks/session_start.py`, `tools/`, `templates/`, `tests/`, `evals/cases/`, `evals/fixture/`, `README.md`, the `Unreleased` section of `CHANGELOG.md`, `CLAUDE.md`, `docs/BEHAVIOUR.md`, `docs/architecture/`.
 - **Only when the plan names them:** `hooks/hooks.json`, `.github/workflows/`, `.gitignore`, `.gitattributes`, `.editorconfig`, `plugins/devflow-ui/skills/review-ui/vendor/` (re-copied from upstream), `.claude/`, a new plugin's `plugins/<name>/.claude-plugin/plugin.json` and its entry in `.claude-plugin/marketplace.json` (both with no `version`).
 - **Never edited outside a release commit:** `.claude-plugin/plugin.json`, `.claude-plugin/marketplace.json` and `plugins/*/.claude-plugin/plugin.json`, except a new plugin's, above.
 - **Never staged:** `evals/results/`, `__pycache__/`, `docs/plans/`, `docs/STATUS.md`, `docs/archive/`, `docs/PROMPTS.md`, anything under `~/.claude/`.
@@ -104,6 +105,7 @@ The maintainer's manual checks for every release:
 
 - [ ] After `/plugin marketplace update devflow`, `/plugin` shows the new version.
 - [ ] One real session with the updated plugin in a project that uses it starts cleanly (the session-start summary prints, the guard allows normal work).
+- [ ] The docs audit (`docs/PROMPTS.md`, Upkeep) ran since the last release.
 
 ## Standing rules
 

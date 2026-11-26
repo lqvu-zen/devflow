@@ -557,5 +557,259 @@ class TestNewBranchPush(_RepoCase):
         self.assertEqual(checks.commits_in(repo, release, "HEAD"), [first, second])
 
 
+SOURCE = "class Loader:\n    def load_config(self):\n        return {}\n\n\ndef total(values):\n    return sum(values)\n"
+RULE = "(docs/architecture/README.md, Writing rules)"
+
+
+class TestAnchorCheck(_RepoCase):
+    def setUp(self):
+        super().setUp()
+        self.repo.commit("Add the source", {"src/app.py": SOURCE})
+
+    def write_doc(self, text: str, name: str = "app.md") -> None:
+        self.repo.commit(f"Write {name}", {f"docs/architecture/{name}": text})
+
+    def problems(self, *names: str) -> list[str]:
+        return checks.anchor_problems(str(self.tmp), list(names))[0]
+
+    def run_cli(self, *args: str, repo: Path | None = None) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(CHECKS_PATH), "anchors", *args,
+                               "--repo", str(repo or self.tmp)],
+                              capture_output=True, text=True, encoding="utf-8")
+
+    def test_a_symbol_in_its_file_passes(self):
+        self.write_doc("# App\n\n[`total`](../../src/app.py) adds them up; "
+                       "[`Loader.load_config()`](../../src/app.py) reads it; "
+                       "[`total`](/src/app.py) from the root.\n")
+        self.assertEqual(checks.anchor_problems(str(self.tmp), []), ([], 3))
+
+    def test_a_missing_file_fails(self):
+        self.write_doc("# App\n\n[`total`](../../src/gone.py)\n")
+        self.assertEqual(self.problems(), [
+            f"docs/architecture/app.md:3: [`total`] names src/gone.py, which does not exist {RULE}"])
+
+    def test_a_folder_is_not_a_file(self):
+        self.write_doc("# App\n\n[`total`](../../src)\n")
+        self.assertEqual(self.problems(), [
+            f"docs/architecture/app.md:3: [`total`] names src, which does not exist {RULE}"])
+
+    def test_a_target_outside_the_repo_fails(self):
+        self.write_doc("# App\n\n[`total`](../../../elsewhere.py)\n")
+        problems = self.problems()
+        self.assertEqual(len(problems), 1)
+        self.assertIn("which is outside the repo", problems[0])
+
+    def test_a_missing_symbol_fails(self):
+        self.write_doc("# App\n\n[`average`](../../src/app.py)\n")
+        self.assertEqual(self.problems(), [
+            f'docs/architecture/app.md:3: src/app.py has no "average" {RULE}'])
+
+    def test_the_symbol_is_case_sensitive(self):
+        self.write_doc("# App\n\n[`Total`](../../src/app.py)\n")
+        self.assertEqual(len(self.problems()), 1)
+
+    def test_each_line_anchor_form_fails(self):
+        forms = {
+            "plain fragment": ("See src/app.py#L12 for it.", "#L12"),
+            "fragment range": ("See src/app.py#L12-L20 for it.", "#L12-L20"),
+            "file and line": ("See src/app.py:12 for it.", "src/app.py:12"),
+            "file and range": ("See src/app.py:12-20 for it.", "src/app.py:12-20"),
+            "linked fragment": ("[`total`](../../src/app.py#L6)", "../../src/app.py#L6"),
+            "linked range": ("[`total`](../../src/app.py#L6-L7)", "../../src/app.py#L6-L7"),
+            "linked file and line": ("[`total`](../../src/app.py:6)", "../../src/app.py:6"),
+        }
+        for label, (line, shown) in forms.items():
+            with self.subTest(form=label):
+                self.write_doc(f"# App\n\n{line}\n")
+                self.assertEqual(self.problems(), [
+                    f'docs/architecture/app.md:3: line anchor "{shown}"; anchor by symbol {RULE}'])
+
+    def test_fenced_blocks_are_skipped(self):
+        self.write_doc("# App\n\n```markdown\n[`gone`](../../src/gone.py) at src/app.py:3\n```\n\n"
+                       "  ~~~\n  Traceback: app.py:7\n  ~~~\n\n[`total`](../../src/app.py)\n")
+        self.assertEqual(checks.anchor_problems(str(self.tmp), []), ([], 1))
+
+    def test_url_links_are_skipped(self):
+        self.write_doc("# App\n\n[`fnmatch`](https://docs.python.org/3/library/fnmatch.html)\n")
+        self.assertEqual(checks.anchor_problems(str(self.tmp), []), ([], 0))
+
+    def test_named_docs_are_checked_alone(self):
+        self.write_doc("# Good\n\n[`total`](../../src/app.py)\n", "good.md")
+        self.write_doc("# Bad\n\n[`average`](../../src/app.py)\n", "bad.md")
+        self.assertEqual(checks.anchor_problems(str(self.tmp), ["good.md"]), ([], 1))
+        self.assertEqual(checks.anchor_problems(str(self.tmp), ["docs/architecture/good.md"]), ([], 1))
+        self.assertEqual(len(self.problems()), 1)
+        self.assertEqual(len(self.problems("bad.md")), 1)
+
+    def test_an_unknown_name_fails(self):
+        self.write_doc("# Good\n\n[`total`](../../src/app.py)\n", "good.md")
+        self.assertEqual(self.problems("gone.md"), [f"docs/architecture/gone.md: no such doc {RULE}"])
+
+    def test_no_docs_folder_passes(self):
+        self.assertEqual(checks.anchor_problems(str(self.tmp), []), ([], 0))
+        result = self.run_cli()
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, "anchors: ok (0 docs, 0 anchors)"))
+
+    def test_main_needs_no_config_and_reports(self):
+        bare = Path(tempfile.mkdtemp(prefix="devflow-anchors-"))
+        self.addCleanup(shutil.rmtree, bare, True)
+        (bare / "src").mkdir()
+        (bare / "src" / "app.py").write_text(SOURCE, encoding="utf-8")
+        (bare / "docs" / "architecture").mkdir(parents=True)
+        doc = bare / "docs" / "architecture" / "app.md"
+        doc.write_text("# App\n\n[`total`](../../src/app.py)\n", encoding="utf-8")
+        result = self.run_cli(repo=bare)
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, "anchors: ok (1 docs, 1 anchors)"))
+        doc.write_text("# App\n\n[`average`](../../src/app.py)\n", encoding="utf-8")
+        result = self.run_cli("app.md", repo=bare)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn('src/app.py has no "average"', result.stdout)
+
+    def test_only_anchors_takes_names(self):
+        result = subprocess.run([sys.executable, str(CHECKS_PATH), "version", "app.md",
+                                 "--repo", str(self.tmp)], capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("only anchors takes doc names", result.stderr)
+
+    def test_devflows_own_docs_pass(self):
+        self.assertEqual(checks.anchor_problems(str(ROOT), [])[0], [])
+
+
+ROUTING = ("# Project\n\n## How work is done here\n\n### When to read an area's doc first\n\n"
+           "Read the doc first.\n\n"
+           "| Paths | Topics | Doc |\n|---|---|---|\n"
+           "| `app/`, `lib/*.py` | the app | `docs/architecture/app.md` |\n"
+           "| | the release | `docs/architecture/release.md` |\n\n## Other\n\n| Paths | Doc |\n|---|---|\n"
+           "| `other/` | `docs/architecture/other.md` |\n")
+
+
+class TestDocsCheck(_RepoCase):
+    def setUp(self):
+        super().setUp()
+        self.base = self.repo.commit("Route the docs", {
+            ".claude/devflow.json": json.dumps({"checks": {"docs_routing": "CLAUDE.md"}}),
+            "CLAUDE.md": ROUTING,
+            "docs/architecture/app.md": "# App\n",
+            "lib/x.py": "x = 1\n",
+        })
+
+    def problems(self) -> list[str]:
+        repo = str(self.tmp)
+        config = checks.checks_from(checks.load_config(repo))
+        commits = checks.commits_in(repo, checks.commit_range(repo, self.base, "HEAD"), "HEAD")
+        return checks.docs_problems_in(repo, commits, config.docs_routing)
+
+    def expected(self, sha: str, title: str, path: str) -> str:
+        return (f'{sha[:7]} "{title}" changes {path} (routed to docs/architecture/app.md) but not '
+                f'docs/architecture/app.md, and has no "Docs-unaffected: app.md - <why>" line '
+                f"(CLAUDE.md, When to read an area's doc first)")
+
+    def test_the_routing_table_is_read(self):
+        self.assertEqual(checks.routes_in(ROUTING),
+                         [checks.Route(("app/", "lib/*.py"), "docs/architecture/app.md")])
+
+    def test_a_routed_change_without_its_doc_fails(self):
+        sha = self.repo.commit("feat: a", {"app/a.py": "def a():\n    return 2  # keeps one\n"})
+        self.assertEqual(self.problems(), [self.expected(sha, "feat: a", "app/a.py")])
+
+    def test_a_glob_pattern_routes(self):
+        sha = self.repo.commit("feat: x", {"lib/x.py": "x = 2\n"})
+        self.assertEqual(self.problems(), [self.expected(sha, "feat: x", "lib/x.py")])
+
+    def test_a_change_with_its_doc_passes(self):
+        self.repo.commit("feat: a", {"app/b.py": "b = 1\n", "docs/architecture/app.md": "# App\n\nMore.\n"})
+        self.assertEqual(self.problems(), [])
+
+    def test_a_well_formed_line_passes(self):
+        for line in ("Docs-unaffected: app.md - a rename only",
+                     "Docs-unaffected: docs/architecture/app.md - a rename only"):
+            with self.subTest(line=line):
+                self.repo.commit("feat: a", {"app/b.py": f"b = {len(line)}\n"}, body=line)
+                self.assertEqual(self.problems(), [])
+                self.base = self.repo.git("rev-parse", "HEAD")
+
+    def test_a_line_without_a_reason_or_for_another_doc_fails(self):
+        for line in ("Docs-unaffected: app.md", "Docs-unaffected: app.md -",
+                     "Docs-unaffected: other.md - not this one", "See Docs-unaffected: app.md - quoted"):
+            with self.subTest(line=line):
+                self.repo.commit("feat: a", {"app/b.py": f"b = {len(line)}\n"}, body=line)
+                self.assertEqual(len(self.problems()), 1)
+                self.base = self.repo.git("rev-parse", "HEAD")
+
+    def test_each_commit_is_judged_alone(self):
+        sha = self.repo.commit("feat: a", {"app/b.py": "b = 1\n"})
+        self.repo.commit("docs: app", {"docs/architecture/app.md": "# App\n\nLater.\n"})
+        self.assertEqual(self.problems(), [self.expected(sha, "feat: a", "app/b.py")])
+
+    def test_unrouted_and_topic_only_changes_pass(self):
+        self.repo.commit("feat: other", {"other/o.py": "o = 1\n", "README.md": "release\n"})
+        self.assertEqual(self.problems(), [])
+
+    def test_no_table_or_no_setting_passes(self):
+        self.repo.commit("Drop the table", {"CLAUDE.md": "# Project\n"})
+        self.repo.commit("feat: a", {"app/b.py": "b = 1\n"})
+        self.assertEqual(self.problems(), [])
+        self.repo.commit("Put it back, unset", {"CLAUDE.md": ROUTING, ".claude/devflow.json": "{}"})
+        self.repo.commit("feat: b", {"app/c.py": "c = 1\n"})
+        self.assertEqual(self.problems(), [])
+
+    def test_a_commit_before_the_base_is_not_read(self):
+        self.repo.commit("feat: old", {"app/b.py": "b = 1\n"})
+        self.base = self.repo.commit("feat: new", {"README.md": "x\n"})
+        self.repo.commit("feat: newer", {"other/o.py": "o = 1\n"})
+        self.assertEqual(self.problems(), [])
+
+    def test_main_reports_and_exits(self):
+        self.repo.commit("feat: a", {"app/b.py": "b = 1\n"})
+        command = [sys.executable, str(CHECKS_PATH), "docs", "--base", self.base, "--head", "HEAD",
+                   "--repo", str(self.tmp)]
+        result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("routed to docs/architecture/app.md", result.stdout)
+        self.repo.commit("feat: b", {"app/c.py": "c = 1\n"}, body="Docs-unaffected: app.md - a constant")
+        self.base = self.repo.git("rev-parse", "HEAD~1")
+        command[4] = self.base
+        result = subprocess.run(command, capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual((result.returncode, result.stdout.strip()), (0, "docs: ok (1 commits)"))
+
+    def test_only_a_string_sets_the_routing_file(self):
+        self.assertEqual(checks.checks_from({"checks": {"docs_routing": "CLAUDE.md"}}).docs_routing, "CLAUDE.md")
+        for value in (None, "", 3, ["CLAUDE.md"]):
+            with self.subTest(value=value):
+                self.assertIsNone(checks.checks_from({"checks": {"docs_routing": value}}).docs_routing)
+
+
+class TestDocsWiring(unittest.TestCase):
+    STEPS = ("uv run --no-project python tools/devflow_checks.py anchors\n",
+             'devflow_checks.py docs --base "$BASE" --head "$HEAD_SHA"')
+
+    def test_the_ci_files_run_both_checks(self):
+        for path in (ROOT / "templates" / "ci-devflow.yml", ROOT / ".github" / "workflows" / "test.yml"):
+            text = path.read_text(encoding="utf-8").replace("\r", "")
+            for step in self.STEPS:
+                with self.subTest(path=path.name, step=step):
+                    self.assertIn(step, text)
+
+    def test_the_devflow_configs_set_the_routing_file(self):
+        for path in (ROOT / "templates" / "devflow.json", ROOT / ".claude" / "devflow.json"):
+            with self.subTest(path=str(path)):
+                config = checks.checks_from(json.loads(path.read_text(encoding="utf-8")))
+                self.assertEqual(config.docs_routing, "CLAUDE.md")
+
+    def test_the_template_table_parses(self):
+        text = (ROOT / "templates" / "CLAUDE-section.md").read_text(encoding="utf-8")
+        self.assertEqual(checks.routes_in(text), [checks.Route(
+            ("<folder>/", "<path/file.ext>", "<glob/*.ext>"), "docs/architecture/<area>.md")])
+
+    def test_devflows_own_table_names_docs_and_paths_that_exist(self):
+        routes = checks.routes_in((ROOT / "CLAUDE.md").read_text(encoding="utf-8"))
+        self.assertTrue(routes)
+        for route in routes:
+            with self.subTest(doc=route.doc):
+                self.assertTrue((ROOT / route.doc).is_file())
+                for pattern in route.patterns:
+                    self.assertTrue(any(ROOT.glob(pattern.rstrip("/"))), pattern)
+
+
 if __name__ == "__main__":
     unittest.main()

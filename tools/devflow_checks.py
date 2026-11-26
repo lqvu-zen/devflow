@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import io
 import json
 import os
@@ -10,6 +11,7 @@ import sys
 import tokenize
 from collections import Counter
 from typing import Any, Mapping, NamedTuple
+from urllib.parse import unquote
 
 RELEASE_TITLE = re.compile(r"^Release candidate (\d+\.\d+\.\d+-rc\d+)$|^Release (\d+\.\d+\.\d+)$")
 EMPTY_TREE = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
@@ -23,6 +25,20 @@ CLAUDE_TRAILER = re.compile(r"^[ \t]*co-authored-by:.*(?:(?<![\w-])claude\b|nore
                             re.IGNORECASE | re.MULTILINE)
 GENERATED_LINE = re.compile(r"^[ \t]*(?:\U0001F916\ufe0f?[ \t]*)?generated with \[?claude code",
                             re.IGNORECASE | re.MULTILINE)
+DOCS_DIR = "docs/architecture"
+ANCHORS_RULE = "(docs/architecture/README.md, Writing rules)"
+ROUTING_SECTION = "When to read an area's doc first"
+ROUTING_HEADING = re.compile(r"^#{1,6}[ \t]+When to read an area's doc first[ \t]*$")
+ANY_HEADING = re.compile(r"^#{1,6}[ \t]")
+FENCE = re.compile(r"^[ \t]*(```|~~~)")
+CODE_LINK = re.compile(r"\[`([^`]+)`\]\(([^)\s]+)\)")
+LINE_FRAGMENT = re.compile(r"#L\d+(?:-L?\d+)?")
+FILE_LINE = re.compile(r"[\w./-]+\.[A-Za-z0-9]+:\d+(?:-\d+)?")
+LINE_FRAGMENT_ONLY = re.compile(r"^L\d+(?:-L?\d+)?$")
+FILE_LINE_TARGET = re.compile(r":\d+(?:-\d+)?$")
+URL_SCHEME = re.compile(r"^[A-Za-z][A-Za-z0-9+.-]*:")
+BACKTICKS = re.compile(r"`([^`]+)`")
+DOCS_UNAFFECTED = re.compile(r"^Docs-unaffected:[ \t]+(\S+\.md)[ \t]+-[ \t]+\S", re.MULTILINE)
 
 
 class GitError(Exception):
@@ -40,6 +56,12 @@ class Checks(NamedTuple):
     comment_dirs: tuple[str, ...]
     default_base: str
     no_attribution: bool
+    docs_routing: str | None = None
+
+
+class Route(NamedTuple):
+    patterns: tuple[str, ...]
+    doc: str
 
 
 def checks_from(config: Mapping[str, Any]) -> Checks:
@@ -53,7 +75,9 @@ def checks_from(config: Mapping[str, Any]) -> Checks:
     dirs = tuple(d.replace("\\", "/") for d in section.get("no_new_python_comments") or []
                  if isinstance(d, str) and d)
     branch = config.get("main_branch") if isinstance(config.get("main_branch"), str) else "main"
-    return Checks(tuple(files), dirs, f"origin/{branch}", config.get("attribution") == "none")
+    routing = section.get("docs_routing")
+    routing = routing.replace("\\", "/") if isinstance(routing, str) and routing else None
+    return Checks(tuple(files), dirs, f"origin/{branch}", config.get("attribution") == "none", routing)
 
 
 def load_config(repo: str) -> dict:
@@ -310,15 +334,217 @@ def comment_problems_in(repo: str, start: str | None, head: str,
     return problems
 
 
+def _cells(line: str) -> list[str]:
+    row = line.strip()
+    if row.startswith("|"):
+        row = row[1:]
+    if row.endswith("|"):
+        row = row[:-1]
+    return [cell.strip() for cell in row.split("|")]
+
+
+def _routing_rows(text: str) -> list[str]:
+    lines = text.replace("\r", "").split("\n")
+    start = next((index for index, line in enumerate(lines) if ROUTING_HEADING.match(line)), None)
+    if start is None:
+        return []
+    rows: list[str] = []
+    for line in lines[start + 1:]:
+        if ANY_HEADING.match(line):
+            break
+        if line.lstrip().startswith("|"):
+            rows.append(line)
+        elif rows:
+            break
+    return rows
+
+
+def routes_in(text: str) -> list[Route]:
+    rows = _routing_rows(text)
+    if len(rows) < 2:
+        return []
+    header = [cell.lower() for cell in _cells(rows[0])]
+    if "paths" not in header or "doc" not in header:
+        return []
+    paths_at, doc_at = header.index("paths"), header.index("doc")
+    routes: list[Route] = []
+    for row in rows[2:]:
+        cells = _cells(row)
+        if max(paths_at, doc_at) >= len(cells):
+            continue
+        patterns = tuple(span.strip().lstrip("/") for span in BACKTICKS.findall(cells[paths_at])
+                         if span.strip().lstrip("/"))
+        docs = [span.strip().lstrip("/") for span in BACKTICKS.findall(cells[doc_at])]
+        if patterns and docs and docs[0]:
+            routes.append(Route(patterns, docs[0]))
+    return routes
+
+
+def _routed(path: str, pattern: str) -> bool:
+    if pattern.endswith("/"):
+        return path.startswith(pattern)
+    return fnmatch.fnmatchcase(path, pattern)
+
+
+def doc_paths(repo: str, names: list[str]) -> tuple[list[str], list[str]]:
+    if not names:
+        folder = os.path.join(repo, *DOCS_DIR.split("/"))
+        if not os.path.isdir(folder):
+            return [], []
+        return sorted(f"{DOCS_DIR}/{name}" for name in os.listdir(folder)
+                      if name.endswith(".md") and os.path.isfile(os.path.join(folder, name))), []
+    found: list[str] = []
+    problems: list[str] = []
+    for name in names:
+        clean = name.replace("\\", "/")
+        path = clean if "/" in clean else f"{DOCS_DIR}/{clean}"
+        if os.path.isfile(os.path.join(repo, *path.split("/"))):
+            found.append(path)
+        else:
+            problems.append(f"{path}: no such doc {ANCHORS_RULE}")
+    return found, problems
+
+
+def _inside(root: str, path: str) -> bool:
+    try:
+        return os.path.commonpath([root, path]) == root
+    except ValueError:
+        return False
+
+
+def _symbol_problem(repo: str, doc: str, where: str, symbol: str, target: str) -> str | None:
+    path, _, fragment = target.partition("#")
+    if LINE_FRAGMENT_ONLY.match(fragment) or FILE_LINE_TARGET.search(path):
+        return f'{where}: line anchor "{target}"; anchor by symbol {ANCHORS_RULE}'
+    root = os.path.realpath(repo)
+    path = unquote(path)
+    if path.startswith("/"):
+        full = os.path.join(root, *path.lstrip("/").split("/"))
+    else:
+        full = os.path.join(root, *doc.split("/")[:-1], *path.split("/"))
+    full = os.path.realpath(full)
+    if not _inside(root, full):
+        return f"{where}: [`{symbol}`] names {path}, which is outside the repo {ANCHORS_RULE}"
+    shown = os.path.relpath(full, root).replace("\\", "/")
+    if not os.path.isfile(full):
+        return f"{where}: [`{symbol}`] names {shown}, which does not exist {ANCHORS_RULE}"
+    with open(full, encoding="utf-8", errors="replace") as handle:
+        text = handle.read()
+    name = symbol.strip()
+    if name.endswith("()"):
+        name = name[:-2]
+    name = name.rsplit(".", 1)[-1]
+    if not name or name not in text:
+        return f'{where}: {shown} has no "{symbol}" {ANCHORS_RULE}'
+    return None
+
+
+def _line_anchor_problems(where: str, text: str) -> list[str]:
+    found = [*LINE_FRAGMENT.finditer(text), *FILE_LINE.finditer(text)]
+    return [f'{where}: line anchor "{match.group(0)}"; anchor by symbol {ANCHORS_RULE}'
+            for match in sorted(found, key=lambda match: match.start())]
+
+
+def anchor_problems(repo: str, names: list[str]) -> tuple[list[str], int]:
+    docs, problems = doc_paths(repo, names)
+    count = 0
+    for doc in docs:
+        with open(os.path.join(repo, *doc.split("/")), encoding="utf-8-sig", errors="replace") as handle:
+            lines = handle.read().replace("\r", "").split("\n")
+        fence = None
+        for number, line in enumerate(lines, 1):
+            marker = FENCE.match(line)
+            if fence:
+                if marker and marker.group(1) == fence:
+                    fence = None
+                continue
+            if marker:
+                fence = marker.group(1)
+                continue
+            where = f"{doc}:{number}"
+            rest = line
+            for link in CODE_LINK.finditer(line):
+                symbol, target = link.group(1), link.group(2)
+                if URL_SCHEME.match(target):
+                    continue
+                count += 1
+                rest = rest.replace(link.group(0), " ", 1)
+                problem = _symbol_problem(repo, doc, where, symbol, target)
+                if problem:
+                    problems.append(problem)
+            problems.extend(_line_anchor_problems(where, rest))
+    return problems, count
+
+
+def _changed_in(repo: str, commit: str) -> list[str]:
+    out = git(repo, "-c", "core.quotepath=false", "diff-tree", "--root", "--no-commit-id",
+              "--name-only", "-r", "--no-renames", commit)
+    return [line for line in out.splitlines() if line]
+
+
+def _doc_name(path: str) -> str:
+    return path.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+def docs_problems_in(repo: str, commits: list[str], routing: str | None) -> list[str]:
+    if not routing:
+        return []
+    problems: list[str] = []
+    for commit in commits:
+        table = _show(repo, commit, routing)
+        routes = routes_in(table) if table is not None else []
+        if not routes:
+            continue
+        changed = _changed_in(repo, commit)
+        excused: set[str] | None = None
+        for route in routes:
+            if route.doc in changed:
+                continue
+            hit = next((path for path in changed
+                        if any(_routed(path, pattern) for pattern in route.patterns)), None)
+            if hit is None:
+                continue
+            if excused is None:
+                excused = {_doc_name(name) for name in DOCS_UNAFFECTED.findall(_message(repo, commit))}
+            name = _doc_name(route.doc)
+            if name in excused:
+                continue
+            label = f'{commit[:7]} "{_short_title(_title(repo, commit))}"'
+            problems.append(f'{label} changes {hit} (routed to {route.doc}) but not {route.doc}, '
+                            f'and has no "Docs-unaffected: {name} - <why>" line '
+                            f'({routing}, {ROUTING_SECTION})')
+    return problems
+
+
+def _anchors(repo: str, names: list[str]) -> int:
+    try:
+        problems, count = anchor_problems(repo, names)
+        docs = len(doc_paths(repo, names)[0])
+    except OSError as error:
+        print(f"devflow_checks anchors: {error}")
+        return 1
+    for problem in problems:
+        print(problem)
+    if problems:
+        return 1
+    print(f"anchors: ok ({docs} docs, {count} anchors)")
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="devflow process checks for CI.")
-    parser.add_argument("check", choices=("version", "comments", "attribution"))
+    parser.add_argument("check", choices=("version", "comments", "attribution", "anchors", "docs"))
+    parser.add_argument("names", nargs="*", help="anchors only: the docs to check")
     parser.add_argument("--base", default="")
     parser.add_argument("--head", default="HEAD")
     parser.add_argument("--repo", default=".")
-    args = parser.parse_args(argv)
+    args = parser.parse_intermixed_args(argv)
+    if args.names and args.check != "anchors":
+        parser.error(f"only anchors takes doc names, not {args.check}")
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    if args.check == "anchors":
+        return _anchors(args.repo, args.names)
     try:
         checks = checks_from(load_config(args.repo))
         start = commit_range(args.repo, args.base or None, args.head, checks.default_base)
@@ -327,6 +553,8 @@ def main(argv: list[str] | None = None) -> int:
             problems = version_problems_in(args.repo, commits, checks.version_files)
         elif args.check == "attribution":
             problems = attribution_problems_in(args.repo, commits, checks.no_attribution)
+        elif args.check == "docs":
+            problems = docs_problems_in(args.repo, commits, checks.docs_routing)
         else:
             problems = comment_problems_in(args.repo, start, args.head, checks.comment_dirs)
     except (GitError, OSError, ValueError) as error:

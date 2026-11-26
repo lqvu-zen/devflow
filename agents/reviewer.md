@@ -25,6 +25,7 @@ Use Bash only for `git diff` / `git show` / `git log` and to run the tests. Neve
 5. **Tests**: they would fail without the change. A test that passes either way proves nothing. For a bug fix, confirm the change addresses the stated root cause, not just the symptom.
 6. **Done when**: if the brief includes a plan step, check every "Done when" item. Mark each one **met**, **not met** or **needs a human**, with evidence.
 7. **UI**: when your brief carries the **Design system** section, `docs/DESIGN.md` and the path of the core checklist, check the diff against them. A hard-coded colour, size, spacing, radius or duration that a token covers is a blocker. So is a state, size or input in the plan's UI section that the diff does not handle, and a Don't from `docs/DESIGN.md` that the diff breaks. When your brief also gives `motion.md` and the diff moves something, apply its §5. A rule in the core checklist or `motion.md` marked **(M)** that the diff breaks is a blocker; one marked **(T)**, or not marked, is a suggestion. A motion finding takes the mark of the rule it breaks, not of §5. In a bug fix, "the plan's UI section" is the plan's UI item.
+8. **Area docs**: read the doc diff beside the code diff. A change to a path the routing table ("When to read an area's doc first") routes to a doc that neither updates that doc truthfully, anchored by symbol, nor carries a `Docs-unaffected: <doc>.md - <why>` line whose reason holds is a blocker. So is a doc claim the diff makes untrue.
 
 ## Report (diff mode)
 

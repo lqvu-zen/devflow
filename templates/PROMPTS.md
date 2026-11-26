@@ -243,6 +243,18 @@ remove, archive or keep for each, and fix links in the same commit once I
 agree.
 ```
 
+**Docs audit** (each release, or quarterly):
+```
+Audit the area docs in docs/architecture/. Run
+`uv run --no-project python tools/devflow_checks.py anchors` over every doc.
+List the areas added since {date of the last audit} that meet a trigger in
+docs/architecture/README.md and have no doc. Spot-check against the code the
+three docs whose anchored files changed most (`git log --since={date of the
+last audit} --stat -- <the files they anchor>`). Fix what is small, flag the
+rest in each doc's "Flagged / unverified" section, and propose a plan step for
+anything larger. Change nothing until I agree.
+```
+
 **Review recent sessions for process escapes** (project-manager tab; after a release, or every couple of weeks):
 ```
 Review my last {15} sessions for process escapes, as the manage-project skill

@@ -19,6 +19,7 @@ The devflow skills and agents read this file for everything specific to this pro
 | <UI> | `<path>` |
 | <tests> | `<path>` |
 | Version | `<path>` |
+| Area docs (read first: the routing table in `CLAUDE.md`, "When to read an area's doc first") | `docs/architecture/` |
 
 ## Architecture rules
 
@@ -42,7 +43,7 @@ Run from the repo root. All must pass before a change is reviewed.
 
 ## Edit bounds
 
-- **The implementer may edit:** `<source dirs>`, the tests the plan names, `docs/BEHAVIOUR.md`.
+- **The implementer may edit:** `<source dirs>`, the tests the plan names, `docs/BEHAVIOUR.md`, `docs/architecture/`.
 - **Only when the plan names them:** `<build files, lock files, packaging>`.
 - **Never staged:** `<build output, local databases, .env, caches>`.
 
@@ -96,6 +97,7 @@ The maintainer's manual checks for every candidate:
 
 - [ ] A fresh download from the candidate's release page installs and starts.
 - [ ] The maintainer's real data looks right after the upgrade.
+- [ ] The docs audit (`docs/PROMPTS.md`, Upkeep) ran since the last release.
 - [ ] <anything only a person can check>
 
 ## Try it

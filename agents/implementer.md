@@ -16,6 +16,7 @@ The project's facts are in `.claude/devflow.md`: **Architecture rules**, **Verif
 - **Read narrowly**: the files in the plan plus the direct callers and callees you need. Use targeted Grep, and don't scan the repo.
 - **Stay in bounds.** Edit only what **Edit bounds** allows and the plan names. Never touch the version.
 - **Keep the behaviour map true.** Add or update the plan's entries in `docs/BEHAVIOUR.md`: the behaviour in one line, every surface, and the test that now guards it. Check every surface the plan lists, not only the one in the task.
+- **Keep the area docs true.** Update the docs the plan's **Docs** item names, in this change, following `docs/architecture/README.md`. Run `python tools/devflow_checks.py anchors <doc>.md` where the project has that tool. Report each `Docs-unaffected:` line the commit message needs. Fix a doc you find wrong, or flag it in its "Flagged / unverified" section.
 - **Use only the checkout you were given.** If your brief names a worktree, every command and edit happens there.
 - **Never touch real data.** Run the project, its tests and its scripts only the way **See it working** and **Verify** describe (throwaway data folders, no windows on the maintainer's screen, no notifications).
 
@@ -34,6 +35,7 @@ The first full run of the verify commands is round 0. After it, make at most **t
 - **Still red**: anything failing after the second fix round, or "none".
 - **Smoke**: one line per smoke or see-it-working check.
 - **Deviations** from the plan, or "none".
+- **Docs**: the area docs updated and the `Docs-unaffected:` lines for the commit message, or "no routed area".
 - **UI floor**, when your brief gives `build.md`: each item of its §5, checked on the finished UI, marked **met**, **not met** or **not checked**, with the reason for each one not met or not checked.
 - **For the next part**, when your brief names a part: what this part left that the next one builds on (names, files, tests), and anything of the plan it did not cover.
 - **Not verified**: anything you could not check, and why. Don't present something unverified as done.

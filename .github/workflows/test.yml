@@ -30,7 +30,7 @@ jobs:
         run: python -m unittest discover -s tests
 
   devflow:
-    name: devflow (version bump, new comments, AI attribution)
+    name: devflow (version bump, new comments, AI attribution, knowledge docs)
     runs-on: ubuntu-latest
     env:
       BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
@@ -50,3 +50,9 @@ jobs:
 
       - name: No AI attribution where the project turned it off
         run: uv run --no-project python tools/devflow_checks.py attribution --base "$BASE" --head "$HEAD_SHA"
+
+      - name: Every doc anchor names a file and a symbol in it
+        run: uv run --no-project python tools/devflow_checks.py anchors
+
+      - name: A change to a documented area updates its doc or says why not
+        run: uv run --no-project python tools/devflow_checks.py docs --base "$BASE" --head "$HEAD_SHA"

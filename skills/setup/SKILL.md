@@ -45,7 +45,8 @@ One `AskUserQuestion` call, at most four questions, only those whose answers you
 - whether the project ships releases, and through what (GitHub releases, a package registry, a store);
 - if it ships through GitHub releases: whether its release gate can write a pass stamp (a JSON file with the full HEAD SHA, the SHA-256 of the artifact checksum file and the case count, written only when every case passes and deleted when a run or build starts);
 - where the real user data lives, if the code doesn't make it obvious;
-- which areas are risky enough to escalate (migrations, packaging, concurrency, security, payments).
+- which areas are risky enough to escalate (migrations, packaging, concurrency, security, payments);
+- which two or three areas cause the most rework (for the area docs in §4.9).
 
 ## 4. Draft, show, then write
 
@@ -63,6 +64,7 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
    - `guard.self_guarding_scripts`: the project's own harnesses that protect real data themselves;
    - `guard.release_stamp` (`path`, `binds`, optional `gate`): only if the gate writes a stamp, or the maintainer wants it added to the gate now; the guard then refuses to publish a release without a stamp for the current HEAD and the current hash of `binds`. If the gate can't write one, leave the key out: publishing stays an ask. Record the choice in **Release** under **Stamp**;
    - `checks.version_files` (path and a regex whose group 1 is the version; `numbers_only` for files that take `X.Y.Z` only) and `checks.no_new_python_comments` (folders, Python only);
+   - `checks.docs_routing`: keep the template's `"CLAUDE.md"` only when §4.9 writes area docs; with no area named, remove the key, so it alone never makes §4.7 add CI;
    - `attribution`: ask whether commits and PR descriptions carry AI attribution (Claude's `Co-Authored-By:` trailer, the "Generated with Claude Code" footer), recommending none; for none keep the template's `"attribution": "none"`, otherwise remove the key;
    - `models`: copy the template's board as it is (every entry `default`) and tell the maintainer this is where every agent's model and effort are set; `python <plugin>/tools/model_check.py --board` shows what each resolves to.
 3. **`docs/BEHAVIOUR.md`** from `templates/BEHAVIOUR.md`. Start small and true: the surfaces the product really has, and the main areas with a few rows each, every row with the test that guards it today or **untested**. Tell the maintainer the map grows with every change from here on and that they should review it.
@@ -73,8 +75,15 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
 5. **`docs/STATUS.md`** from `templates/STATUS.md`, and an empty `docs/plans/` and `docs/archive/` (a `.gitkeep` each). Skip any that already exist.
    - **`docs/PROMPTS.md`** from `templates/PROMPTS.md`, the prompt book, with the project's name, repo and tab names filled in. Keep the `{braces}` as they are: they are filled in when a prompt is pasted. An existing `docs/PROMPTS.md` is kept as it is.
 6. **`.claude/settings.json`**: merge `templates/settings.json`'s `ask` and `deny` lists into the existing file, keeping everything already there. Change `docs/STATUS.md` and `docs/plans` in the deny rules if `status_file` or `plans_dir` differ. Where `attribution` is `none`, also add the template's `attribution` key (Claude Code's setting; empty `commit` and `pr` strings turn off its trailer and footer: https://code.claude.com/docs/en/settings-reference.md); otherwise leave it out. New `ask` and `deny` rules and the `attribution` setting need the maintainer's approval: list them and wait for a yes.
-7. **CI**, if the project has GitHub Actions and `checks` has anything in it or `attribution` is `none`: copy the plugin's `tools/devflow_checks.py` to `tools/devflow_checks.py` in the project, and add the job in `templates/ci-devflow.yml` to the main workflow.
+7. **CI**, if the project has GitHub Actions and `checks` has anything in it, `attribution` is `none`, or it has area docs: copy the plugin's `tools/devflow_checks.py` to `tools/devflow_checks.py` in the project, and add the job in `templates/ci-devflow.yml` to the main workflow.
+   - **An existing `docs/architecture/`**, whether or not the maintainer named an area: before adding the job, run `uv run --no-project python "<plugin>/tools/devflow_checks.py" anchors --repo .` on it and show the maintainer what fails. Add the anchors step only with their agreement, or after the fixes they approve; otherwise leave that step out of the job and say so.
 8. **`CLAUDE.md`**: add the section in `templates/CLAUDE-section.md` (create the file if there is none). Don't rewrite the rest of it.
+9. **Area docs**, for the areas the maintainer named in §3:
+   - draft `docs/architecture/README.md` from `templates/architecture/README.md`, with one index row per doc;
+   - draft one `docs/architecture/<area>.md` per named area from `templates/architecture/area.md`, only for an area that meets one of the README's triggers (a change there spans layers, adding one more instance of a pattern needs a recipe, or the mechanism takes more than one or two greps to find). Check each claim against the source as you write it, anchor by symbol, and put what you could not check under "Flagged / unverified";
+   - replace the placeholder row of the "When to read an area's doc first" table in the `CLAUDE.md` section with one row per doc: its paths, its topics and the doc;
+   - set `checks.docs_routing` in `.claude/devflow.json` to the instructions file that holds the table (`CLAUDE.md`).
+   More areas get docs as changes touch them, never all at once. With no area named, write no docs, keep the template's placeholder row in the table, and leave `docs_routing` out of `.claude/devflow.json` (§4.2).
 
 ## 5. Check it works
 
@@ -84,6 +93,7 @@ Draft each file and show it to the maintainer before writing it. Keep the drafts
   `echo '{"tool_name":"Bash","tool_input":{"command":"git reset --hard"}}' | CLAUDE_PROJECT_DIR="$PWD" uv run --no-project python "<plugin>/hooks/guard.py"; echo "exit $?"`
   (exit 2 means refused). Also one that writes into a `real_data` folder, and one that starts the product without `isolate_env`, if configured.
 - If `tools/devflow_checks.py` was added: `uv run --no-project python tools/devflow_checks.py version --head HEAD` passes.
+- If area docs were written: `uv run --no-project python tools/devflow_checks.py anchors` passes; show its output.
 
 ## 6. Commit
 

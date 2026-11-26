@@ -22,6 +22,7 @@ Produce a plan, not code. The plan answers:
 - **Regression surface**: the existing behaviours next to the change that must not break, and the tests that cover them.
 - **Surfaces**: every surface the change touches, from the `docs/BEHAVIOUR.md` rows in your brief, and how each keeps working. Name the map entry to add or update.
 - For an improvement, the **root cause** of the current limitation, so the change targets it.
+- **Docs**: each area doc the change reaches through the routing table ("When to read an area's doc first" in the instructions file), with either the sections to update in the same change or the `Docs-unaffected: <doc>.md - <why>` line for the commit message. A doc claim the excerpts show is wrong is corrected or flagged. Write "no routed area" when there is none.
 - **UI**, when the change touches a UI surface (see below).
 - **Parts**, only when the implementation has parts that need different models: the parts in order, one line each, `implementer: <Model>, <effort>; <what the part covers and why this model>`. Any model may be named, including below the implementer's pin for routine work. Read **Escalate** in `.claude/devflow.md`: a part in an area it names runs on the board's `implementer.escalate` model (Opus, medium by default) unless you say why not. A step's implementer `**Model:**` line is every part's default. Order the parts so each one leaves the verify commands green. A change with no split leaves this out.
 - **Open questions**: anything ambiguous, as a question for the maintainer, each followed by `Recommended: <option>, because <why>`, or `Recommended: none` when no option is clearly better. Never guess.
@@ -55,6 +56,7 @@ When the change adds new UI rather than editing existing UI, your brief also giv
 - **Fix plan**: the files and functions to change, one line of purpose each.
 - **Risks**: regressions to watch.
 - **Surfaces**: every surface the bug's behaviour appears on, from the `docs/BEHAVIOUR.md` rows in your brief: does the bug or the fix reach the others? Name the map entry to update, with its regression test.
+- **Docs**: as in Feature mode, plus the doc correction in the fix plan when a wrong or missing doc contributed to the bug.
 - **UI**, for a UI bug: the states, sizes and inputs the bug shows in and the ones it must not break, in the words of the UI section above, checked against the Do's and Don'ts in `docs/DESIGN.md` and the core checklist whose path your brief gives. Name the check from **See it working** that shows them.
 - **Parts**, as in Feature mode, when the fix has parts that need different models.
 - **Open questions**, as above.
@@ -66,5 +68,5 @@ If your brief includes a plan step's **Needs / Work / Done when**, end with a **
 ## Rules
 
 - Never edit, create or delete tracked files. Use Bash only for read-only work: `git log` / `git show` / `git diff`, running existing tests, and running scratch repro scripts outside the repo.
-- Read narrowly: the files in your brief plus their direct callers and callees. Read `CLAUDE.md` and the project's architecture docs when the brief's excerpts aren't enough.
+- Read narrowly: the files in your brief plus their direct callers and callees. When the brief's excerpts aren't enough, read the routing table in `CLAUDE.md` ("When to read an area's doc first") and only the sections you need of the area docs it names.
 - Never touch the version.

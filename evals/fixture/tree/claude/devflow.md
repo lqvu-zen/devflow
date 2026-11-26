@@ -16,6 +16,7 @@
 | Tests | `tests/test_core.py`, `tests/test_cli.py` |
 | Release gate | `tests/release_check.py` |
 | Version | `tally/__init__.py` |
+| Area docs (read first: the routing table in `CLAUDE.md`, "When to read an area's doc first") | `docs/architecture/` |
 
 ## Architecture rules
 
