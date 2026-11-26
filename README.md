@@ -164,14 +164,14 @@ The Opus main session and designer are about 80% of the run, the reviewer 16% an
 
 The area docs (step 29) are measured on the two pipeline cases that run the locator and designer, `add-feature-delegates-not-coding` and `fix-bug-failing-test-first`, two runs each, split with `eval_cost.py`. "Before" ran on `c04fab7`, before the fixture had a `CLAUDE.md` or `docs/architecture/tally.md`, on 2026-11-26 (Claude Code 2.1.329, WSL, `-j 1`, Sonnet judge; 4 of 4 runs passed, $4.16 in all). "After" runs the same commands on the step's commit, with the same Claude Code version, model and `-j`.
 
-| Case | Agent | Before, run 1 | Before, run 2 | Before, mean | After |
-|---|---|---|---|---|---|
-| `add-feature-delegates-not-coding` | designer | $0.1196 | $0.0980 | $0.1088 | not run yet |
-| `add-feature-delegates-not-coding` | locator | not called | $0.0028 | $0.0028 (one call) | not run yet |
-| `fix-bug-failing-test-first` | designer | $0.1499 | $0.1419 | $0.1459 | not run yet |
-| `fix-bug-failing-test-first` | locator | $0.0035 | $0.0038 | $0.0037 | not run yet |
+| Case | Agent | Before, run 1 | Before, run 2 | Before, mean | After, run 1 | After, run 2 | After, mean |
+|---|---|---|---|---|---|---|---|
+| `add-feature-delegates-not-coding` | designer | $0.1196 | $0.0980 | $0.1088 | $0.1818 | $0.1517 | $0.1668 |
+| `add-feature-delegates-not-coding` | locator | not called | $0.0028 | $0.0028 (one call) | not called | $0.0032 | $0.0032 (one call) |
+| `fix-bug-failing-test-first` | designer | $0.1499 | $0.1419 | $0.1459 | $0.1476 | $0.2003 | $0.1740 |
+| `fix-bug-failing-test-first` | locator | $0.0035 | $0.0038 | $0.0037 | $0.0031 | $0.0033 | $0.0032 |
 
-The saving, or that there was none, is stated here once the "after" runs are in. With two runs per case and a two-file fixture, the noise may be larger than any difference.
+There was no saving. The designer cost more with the area docs on both cases (mean up 53% on `add-feature`, 19% on `fix-bug`), the locator's change was under a tenth of a cent, and the two cases together went from $4.16 to $4.81 (one `add-feature` run after also called the reviewer twice). With two runs per case and a two-file fixture, where a doc has little to save, this does not show what the docs do on a larger project.
 
 To see which model each agent actually ran on, `python tools/model_check.py [SOURCE]` reads a session's transcripts (a session `.jsonl`, an eval run's workspace, or a project path, which takes its newest session; `--count N` and `--exclude ID` pick more) and prints, per agent call, the role, what the call passed, the model each reply ran on, the effort where the transcript records it, and what was expected: the agent file's pin, or a `--model "<role>: <Model>, <effort>"` line for a role the run moved. It marks every mismatch, exits 1 when there is one, and says what it could not read (a call with no transcript, effort not recorded, an unfinished agent, the role of a `general-purpose` call). It refuses a line that moves the locator, reviewer or planner below its pin. With one `--part "implementer: <Model>, <effort>"` per part of a design, in order, it judges the implementer calls against the parts. `add-feature` and `fix-bug` run it at the end, and the project manager's session review reads it. A plan step's `**Model:** <role>: <Model>, <effort>; <why>` line is how a step moves one role off its pin.
 
@@ -205,6 +205,7 @@ Recorded runs:
 | 2026-11-18 | trigger (37 cases, 1 run each), default model, WSL, Claude Code 2.1.308; step 12 release gate for 0.3.0, on `d9c1207` | 37 pass, including all of `manage-project`, `next-step` and `review-ui` | $5.93 |
 | 2026-11-22 | behaviour (48 cases, `-j 1`, Sonnet judge, `--keep-temp`), default model, WSL, Claude Code 2.1.329; step 12 release gate for 0.3.0, run one suite per command on `789f7e8` to `4228cde` (each case recorded on the HEAD it last ran on) | 45 of 48 pass: all of `fix-bug` (7), `release` (8), `next-step` (6) and `review-ui` (4), `add-feature` 12 of 13 and `manage-project` 8 of 10. **Known failures, accepted for 0.3.0:** `manage-project-diagnose-finds-a-skipped-review` (`report` judge fails: findings cite a bare line number or carry no confidence), `manage-project-vague-step-gets-a-cold-read` (`ranked-questions` judge fails: the questions come back unsorted) and `add-feature-ui-change-covers-states-and-inputs` (`states-and-inputs` judge fails: the design names an error state and the focus ring but not the other states or the inputs). Follow-ups: `release-later.md` steps 78, 79 and 81. Trigger stays at 37 of 37 (row above) | about $28 on the recorded runs, about $121 on the gate since 11-18 |
 | 2026-11-26 | behaviour, `add-feature-delegates-not-coding` and `fix-bug-failing-test-first` (2 runs each, `-j 1`, Sonnet judge), default model, WSL, Claude Code 2.1.329; step 29's "before" runs, on `c04fab7` | 4 of 4 pass; the locator and designer costs are in the area-docs table above | $4.16 |
+| 2026-11-26 | behaviour, the same two cases with the same settings; step 29's "after" runs, on `f1004c8` | 4 of 4 pass; the costs are in the area-docs table above | $4.81 |
 
 ## Where it came from
 
