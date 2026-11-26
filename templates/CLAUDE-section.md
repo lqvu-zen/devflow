@@ -6,6 +6,7 @@ This project uses the devflow plugin. Its profile is `.claude/devflow.md` (archi
 - What must keep working, on every surface, with the test guarding each: `docs/BEHAVIOUR.md`. Read an area's rows before changing it; a fix updates its entry and test, a new behaviour adds one.
 - Project status: `docs/STATUS.md`, kept by the project manager. Plans: `docs/plans/`, one fresh coding session per step; claim the step first.
 - The version changes only in a `Release candidate X.Y.Z-rcN` or `Release X.Y.Z` commit.
+- Where another rule in this file meets one of devflow's, **Architecture rules** in `.claude/devflow.md` says which applies.
 - **The escape rule.** Every bug found after a release gets one line in `docs/BEHAVIOUR.md` § Escapes, and its fix adds the check that would have caught it.
 
 ### When to read an area's doc first

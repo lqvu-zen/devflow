@@ -23,7 +23,7 @@ The devflow skills and agents read this file for everything specific to this pro
 
 ## Architecture rules
 
-The invariants that make this project work. Most "looked fine, broke in practice" bugs come from breaking one of them, so each rule says *why*. This is the canonical list: briefs paste it whole.
+The invariants that make this project work. Most "looked fine, broke in practice" bugs come from breaking one of them, so each rule says *why*. This is the canonical list: briefs paste it whole. Where this project's own `CLAUDE.md` says otherwise than devflow, the rule settled at setup is here, quoting the line it settles.
 
 - **<Rule>.** <What it means and why it exists.>
 - **Data changes go through migrations.** <Where migrations live, how they are keyed, that each is safe to run twice.>

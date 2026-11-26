@@ -1400,6 +1400,50 @@ class TestSetupChecksUv(unittest.TestCase):
                 self.assertIn(words, paragraph)
 
 
+CLASH_HEADING = "## 3. Ask what the code can't say"
+CLASH_LEAD_IN = "**Rules that clash with devflow's.**"
+CLASH_WORDS = (
+    "devflow wins",
+    "the project's rule wins",
+    "both stay",
+    "Architecture rules",
+    "Never settle one yourself",
+)
+CLASH_RECORD = "`Settles CLAUDE.md: \"<quoted line>\".`"
+CLASH_TEMPLATE_SENTENCE = (
+    "Where this project's own `CLAUDE.md` says otherwise than devflow, the rule settled at setup is here, "
+    "quoting the line it settles."
+)
+
+
+class TestSetupSettlesClashes(unittest.TestCase):
+    def setUp(self):
+        self.section = _section(SETUP, CLASH_HEADING)
+
+    def test_the_check_lists_every_rule(self):
+        self.assertIn(CLASH_LEAD_IN, self.section)
+        for number in range(1, 8):
+            with self.subTest(rule=number):
+                self.assertRegex(self.section, rf"(?m)^- R{number}, ")
+
+    def test_the_check_offers_the_answers_and_leaves_them_to_the_maintainer(self):
+        for words in CLASH_WORDS:
+            with self.subTest(words=words):
+                self.assertIn(words, self.section)
+
+    def test_the_answers_are_recorded_in_the_architecture_rules(self):
+        drafts = _section(SETUP, "## 4. Draft, show, then write")
+        self.assertIn(CLASH_RECORD, drafts)
+
+    def test_a_refresh_runs_the_check(self):
+        section = _section(SETUP, "## 1. See what is already there")
+        self.assertIn("A refresh also runs the clash check in §3", section)
+
+    def test_the_template_says_where_the_answers_are(self):
+        rules = _section(TEMPLATES / "devflow.md", "## Architecture rules")
+        self.assertIn(CLASH_TEMPLATE_SENTENCE, rules)
+
+
 class TestPlanFormat(unittest.TestCase):
     def test_the_template_makes_interfaces_and_review_focus_optional(self):
         text = (TEMPLATES / "plan.md").read_text(encoding="utf-8")

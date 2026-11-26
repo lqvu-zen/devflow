@@ -7,7 +7,8 @@
     "review-ui": ["plugins/devflow-ui/skills/review-ui/"],
     "manage-project": ["skills/manage-project/", "agents/planner.md", "tools/model_check.py", "templates/plan.md", "tools/session_extract.py"],
     "next-step": ["skills/next-step/", "skills/add-feature/SKILL.md", "skills/fix-bug/SKILL.md", "agents/designer.md", "tools/plan_runner.py"],
-    "run-plan": ["skills/run-plan/", "tools/plan_runner.py"]
+    "run-plan": ["skills/run-plan/", "tools/plan_runner.py"],
+    "setup": ["skills/setup/", "templates/", "tools/model_check.py", "tools/devflow_checks.py"]
   },
   "near_misses": {
     "add-feature-4-near-miss": "fix-bug",
