@@ -39,6 +39,13 @@ DENIAL_TEXT = 100
 DENIAL_KEYS = ("command", "file_path", "notebook_path", "path", "pattern")
 WAITING = "waiting for the maintainer's yes"
 CUT_OFF = "cut off by the usage limit"
+RESUME_ONLY_ADVICE = ("; after the reset, resume the cut-off session with the `claude --resume` line below "
+                      "and finish the step there")
+RESUME_ADVICE = RESUME_ONLY_ADVICE + " (the next run would refuse this tree)"
+NO_SESSION_ADVICE = ("; no session id was read to resume it: after the reset, deal with those changes by hand, "
+                     "then run the plan again")
+RERUN_ADVICE = "; after the reset, run the plan again, which retakes the step"
+START_FORMAT = "%Y-%m-%d %H:%M:%S %z"
 BOM = b"\xef\xbb\xbf"
 USAGE_LIMIT = re.compile(r"hit your [\w -]*?limit|usage limit reached", re.I)
 LIMIT_TEXT = 120
@@ -421,8 +428,7 @@ def session_trouble(result: SessionResult) -> str:
     return ""
 
 
-def _foreign_clause(project: Path, layout) -> str:
-    foreign = foreign_changes(project, layout)
+def _foreign_clause(foreign: list[str] | None) -> str:
     if foreign:
         return ("; it left changes beyond the status and plan files: " + ", ".join(foreign)
                 + " (the next run refuses until they are dealt with)")
@@ -442,14 +448,25 @@ def _duration(seconds: float) -> str:
 
 def timeout_stop(project: Path, layout, number: int, seconds: float) -> str:
     return (f"step {number}'s session ran past the session timeout ({_duration(seconds)}) and was ended; "
-            "its row was left as it was" + _foreign_clause(project, layout))
+            "its row was left as it was" + _foreign_clause(foreign_changes(project, layout)))
 
 
-def limit_stop(project: Path, root: Path, layout, plan: str, number: int, message: str) -> str:
+def limit_advice(foreign: list[str] | None, retakes: bool, session: str | None) -> str:
+    if foreign:
+        return RESUME_ADVICE if session else NO_SESSION_ADVICE
+    if foreign is not None and retakes:
+        return RERUN_ADVICE
+    return RESUME_ONLY_ADVICE if session else ""
+
+
+def limit_stop(project: Path, root: Path, layout, plan: str, number: int, message: str,
+               session: str | None) -> str:
     session_start = _session_start()
     head = f"the usage limit cut off step {number}'s session ({message})"
     state = row_state(root, plan, number)
-    if state is not None and session_start.is_claimed(state) and WAITING not in state.lower().replace("’", "'"):
+    waiting = state is not None and WAITING in state.lower().replace("’", "'")
+    retakes = state is not None and not waiting and session_start.is_open(state)
+    if state is not None and not waiting and session_start.is_claimed(state):
         stamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
         if mark_for_retake(root, plan, number, state, stamp):
             why = (f"{head}; its row now reads `stopped ({stamp}): {CUT_OFF}; retake it`, "
@@ -458,14 +475,15 @@ def limit_stop(project: Path, root: Path, layout, plan: str, number: int, messag
             why = f"{head}; its row could not be marked: set it to stopped by hand"
     else:
         why = f"{head}; its row was left as it was"
-    return why + _foreign_clause(project, layout)
+    foreign = foreign_changes(project, layout)
+    return why + _foreign_clause(foreign) + limit_advice(foreign, retakes, session)
 
 
 def step_outcome(project: Path, root: Path, layout, plan: str, number: int, result: SessionResult,
                  ci: Callable[[Path, str], str]) -> tuple[str, str | None]:
     session_start = _session_start()
     if result.limit:
-        return "stopped", limit_stop(project, root, layout, plan, number, result.limit)
+        return "stopped", limit_stop(project, root, layout, plan, number, result.limit, result.session_id)
     if result.timed_out is not None:
         return "stopped", timeout_stop(project, layout, number, result.timed_out)
     if result.denials:
@@ -536,6 +554,10 @@ def say_now(line: str) -> None:
     print(line, flush=True)
 
 
+def started_stamp() -> str:
+    return datetime.datetime.now().astimezone().strftime(START_FORMAT)
+
+
 def run_plan(project: Path, steps: int | None, dollars: float | None, commit_flag: bool, model: str | None,
              mode: str | None, claude: object, ci: Callable[[Path, str], str] = ci_conclusion,
              token: str | None = None, rows: list | None = None,
@@ -567,7 +589,8 @@ def run_plan(project: Path, steps: int | None, dollars: float | None, commit_fla
                 return rows, f"the dollar limit (${_money(dollars)}) is reached: ${_money(spent)} spent", 0
             budget = left
         before = head_of(project)
-        say(f"Running step {step.number} {step.title} ({step.plan}) with {step.run}...")
+        say(f"Running step {step.number} {step.title} ({step.plan}) with {step.run}... "
+            f"(started {started_stamp()})")
         argv = claude_argv(claude, model, budget, mode)
         result = run_session(argv, project, session_env(project, token if commit_flag else None),
                              session_seconds)

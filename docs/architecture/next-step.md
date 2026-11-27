@@ -18,7 +18,7 @@ One decision, which plan step runs next, is made in one place and read by three:
    - [`plan_lines`](../../hooks/session_start.py) prints the summary's plan lines from the same [`Choice`](../../hooks/session_start.py);
    - [`next_step_lines`](../../hooks/session_start.py) prints `Plan:`, `Step:`, `Run:` or `Stop: … Next: …`, adding `Design:` when the Gate is cleared and the design file from [`design_file`](../../hooks/session_start.py) exists;
    - the runner's [`ask_next_step`](../../tools/plan_runner.py) runs `session_start.py --next-step` as a subprocess and parses those lines.
-5. **The runner's loop.** [`run_plan`](../../tools/plan_runner.py) asks for the next step, starts one session for it, and then [`step_outcome`](../../tools/plan_runner.py) judges it: the usage limit, a timeout, permission denials, the step's Status row read back with [`row_state`](../../tools/plan_runner.py) (missing, waiting for the maintainer's yes, or still open), changes beyond the status and plan files ([`foreign_changes`](../../tools/plan_runner.py)), the branch, and CI on the new HEAD ([`ci_conclusion`](../../tools/plan_runner.py)). Anything but `done` ends the run; a step offered twice ends it too.
+5. **The runner's loop.** [`run_plan`](../../tools/plan_runner.py) asks for the next step, starts one session for it, and then [`step_outcome`](../../tools/plan_runner.py) judges it: the usage limit, a timeout, permission denials, the step's Status row read back with [`row_state`](../../tools/plan_runner.py) (missing, waiting for the maintainer's yes, or still open), changes beyond the status and plan files ([`foreign_changes`](../../tools/plan_runner.py)), the branch, and CI on the new HEAD ([`ci_conclusion`](../../tools/plan_runner.py)). Anything but `done` ends the run; a step offered twice ends it too. Each step's start line carries the local time with its offset from [`started_stamp`](../../tools/plan_runner.py), and a usage-limit stop from [`limit_stop`](../../tools/plan_runner.py) ends with advice to resume the cut-off session or run the plan again.
 
 ## Invariants
 
@@ -40,6 +40,7 @@ Adding a reason a step cannot start:
 - **Files overlap is checked only for the next plan's steps.** A current-plan step is never held back because a step in progress names the same files; only a fallback step from the next plan is, and a step there with no `Files` line is held back too.
 - **The behaviour map, the changelog and the status and plan files are left out of the Files comparison** ([`step_files`](../../hooks/session_start.py)), because every step may touch them.
 - **Gate wording matters.** A Gate is cleared only by a `Cleared YYYY-MM-DD` clause; a Gate saying "at the design stop" or "before implementation" lets the step start and stop itself at the design, and a row `stopped` there holds it until the maintainer answers.
+- **The start line is read twice.** Its text up to `...` is read exactly by WF-27's tests, and its `(started …)` stamp by `run-plan`'s mid-run answer, which subtracts it from `date "+%Y-%m-%d %H:%M:%S %z"`; change the format in both or neither.
 
 ## Flagged / unverified
 

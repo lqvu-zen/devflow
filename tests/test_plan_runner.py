@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import datetime
 import importlib.util
 import io
 import json
@@ -9,6 +10,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -152,6 +154,8 @@ else:
               "session_id": f"s{index}",
               "permission_denials": [{"tool_name": name, "tool_use_id": "t", "tool_input": given}
                                      for name, given in denials]}
+    if spec.get("no_session"):
+        del result["session_id"]
     if spec.get("limit"):
         sentence = "You've hit your session limit \u00b7 resets 2:10am (Asia/Bangkok)"
         result["is_error"] = True
@@ -344,8 +348,41 @@ class TestRunsSteps(RunnerCase):
         self.calls([{"row": {"1": "done"}}])
         said = []
         plan_runner.run_plan(self.project, 1, None, False, None, None, self.claude, ci=green, say=said.append)
-        self.assertEqual(said[0], f"Running step 1 Alpha ({PLAN}) with /devflow:add-feature...")
+        self.start_stamp(said[0])
         self.assertTrue(said[1].startswith("- 1 Alpha: done"), said)
+
+    def start_stamp(self, line):
+        prefix = f"Running step 1 Alpha ({PLAN}) with /devflow:add-feature... (started "
+        self.assertTrue(line.startswith(prefix), line)
+        self.assertTrue(line.endswith(")"), line)
+        return datetime.datetime.strptime(line[len(prefix):-1], plan_runner.START_FORMAT)
+
+    def test_the_start_time_is_out_while_the_session_still_runs(self):
+        self.calls([{"row": {"1": "done"}, "sleep": 3}])
+        said = []
+        returned = []
+
+        def run():
+            returned.append(plan_runner.run_plan(self.project, 1, None, False, None, None, self.claude, ci=green,
+                                                 say=said.append))
+
+        before = datetime.datetime.now().astimezone().replace(microsecond=0)
+        thread = threading.Thread(target=run)
+        thread.start()
+        self.addCleanup(thread.join)
+        deadline = time.time() + 20
+        while not said and time.time() < deadline:
+            time.sleep(0.05)
+        self.assertTrue(said, "no start line while the session ran")
+        self.assertTrue(thread.is_alive())
+        self.assertEqual(self.records(), [])
+        started = self.start_stamp(said[0])
+        self.assertTrue(before <= started <= datetime.datetime.now().astimezone(), said[0])
+        thread.join(60)
+        self.assertFalse(thread.is_alive())
+        self.assertTrue(said[1].startswith("- 1 Alpha: done"), said)
+        rows, reason, code = returned[0]
+        self.assertTrue(plan_runner.summary(rows, reason, False, 0.25)[0].startswith("Plan runner: "))
 
     def test_the_command_line(self):
         self.assertEqual(plan_runner.claude_argv("claude", "sonnet", 2.5, "acceptEdits"),
@@ -512,6 +549,8 @@ class TestUsageLimit(RunnerCase):
         self.assertIn("Stopped: the usage limit cut off step 1's session (You've hit your session limit", out)
         self.assertIn("resets 2:10am (Asia/Bangkok)", out)
         self.assertRegex(out, r"its row now reads `" + RETAKE + r"`, so the next run takes it again")
+        self.assertIn("after the reset, run the plan again, which retakes the step", out)
+        self.assertNotIn("resume the cut-off session", out)
         self.assertIn("- 1 Alpha: stopped (the usage limit cut off", out)
         self.assertEqual(out.splitlines()[-1], "To answer step 1's session: claude --resume s0")
 
@@ -578,14 +617,15 @@ class TestUsageLimit(RunnerCase):
         waiting = "in progress (2026-11-24 10:00), waiting for the maintainer's yes"
         self.calls([{"row": {"1": waiting}, "limit": True}])
         rows, reason, code = self.run_plan()
-        self.assertTrue(reason.endswith("; its row was left as it was"), reason)
+        self.assertTrue(reason.endswith("; its row was left as it was" + plan_runner.RESUME_ONLY_ADVICE), reason)
+        self.assertNotIn("would refuse this tree", reason)
         self.assertIn("| 1 Alpha | " + waiting + " |", (self.project / PLAN).read_text(encoding="utf-8"))
 
     def test_a_row_the_session_never_claimed_is_left_as_it_was(self):
         before = (self.project / PLAN).read_bytes()
         self.calls([{"limit": True}])
         rows, reason, code = self.run_plan()
-        self.assertTrue(reason.endswith("; its row was left as it was"), reason)
+        self.assertTrue(reason.endswith("; its row was left as it was" + plan_runner.RERUN_ADVICE), reason)
         self.assertEqual((self.project / PLAN).read_bytes(), before)
 
     def test_foreign_changes_are_named_as_well(self):
@@ -594,12 +634,30 @@ class TestUsageLimit(RunnerCase):
         self.assertIn("; it left changes beyond the status and plan files: junk.txt "
                       "(the next run refuses until they are dealt with)", reason)
         self.assertRegex(reason, RETAKE)
+        self.assertTrue(reason.endswith(plan_runner.RESUME_ADVICE), reason)
+        self.assertNotIn(plan_runner.RERUN_ADVICE, reason)
+
+    def test_changes_left_without_a_session_id_say_to_deal_with_them_by_hand(self):
+        self.calls([{"row": {"1": CLAIMED}, "limit": True, "no_session": True, "foreign": "junk.txt"}])
+        code, out = self.main("--steps", "1")
+        self.assertIn("(the next run refuses until they are dealt with)" + plan_runner.NO_SESSION_ADVICE + ".", out)
+        self.assertNotIn("claude --resume", out)
+
+    def test_no_changes_and_a_done_row_without_a_session_id_give_no_advice(self):
+        self.calls([{"row": {"1": "done"}, "limit": True, "no_session": True}])
+        rows, reason, code = self.run_plan()
+        self.assertTrue(reason.endswith("; its row was left as it was"), reason)
+
+    def test_an_unread_tree_advises_resuming_and_never_a_rerun(self):
+        self.assertEqual(plan_runner.limit_advice(None, True, "s0"), plan_runner.RESUME_ONLY_ADVICE)
+        self.assertEqual(plan_runner.limit_advice(None, True, None), "")
 
     def test_a_row_that_cannot_be_marked_says_to_set_it_by_hand(self):
         self.calls([{"row": {"1": CLAIMED}, "limit": True}])
         with mock.patch.object(plan_runner, "mark_for_retake", return_value=False):
             rows, reason, code = self.run_plan()
-        self.assertTrue(reason.endswith("; its row could not be marked: set it to stopped by hand"), reason)
+        self.assertTrue(reason.endswith("; its row could not be marked: set it to stopped by hand"
+                                        + plan_runner.RERUN_ADVICE), reason)
 
     def test_another_error_is_not_the_limit(self):
         self.calls([{"error": True, "subtype": "error_max_budget_usd"}])

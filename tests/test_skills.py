@@ -1218,6 +1218,29 @@ RUN_PLAN_RULES = (
     "you pick no step, answer no session, edit no plan or status file, commit nothing and push nothing",
     "Start no second run on your own, and never retry a stopped step",
 )
+RUN_PLAN_MID_RUN_HEADING = "## 4. Asked how the run is going"
+RUN_PLAN_MID_RUN = (
+    "Only while a run this session started is still going",
+    "output so far",
+    "as printed",
+    "`Running step ",
+    "`date \"+%Y-%m-%d %H:%M:%S %z\"`",
+    "(started …)",
+    "which step is running and for how long",
+    "Edit nothing, start nothing",
+    "do not stop the run",
+    "end your turn",
+)
+RUN_PLAN_LIMIT_ADVICE = (
+    "When the run stopped at the usage limit, pass on the runner's advice from its Stopped line: with changes "
+    "left, after the reset resume the cut-off session with the `claude --resume` line and finish the step "
+    "there; with none, after the reset run the plan again, which retakes the step. Never wait for the reset "
+    "yourself, and start, resume or discard nothing."
+)
+RUN_PLAN_PASTE_RULE = (
+    "paste, in a code block, everything from the line starting `Plan runner:` or `Plan runner refused:` to the "
+    "end, as printed"
+)
 
 
 class TestRunPlan(unittest.TestCase):
@@ -1263,6 +1286,33 @@ class TestRunPlan(unittest.TestCase):
 
     def test_the_description_names_the_decide_flag(self):
         self.assertIn(_plan_runner().DECIDE_FLAG, self.text.split("---")[1])
+
+    def test_it_answers_mid_run_from_the_output_and_stops_nothing(self):
+        section = _section(RUN_PLAN, RUN_PLAN_MID_RUN_HEADING)
+        for words in RUN_PLAN_MID_RUN:
+            with self.subTest(words=words):
+                self.assertIn(words, section)
+
+    def test_when_it_ends_passes_on_the_limit_advice_and_starts_nothing(self):
+        section = _section(RUN_PLAN, "## 3. When it ends")
+        for words in (RUN_PLAN_LIMIT_ADVICE, "start, resume or discard nothing", RUN_PLAN_PASTE_RULE):
+            with self.subTest(words=words):
+                self.assertIn(words, section)
+
+    def test_the_description_keeps_a_run_in_progress_and_sends_other_status_to_manage_project(self):
+        description = self.text.split("---")[1]
+        for words in ("while a run this session started is still going, asks how it is going, whether it is "
+                      "stuck or which step it is on",
+                      "asks where things stand or what is left outside a run this session started "
+                      "(use manage-project)"):
+            with self.subTest(words=words):
+                self.assertIn(words, description)
+
+    def test_the_mid_run_answer_reads_the_runners_real_start_line(self):
+        source = PLAN_RUNNER.read_text(encoding="utf-8")
+        self.assertIn('f"Running step {step.number} ', source)
+        self.assertIn('f"(started {started_stamp()})"', source)
+        self.assertIn(f'`date "+{_plan_runner().START_FORMAT}"`', _section(RUN_PLAN, RUN_PLAN_MID_RUN_HEADING))
 
 
 def _plan_runner():

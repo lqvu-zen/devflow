@@ -392,6 +392,7 @@ SKILL_COMMANDS = [
     "uv run --no-project python tools/devflow_checks.py version --base 5c76e95 --head HEAD",
     "python /home/u/.claude/plugins/devflow/tools/model_check.py --model \"designer: Opus, high\"",
     "python /home/u/.claude/plugins/devflow/hooks/session_start.py --next-step",
+    'date "+%Y-%m-%d %H:%M:%S %z"',
 ]
 
 
