@@ -197,7 +197,9 @@ def preflight(project: Path, layout, claude: object) -> str | None:
 
 def orchestrator_model(config: object) -> str | None:
     model_check = _model_check()
-    rows, _notes = model_check.board_rows(config, model_check.load_pins(AGENTS_DIR))
+    raw, _where, _read = model_check.read_user_defaults(os.environ, model_check.default_user_settings())
+    rows, _notes = model_check.board_rows(config, model_check.load_pins(AGENTS_DIR),
+                                          user=model_check.parse_user_defaults(raw))
     for row in rows:
         if row.key == "orchestrator" and row.expect is not None:
             return row.expect.model

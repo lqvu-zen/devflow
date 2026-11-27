@@ -13,5 +13,28 @@
     "release",
     "behaviour-map",
     "hooks"
-  ]
+  ],
+  "userConfig": {
+    "session_start_output": {
+      "type": "string",
+      "title": "Session start output",
+      "description": "full (everything), short (branch, CI, next step, problems only) or off (only the devflow base line). Applies in every project.",
+      "default": "full"
+    },
+    "maintainer_name": {
+      "type": "string",
+      "title": "Your name as maintainer",
+      "description": "Your name for /devflow:setup to suggest in a project's profile and devflow.json."
+    },
+    "maintainer_timezone": {
+      "type": "string",
+      "title": "Your time zone",
+      "description": "For example UTC+7 or Asia/Ho_Chi_Minh, for /devflow:setup to suggest."
+    },
+    "default_models": {
+      "type": "string",
+      "title": "Your default models",
+      "description": "Your own model per role, for projects whose board leaves the role on default. Write role: Model, effort; role: Model, for example implementer: sonnet, low; tester: haiku. Valid roles are the board's keys. The floors still hold."
+    }
+  }
 }

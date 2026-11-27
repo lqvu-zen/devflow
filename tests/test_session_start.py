@@ -10,7 +10,10 @@ import sys
 import tempfile
 import time
 import unittest
+from contextlib import redirect_stdout
+from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SESSION_PATH = ROOT / "hooks" / "session_start.py"
@@ -27,9 +30,32 @@ def _load(name: str, path: Path):
 
 session_start = _load("devflow_session_start", SESSION_PATH)
 
+OPTION_PREFIX = "CLAUDE_PLUGIN_OPTION_"
+OUTPUT_ENV = OPTION_PREFIX + "SESSION_START_OUTPUT"
+USER_MODELS_ENV = OPTION_PREFIX + "DEFAULT_MODELS"
+_SAVED_ENV: dict[str, str | None] = {}
+_USER_CONFIG: list[tempfile.TemporaryDirectory] = []
+
+
+def setUpModule():
+    _USER_CONFIG.append(tempfile.TemporaryDirectory(prefix="devflow-user-config-"))
+    names = [name for name in os.environ if name.startswith(OPTION_PREFIX)] + ["CLAUDE_CONFIG_DIR"]
+    for name in names:
+        _SAVED_ENV[name] = os.environ.pop(name, None)
+    os.environ["CLAUDE_CONFIG_DIR"] = _USER_CONFIG[0].name
+
+
+def tearDownModule():
+    os.environ.pop("CLAUDE_CONFIG_DIR", None)
+    for name, value in _SAVED_ENV.items():
+        if value is not None:
+            os.environ[name] = value
+    _SAVED_ENV.clear()
+    _USER_CONFIG.pop().cleanup()
+
 
 def hook_env(project: Path, scratch: Path) -> dict:
-    env = dict(os.environ)
+    env = {name: value for name, value in os.environ.items() if not name.startswith(OPTION_PREFIX)}
     env.pop("CLAUDE_ENV_FILE", None)
     env.pop("CLAUDE_PLUGIN_ROOT", None)
     env["CLAUDE_CONFIG_DIR"] = str(scratch / "claude-config")
@@ -326,7 +352,7 @@ class TestModelsLine(unittest.TestCase):
         import model_check
         original = model_check.board_summary
 
-        def broken(*args):
+        def broken(*args, **kwargs):
             raise KeyError("models")
 
         model_check.board_summary = broken
@@ -347,6 +373,49 @@ class TestModelsLine(unittest.TestCase):
             counts.append(len(calls))
             self.assertIn("\nModels: ", text)
         self.assertLessEqual(counts[1], counts[0])
+
+    def user_line(self, text: str, config: dict, session_id: str | None = None, quiet: bool = False):
+        with mock.patch.dict(os.environ, {USER_MODELS_ENV: text}):
+            return session_start.models_line(session_start.Layout(config), None, session_id=session_id, quiet=quiet)
+
+    def test_a_user_default_is_named(self):
+        self.assertEqual(self.user_line("implementer: haiku, low", {}),
+                         "Models: the plugin's pins (no board in .claude/devflow.json); your defaults move "
+                         f"implementer to haiku, low. {VIEW}")
+        self.assertEqual(self.user_line("implementer: haiku, low; tester: haiku", {"models": {"designer": "Sonnet, medium"}}),
+                         "Models: board moves designer to sonnet, medium; your defaults move implementer to haiku, low. "
+                         f"{VIEW}")
+        self.assertEqual(self.user_line("implementer: haiku, low", {"models": {"implementer": "Opus, medium"}}),
+                         f"Models: board moves implementer to opus, medium. {VIEW}")
+        for unset in ("", "${user_config.default_models}"):
+            self.assertEqual(self.user_line(unset, {}), self.line({}))
+
+    def test_a_user_orchestrator_is_named_in_the_warning(self):
+        line = self.user_line("orchestrator: opus", {"models": {}}, session_id="claude-sonnet-4-6")
+        self.assertTrue(line.endswith(f"This session runs on sonnet; your default orchestrator is opus "
+                                      f"(/model switches it). {VIEW}"), line)
+
+    def test_quiet_says_nothing_unless_there_is_a_warning(self):
+        self.assertIsNone(self.user_line("implementer: haiku, low", {"models": {"designer": "Sonnet, medium"}},
+                                         quiet=True))
+        self.assertIsNone(session_start.models_line(session_start.Layout({}), MODEL_PLAN, quiet=True))
+        floor = self.user_line("reviewer: sonnet, low", {}, quiet=True)
+        self.assertIn("reviewer kept on opus, medium (floor)", floor)
+        self.assertIn("1 entry ignored", self.user_line("nobody: opus", {}, quiet=True))
+        self.assertIn("This session runs on opus;",
+                      self.user_line("", {}, session_id="claude-opus-4-7", quiet=True))
+        import model_check
+        original = model_check.board_summary
+
+        def broken(*args, **kwargs):
+            raise KeyError("models")
+
+        model_check.board_summary = broken
+        try:
+            line = session_start.models_line(session_start.Layout({"models": {}}), None, quiet=True)
+        finally:
+            model_check.board_summary = original
+        self.assertEqual(line, f"Models: couldn't read the board (KeyError: 'models'). {VIEW}")
 
 
 CURRENT_PATH = "docs/plans/release-0.3.0.md"
@@ -1298,6 +1367,142 @@ class TestBasePath(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertNotIn("devflow base:", result.stdout)
         self.assertFalse(self.env_file.exists())
+
+
+class TestOutputSetting(unittest.TestCase):
+    def setUp(self):
+        self.scratch = Path(tempfile.mkdtemp(prefix="devflow-output-"))
+        self.addCleanup(shutil.rmtree, self.scratch, ignore_errors=True)
+        self.project = self.scratch / "p"
+        (self.project / ".claude").mkdir(parents=True)
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        (self.project / ".claude" / "devflow.md").write_text("# profile\n", encoding="utf-8")
+        (self.project / "docs" / "plans").mkdir(parents=True)
+        (self.project / "docs" / "STATUS.md").write_text(TWO_STATUS, encoding="utf-8")
+        (self.project / CURRENT_PATH).write_text(with_states(CURRENT, {1: "done: fixed"}), encoding="utf-8")
+        self.env_file = self.scratch / "env" / "session.sh"
+
+    def run_hook(self, setting: str | None, *args: str, extra: dict | None = None) -> subprocess.CompletedProcess:
+        env = hook_env(self.project, self.scratch)
+        env["CLAUDE_PLUGIN_ROOT"] = str(ROOT)
+        if setting is not None:
+            env[OUTPUT_ENV] = setting
+        env.update(extra or {})
+        result = subprocess.run([sys.executable, str(SESSION_PATH), *args], capture_output=True, input="",
+                                text=True, encoding="utf-8", env=env, timeout=60)
+        self.assertEqual((result.returncode, result.stderr), (0, ""), setting)
+        return result
+
+    def git_project(self) -> None:
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@t"]
+        subprocess.run(git + ["init", "-q"], cwd=self.project, check=True, capture_output=True)
+        subprocess.run(git + ["commit", "-q", "--allow-empty", "-m", "x"], cwd=self.project, check=True,
+                       capture_output=True)
+
+    def test_output_mode(self):
+        for value, mode in ((None, "full"), ("", "full"), ("  ", "full"), ("${user_config.session_start_output}", "full"),
+                            ("full", "full"), (" Short ", "short"), ("OFF", "off")):
+            environ = {} if value is None else {OUTPUT_ENV: value}
+            self.assertEqual(session_start.output_mode(environ), (mode, None), value)
+        self.assertEqual(session_start.output_mode({OUTPUT_ENV: " quiet "}),
+                         ("full", 'Settings: session_start_output is "quiet", not full, short or off; '
+                                  "this is the full summary. Change it in /config."))
+
+    def test_unset_is_full(self):
+        unset = self.run_hook(None).stdout
+        self.assertEqual(self.run_hook("full").stdout, unset)
+        self.assertEqual(self.run_hook("${user_config.session_start_output}").stdout, unset)
+        self.assertTrue(unset.startswith(f"tally session start\ndevflow base: {ROOT}\n"))
+        self.assertIn("\nModels: the plugin's pins (no board in .claude/devflow.json).", unset)
+        self.assertIn("Next open step in Order: 2 Median", unset)
+        self.assertNotIn("Settings:", unset)
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_short(self):
+        self.git_project()
+        (self.project / "a.txt").write_text("a", encoding="utf-8")
+        full = self.run_hook("full").stdout
+        short = self.run_hook("short").stdout
+        lines = short.splitlines()
+        self.assertEqual(lines[:2], ["tally session start", f"devflow base: {ROOT}"])
+        self.assertTrue(any(line.startswith("Branch: ") for line in lines), short)
+        self.assertTrue(any(line.startswith("CI") for line in lines), short)
+        self.assertIn("Uncommitted: 3 files (git status lists them).", lines)
+        self.assertNotIn("Status and plan edits waiting", short)
+        self.assertIn("Next open step in Order: 2 Median", short)
+        self.assertNotIn("Models:", short)
+        self.assertIn("Models:", full)
+        self.assertIn("Uncommitted (3):", full)
+        self.assertLess(len(lines), len(full.splitlines()))
+
+    @unittest.skipUnless(shutil.which("git"), "needs git")
+    def test_short_keeps_the_warnings(self):
+        self.git_project()
+        (self.project / ".claude" / "devflow.json").write_text(
+            json.dumps({"name": "tally", "models": {"reviewer": "Sonnet, medium"}}), encoding="utf-8")
+        (self.project / ".claude" / "devflow.md").unlink()
+        short = self.run_hook("short").stdout
+        self.assertIn("\nModels: reviewer kept on opus, medium (floor). Full view: python ", short)
+        self.assertIn("Profile: .claude/devflow.md is missing", short)
+
+    def test_compact_change_lines(self):
+        self.assertEqual(session_start.change_lines(lambda argv: "", compact=True), ["Uncommitted: none."])
+        self.assertEqual(session_start.change_lines(lambda argv: "?? a.txt", compact=True),
+                         ["Uncommitted: 1 file (git status lists them)."])
+        lines = session_start.change_lines(lambda argv: " M docs/STATUS.md\n?? a.txt", compact=True)
+        self.assertEqual(lines[0], "Uncommitted: 2 files (git status lists them).")
+        self.assertTrue(lines[1].startswith("Status and plan edits waiting: docs/STATUS.md."))
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(session_start.change_lines(lambda argv: None, compact=True),
+                         ["Uncommitted: unknown (git status failed)"])
+
+    def test_off_prints_the_base_line_and_writes_the_env_file(self):
+        self.env_file.parent.mkdir()
+        result = self.run_hook("off", extra={"CLAUDE_ENV_FILE": str(self.env_file)})
+        self.assertEqual(result.stdout, f"devflow base: {ROOT}\n")
+        self.assertEqual(self.env_file.read_text(encoding="utf-8").splitlines(),
+                         ["DEVFLOW_ROOT='" + str(ROOT).replace("\\", "/") + "'"])
+
+    def test_off_names_the_store(self):
+        main = self.scratch / "main"
+        store = make_store(self.scratch / "home" / "projects" / "tally", {"name": "tally"})
+        link(main / ".git", store)
+        wt = worktree(main, self.scratch / "wt")
+        self.project = wt
+        result = self.run_hook("off", extra={"DEVFLOW_HOME": str(self.scratch / "home")})
+        self.assertEqual(result.stdout.splitlines(),
+                         [f"devflow base: {ROOT}", session_start.store_line(store)])
+
+    def test_off_runs_no_subprocess(self):
+        calls = []
+        env = {"CLAUDE_PROJECT_DIR": str(self.project), OUTPUT_ENV: "off", "CLAUDE_PLUGIN_ROOT": str(ROOT)}
+        out = StringIO()
+        with mock.patch.dict(os.environ, env), \
+                mock.patch.object(session_start.subprocess, "run", side_effect=lambda *a, **k: calls.append(a)), \
+                mock.patch.object(session_start.subprocess, "Popen", side_effect=lambda *a, **k: calls.append(a)), \
+                redirect_stdout(out):
+            os.environ.pop("CLAUDE_ENV_FILE", None)
+            code = session_start.main([])
+        self.assertEqual((code, calls), (0, []))
+        self.assertEqual(out.getvalue(), f"devflow base: {ROOT}\n")
+
+    def test_a_bad_value_gives_the_full_summary_and_a_line(self):
+        unset = self.run_hook(None).stdout
+        bad = self.run_hook("loud").stdout
+        self.assertEqual(bad, unset + 'Settings: session_start_output is "loud", not full, short or off; '
+                                      "this is the full summary. Change it in /config.\n")
+
+    def test_next_step_ignores_the_setting(self):
+        expected = f"Plan: {CURRENT_PATH}\nStep: 2 Median\nRun: /devflow:add-feature\n"
+        for setting in (None, "off", "short", "loud"):
+            self.assertEqual(self.run_hook(setting, "--next-step").stdout, expected, setting)
+
+    def test_the_models_line_names_a_user_default_from_the_env_var(self):
+        result = self.run_hook(None, extra={USER_MODELS_ENV: "implementer: haiku, low"})
+        self.assertIn("\nModels: the plugin's pins (no board in .claude/devflow.json); your defaults move "
+                      "implementer to haiku, low. Full view: python ", result.stdout)
+        short = self.run_hook("short", extra={USER_MODELS_ENV: "reviewer: sonnet, low"}).stdout
+        self.assertIn("reviewer kept on opus, medium (floor)", short)
 
 
 DESIGNED = "# Profile\n\n## Design system\n\nTokens in `ui/tokens.css`.\n\n## Release\n\nBy hand, no candidate.\n"

@@ -131,6 +131,15 @@ class TestVersionCheck(_RepoCase):
         self.assertIsNone(match("Release 2.3.1 and a fix"))
         self.assertIsNone(match("feat: Release 2.3.1"))
 
+    def test_a_manifest_edit_that_keeps_the_version_passes(self):
+        self.repo.commit("Release 2.4.0", {
+            "app/__init__.py": init_file("2.4.0"), "setup_freeze.py": setup_file("2.4.0"),
+            PLUGIN.path: manifest_file("2.4.0")})
+        base = self.repo.git("rev-parse", "HEAD")
+        edited = json.dumps({"name": "x", "version": "2.4.0", "description": "new"}, indent=2) + "\n"
+        self.repo.commit("feat: describe the plugin", {PLUGIN.path: edited})
+        self.assertEqual(self.problems(base=base, files=self.with_plugin()), [])
+
     def test_a_feature_commit_bumping_the_version_fails(self):
         sha = self.repo.commit("feat: x", {"app/__init__.py": init_file("2.3.2")})
         problems = self.problems()

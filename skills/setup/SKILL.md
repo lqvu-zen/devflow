@@ -41,7 +41,7 @@ Enough to fill the profile with evidence, not a full audit:
 
 One `AskUserQuestion` call, at most four questions, only those whose answers you couldn't find. Usually:
 
-- the maintainer's name and time zone (for the decision log);
+- the maintainer's name and time zone (for the decision log), unless your plugin settings give them (name `${user_config.maintainer_name}`, time zone `${user_config.maintainer_timezone}`). Each is judged on its own: a value that is empty, or still shows its `user_config` placeholder, is not given, and is asked for as before. A given value is not asked for: it goes into the drafts (`maintainer` in `devflow.json`, **Maintainer** in **Project**) marked "(from your plugin settings)";
 - whether the project ships releases, and through what (GitHub releases, a package registry, a store);
 - if it ships through GitHub releases: whether its release gate can write a pass stamp (a JSON file with the full HEAD SHA, the SHA-256 of the artifact checksum file and the case count, written only when every case passes and deleted when a run or build starts);
 - where the real user data lives, if the code doesn't make it obvious;

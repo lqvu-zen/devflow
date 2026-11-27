@@ -1494,6 +1494,28 @@ class TestSetupSettlesClashes(unittest.TestCase):
         self.assertIn(CLASH_TEMPLATE_SENTENCE, rules)
 
 
+MAINTAINER_BULLET = "- the maintainer's name and time zone"
+MAINTAINER_WORDS = (
+    "`${user_config.maintainer_name}`",
+    "`${user_config.maintainer_timezone}`",
+    "\"(from your plugin settings)\"",
+    "`maintainer` in `devflow.json`",
+    "**Maintainer** in **Project**",
+    "empty, or still shows its `user_config` placeholder, is not given, and is asked for as before",
+    "A given value is not asked for",
+)
+
+
+class TestSetupProposesTheMaintainer(unittest.TestCase):
+    def test_the_settings_are_proposed_and_asking_is_the_fallback(self):
+        section = _section(SETUP, CLASH_HEADING)
+        bullet = _paragraph(SETUP, MAINTAINER_BULLET)
+        self.assertIn(bullet, section)
+        for words in MAINTAINER_WORDS:
+            with self.subTest(words=words):
+                self.assertIn(words, bullet)
+
+
 class TestPlanFormat(unittest.TestCase):
     def test_the_template_makes_interfaces_and_review_focus_optional(self):
         text = (TEMPLATES / "plan.md").read_text(encoding="utf-8")

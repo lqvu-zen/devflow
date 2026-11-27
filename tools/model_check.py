@@ -34,6 +34,12 @@ BOARD_KEYS = ("orchestrator", "locator", "designer", "designer.diagnosis", "impl
 STEP_HEADING = re.compile(r"^###\s+(\d{1,3})(?!\d)")
 SESSION_PASS = "session model, set with /model"
 NOT_INSTALLED = "not installed"
+OPTION_PREFIX = "CLAUDE_PLUGIN_OPTION_"
+USER_MODELS = "default_models"
+USER_MODELS_ENV = OPTION_PREFIX + USER_MODELS.upper()
+PLUGIN_KEY_PREFIX = "devflow@"
+PLACEHOLDER = "${user_config."
+USER_SOURCE = "user"
 
 
 class Expect(NamedTuple):
@@ -213,6 +219,94 @@ def read_board(config: object) -> tuple[dict[str, object], list[str]]:
     return entries, ignored
 
 
+def default_user_settings() -> Path:
+    config = os.environ.get("CLAUDE_CONFIG_DIR")
+    if config:
+        return Path(config) / "settings.json"
+    return Path.home() / ".claude" / "settings.json"
+
+
+def _unset(text: object) -> bool:
+    return not isinstance(text, str) or not text.strip() or text.strip().startswith(PLACEHOLDER)
+
+
+def _plugin_options(data: dict) -> tuple[str, dict] | None:
+    configs = data.get("pluginConfigs")
+    if not isinstance(configs, dict):
+        return None
+    found = sorted(key for key, value in configs.items() if isinstance(key, str) and key.startswith(PLUGIN_KEY_PREFIX)
+                   and isinstance(value, dict) and isinstance(value.get("options"), dict))
+    if not found:
+        return None
+    enabled = data.get("enabledPlugins")
+    enabled = enabled if isinstance(enabled, dict) else {}
+    key = next((key for key in found if enabled.get(key) is True), found[0])
+    return key, configs[key]["options"]
+
+
+def read_user_defaults(environ, settings: Path) -> tuple[str | None, str, list[str]]:
+    if USER_MODELS_ENV in environ:
+        return environ[USER_MODELS_ENV], USER_MODELS_ENV, []
+    where = str(settings)
+    try:
+        data = json.loads(Path(settings).read_text(encoding="utf-8-sig"))
+    except FileNotFoundError:
+        return None, where, ["no file"]
+    except OSError as error:
+        return None, where, [f"not read: {error}"]
+    except ValueError as error:
+        return None, where, [f"not JSON: {error}"]
+    if not isinstance(data, dict):
+        return None, where, [f"not an object ({type(data).__name__})"]
+    chosen = _plugin_options(data)
+    if chosen is None:
+        return None, where, [f"no pluginConfigs entry for {PLUGIN_KEY_PREFIX}<marketplace>"]
+    key, options = chosen
+    where = f"{settings} pluginConfigs {key}"
+    value = options.get(USER_MODELS)
+    if value is None or isinstance(value, str):
+        return value, where, []
+    return None, where, [f"{USER_MODELS} is not a string ({type(value).__name__})"]
+
+
+def parse_user_defaults(text: object) -> tuple[dict[str, str], list[str]]:
+    if _unset(text):
+        return {}, []
+    entries: dict[str, str] = {}
+    ignored: list[str] = []
+    for chunk in str(text).split(";"):
+        chunk = chunk.strip()
+        if not chunk:
+            continue
+        key, colon, value = chunk.partition(":")
+        key, value = key.strip().lower(), value.strip()
+        if not colon:
+            ignored.append(f"your default {chunk!r}: not \"<role>: <Model>, <effort>\"")
+        elif key not in BOARD_KEYS:
+            ignored.append(f"your default {key}: unknown key; the keys are {', '.join(BOARD_KEYS)}")
+        elif value.lower() == DEFAULT_WORD:
+            continue
+        elif key == "orchestrator" and "," in value:
+            ignored.append(f"your default {key}: {value!r}: the orchestrator takes a model only, and runs on the "
+                           f"session model set with /model")
+        elif key in entries:
+            ignored.append(f"your default {key}: a second entry; give one entry per role")
+        else:
+            entries[key] = value
+    return entries, ignored
+
+
+def user_defaults_text(raw: str | None, where: str, notes: list[str]) -> str:
+    if _unset(raw):
+        return f"none set ({'; '.join([where] + list(notes))})"
+    return f'{where} "{raw.strip()}"'
+
+
+def load_user_defaults(environ=None) -> tuple[tuple[dict[str, str], list[str]], str]:
+    raw, where, notes = read_user_defaults(os.environ if environ is None else environ, default_user_settings())
+    return parse_user_defaults(raw), user_defaults_text(raw, where, notes)
+
+
 def _floor_of(key: str, expect: Expect, pins: dict[str, Expect]) -> Expect | None:
     if key == "designer.diagnosis":
         return DIAGNOSIS_FLOOR if _below(expect, DIAGNOSIS_FLOOR) else None
@@ -225,7 +319,8 @@ def _model_line_keys(role: str, keys: tuple[str, ...]) -> list[str]:
     return [key for key in keys if agent_of(key) == role]
 
 
-def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=()) -> tuple[list[Row], list[tuple[str, str]]]:
+def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=(),
+               user=None) -> tuple[list[Row], list[tuple[str, str]]]:
     defaults = board_defaults(pins)
     current = dict(defaults)
     extra = tuple(role for role in sorted(pins) if role not in BOARD_KEYS)
@@ -235,6 +330,22 @@ def board_rows(config: object, pins: dict[str, Expect], lines=(), parts=()) -> t
     entries, ignored = read_board(config)
     notes: list[tuple[str, str]] = [("ignored", text) for text in ignored]
     absent = missing_agents(pins)
+    if user is not None:
+        user_entries, user_ignored = user
+        notes += [("ignored", text) for text in user_ignored]
+        for key, value in user_entries.items():
+            if key in entries or agent_of(key) in absent:
+                continue
+            try:
+                expect = parse_board_value(value, defaults[key])
+            except ValueError as error:
+                notes.append(("ignored", f"your default {key}: {error}"))
+                continue
+            floor = _floor_of(key, expect, pins)
+            if floor is not None:
+                current[key] = Expect(floor.model, floor.effort, f"floor (your default said {shown(expect)})")
+            else:
+                current[key] = expect._replace(source=USER_SOURCE)
     for key, value in entries.items():
         if agent_of(key) in absent:
             continue
@@ -386,8 +497,12 @@ def _orchestrator_pass(row: Row, session: str | None) -> str:
 
 
 def format_board(label: str, rows: list[Row], notes: list[tuple[str, str]],
-                 open_steps: list[tuple[int, str, list[str]]], session: str | None) -> list[str]:
-    lines = [f"model board: {label}", "key | model | effort | from | pass"]
+                 open_steps: list[tuple[int, str, list[str]]], session: str | None,
+                 user_label: str | None = None) -> list[str]:
+    lines = [f"model board: {label}"]
+    if user_label is not None:
+        lines.append(f"user defaults: {user_label}")
+    lines.append("key | model | effort | from | pass")
     for row in rows:
         model = row.expect.model if row.expect else "-"
         effort = (row.expect.effort if row.expect else None) or "-"
@@ -410,29 +525,34 @@ def orchestrator_note(rows: list[Row], session: str | None, has_board: bool = Tr
         return None
     for row in rows:
         if row.key == "orchestrator" and row.expect is not None and row.expect.model != session:
-            owner = "the board's orchestrator" if has_board else "the orchestrator default"
+            if row.source == USER_SOURCE:
+                owner = "your default orchestrator"
+            else:
+                owner = "the board's orchestrator" if has_board else "the orchestrator default"
             return f"This session runs on {session}; {owner} is {row.expect.model} (/model switches it)."
     return None
 
 
 def board_summary(config: object, pins: dict[str, Expect], step: int | None, step_lines: list[str],
-                  view_path: str, session: str | None = None) -> str:
+                  view_path: str, session: str | None = None, user=None, quiet: bool = False) -> str | None:
     tail = f"Full view: python {view_path} --board"
-    rows, notes = board_rows(config, pins)
+    rows, notes = board_rows(config, pins, user=user)
     defaults = board_defaults(pins)
     has_board = isinstance(config, dict) and BOARD_KEY in config
     note = orchestrator_note(rows, session, has_board)
     if note:
         tail = f"{note} {tail}"
     said: list[str] = []
-    moves = [f"{row.key} to {shown(row.expect)}" for row in rows
-             if row.source == "board" and shown(row.expect) != shown(defaults.get(row.key))]
-    if moves:
-        said.append("board moves " + " and ".join(moves))
-    said += [f"{row.key} kept on {shown(row.expect)} (floor)" for row in rows if row.source.startswith("floor")]
+    for source, head in (("board", "board moves "), (USER_SOURCE, "your defaults move ")):
+        moves = [f"{row.key} to {shown(row.expect)}" for row in rows
+                 if row.source == source and shown(row.expect) != shown(defaults.get(row.key))]
+        if moves:
+            said.append(head + " and ".join(moves))
+    floors = [f"{row.key} kept on {shown(row.expect)} (floor)" for row in rows if row.source.startswith("floor")]
+    said += floors
+    refused: list[str] = []
     if step is not None and step_lines:
         roles: list[str] = []
-        refused: list[str] = []
         for text in step_lines:
             try:
                 role, expect = parse_model_line(text)
@@ -450,6 +570,8 @@ def board_summary(config: object, pins: dict[str, Expect], step: int | None, ste
     ignored = sum(1 for kind, _text in notes if kind == "ignored")
     if ignored:
         said.append(f"{ignored} {'entry' if ignored == 1 else 'entries'} ignored")
+    if quiet and not (floors or ignored or refused or note):
+        return None
     if not has_board:
         head = "the plugin's pins (no board in .claude/devflow.json)"
         return f"Models: {'; '.join([head] + said)}. {tail}"
@@ -750,16 +872,19 @@ def main(argv: list[str] | None = None) -> int:
         if problem:
             print(f"model_check: {problem}")
             return 2
-    rows, notes = board_rows(config, pins, args.model, args.part)
+    user, user_label = load_user_defaults()
+    rows, notes = board_rows(config, pins, args.model, args.part, user=user)
     expectations = expectations_from(rows, args.escalated, args.diagnosis)
     parts = tuple(row.expect for row in rows if row.key.startswith("implementer part "))
     if not args.board:
         print(f"model_check: board: {label}")
+        print(f"model_check: user defaults: {user_label}")
         for kind, text in notes:
             print(f"model_check: {kind}: {text}")
         return _check(args.source, root, args, expectations, parts, absent)
     project = Path(args.source) if Path(args.source).is_dir() else path.parent.parent
-    for line in format_board(label, rows, notes, open_step_lines(project, config), session_model(project, root)):
+    for line in format_board(label, rows, notes, open_step_lines(project, config), session_model(project, root),
+                             user_label):
         print(line)
     if args.run is None:
         return 0

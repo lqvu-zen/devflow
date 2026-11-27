@@ -30,6 +30,27 @@ def _load():
 
 plan_runner = _load()
 
+OPTION_PREFIX = "CLAUDE_PLUGIN_OPTION_"
+_SAVED_ENV: dict[str, str | None] = {}
+_USER_CONFIG: list[tempfile.TemporaryDirectory] = []
+
+
+def setUpModule():
+    _USER_CONFIG.append(tempfile.TemporaryDirectory(prefix="devflow-user-config-"))
+    names = [name for name in os.environ if name.startswith(OPTION_PREFIX)] + ["CLAUDE_CONFIG_DIR"]
+    for name in names:
+        _SAVED_ENV[name] = os.environ.pop(name, None)
+    os.environ["CLAUDE_CONFIG_DIR"] = _USER_CONFIG[0].name
+
+
+def tearDownModule():
+    os.environ.pop("CLAUDE_CONFIG_DIR", None)
+    for name, value in _SAVED_ENV.items():
+        if value is not None:
+            os.environ[name] = value
+    _SAVED_ENV.clear()
+    _USER_CONFIG.pop().cleanup()
+
 PLAN = "docs/plans/release-x.md"
 STATUS = "docs/STATUS.md"
 
@@ -336,6 +357,25 @@ class TestRunsSteps(RunnerCase):
         self.assertEqual(argv[argv.index("--model") + 1], "opus")
         self.assertEqual(argv[argv.index("--permission-mode") + 1], "acceptEdits")
         self.assertNotIn("--max-budget-usd", argv)
+
+    def test_a_user_orchestrator_default_is_used_and_the_board_wins(self):
+        option = "CLAUDE_PLUGIN_OPTION_DEFAULT_MODELS"
+        with mock.patch.dict(os.environ, {option: "orchestrator: opus; implementer: sonnet, low"}):
+            self.assertEqual(plan_runner.orchestrator_model({}), "opus")
+            self.assertEqual(plan_runner.orchestrator_model({"models": {"orchestrator": "Haiku"}}), "haiku")
+            self.reset(config={"name": "x"})
+            self.calls([{"row": {"1": "done"}}])
+            self.main("--steps", "1")
+        argv = self.records()[0]["argv"]
+        self.assertEqual(argv[argv.index("--model") + 1], "opus")
+        settings = Path(os.environ["CLAUDE_CONFIG_DIR"]) / "settings.json"
+        settings.write_text(json.dumps({"pluginConfigs": {"devflow@devflow": {
+            "options": {"default_models": "orchestrator: haiku"}}}}), encoding="utf-8")
+        try:
+            self.assertEqual(plan_runner.orchestrator_model({}), "haiku")
+        finally:
+            settings.unlink()
+        self.assertEqual(plan_runner.orchestrator_model({}), "sonnet")
 
     def test_the_permission_mode_defaults_to_accept_edits_and_default_passes_through(self):
         self.calls([{"row": {"1": "done"}}, {"row": {"2": "done"}}])

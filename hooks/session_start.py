@@ -22,6 +22,20 @@ Runner = Callable[[list], Optional[str]]
 MAX_CHANGES = 15
 DEADLINE_SECONDS = 15.0
 STDIN_SECONDS = 1.0
+OUTPUT_OPTION = "CLAUDE_PLUGIN_OPTION_SESSION_START_OUTPUT"
+OUTPUT_MODES = ("full", "short", "off")
+PLACEHOLDER = "${user_config."
+
+
+def output_mode(environ: Mapping[str, str]) -> tuple[str, str | None]:
+    value = (environ.get(OUTPUT_OPTION) or "").strip()
+    if not value or value.startswith(PLACEHOLDER):
+        return "full", None
+    mode = value.lower()
+    if mode in OUTPUT_MODES:
+        return mode, None
+    return "full", (f'Settings: session_start_output is "{value}", not full, short or off; '
+                    "this is the full summary. Change it in /config.")
 
 
 class Layout:
@@ -106,12 +120,16 @@ def _path_of(status_line: str) -> str:
     return path.strip('"')
 
 
-def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT, local: bool = False) -> list[str]:
+def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT, local: bool = False,
+                 compact: bool = False) -> list[str]:
     out = run(["git", "status", "--short"])
     if out is None:
         return ["Uncommitted: unknown (git status failed)"]
     lines = [line for line in out.splitlines() if line.strip()]
-    if not lines:
+    if compact:
+        result = ["Uncommitted: none." if not lines else
+                  f"Uncommitted: {len(lines)} {'file' if len(lines) == 1 else 'files'} (git status lists them)."]
+    elif not lines:
         result = ["Uncommitted: none."]
     else:
         result = [f"Uncommitted ({len(lines)}):"]
@@ -124,7 +142,7 @@ def change_lines(run: Runner, layout: Layout = DEFAULT_LAYOUT, local: bool = Fal
     if managed:
         result.append(f"Status and plan edits waiting: {', '.join(managed)}. Commit them with "
                       "your next change; never revert them.")
-    else:
+    elif not compact:
         result.append("Status and plan edits waiting: none. (When listed: commit them with your next "
                       "change; never revert them.)")
     return result
@@ -847,7 +865,7 @@ def session_model_id(hook: Mapping[str, Any]) -> str | None:
 
 
 def models_line(layout: Layout, plan_md: str | None, step: int | None = None,
-                session_id: str | None = None) -> str:
+                session_id: str | None = None, quiet: bool = False) -> str | None:
     try:
         if step is None and plan_md:
             step = next_open(step_order(plan_md), step_states(plan_md))
@@ -858,14 +876,32 @@ def models_line(layout: Layout, plan_md: str | None, step: int | None = None,
         step_lines = model_check.step_model_lines(plan_md).get(step, []) if plan_md and step is not None else []
         pins = model_check.load_pins(model_check.PINS_DIR)
         session = model_check.family(session_id) if session_id else None
-        return model_check.board_summary(config, pins, step, step_lines, str(VIEW_PATH), session)
+        raw, _where, _notes = model_check.read_user_defaults(os.environ, model_check.default_user_settings())
+        user = model_check.parse_user_defaults(raw)
+        return model_check.board_summary(config, pins, step, step_lines, str(VIEW_PATH), session,
+                                         user=user, quiet=quiet)
     except Exception as error:
         return (f"Models: couldn't read the board ({type(error).__name__}: {error}). "
                 f"Full view: python {VIEW_PATH} --board")
 
 
+def store_line(store: Path, layout: Layout = DEFAULT_LAYOUT) -> str:
+    return (f"Store: local-only; devflow's files for this clone are in {store}, at their "
+            f"in-repo paths (.claude/devflow.md, .claude/devflow.json, docs/BEHAVIOUR.md, "
+            f"{layout.status_file}, {layout.plans_dir}/).")
+
+
+def off_lines(base: str, store: Path | None, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
+    lines = [base_line(base)]
+    if store is not None:
+        lines.append(store_line(store, layout))
+    return lines
+
+
 def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
-           session_id: str | None = None, store: Path | None = None, base: str | None = None) -> str:
+           session_id: str | None = None, store: Path | None = None, base: str | None = None,
+           mode: str = "full") -> str:
+    short = mode == "short"
     files = store or project
     state = upstream_state(run)
     _branch, upstream, ahead, _behind, head = state
@@ -873,11 +909,9 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
     if base is not None:
         lines.append(base_line(base))
     if store is not None:
-        lines.append(f"Store: local-only; devflow's files for this clone are in {store}, at their "
-                     f"in-repo paths (.claude/devflow.md, .claude/devflow.json, docs/BEHAVIOUR.md, "
-                     f"{layout.status_file}, {layout.plans_dir}/).")
+        lines.append(store_line(store, layout))
     lines.append(branch_line(state))
-    lines += change_lines(run, layout, local=store is not None)
+    lines += change_lines(run, layout, local=store is not None, compact=short)
     lines.append(ci_line(run, head, upstream, ahead))
     status_md = _read(files / layout.status_file)
     plan = current_plan(status_md, layout) if status_md else None
@@ -888,9 +922,11 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
     lines += plan_lines(plan, plan_md, layout, next_path, next_md, archived)
     choice = _choice(plan, plan_md, next_path, next_md, layout, archived)
     if choice is not None and choice.fallback:
-        lines.append(models_line(layout, next_md, choice.number, session_id))
+        models = models_line(layout, next_md, choice.number, session_id, quiet=short)
     else:
-        lines.append(models_line(layout, plan_md, session_id=session_id))
+        models = models_line(layout, plan_md, session_id=session_id, quiet=short)
+    if models is not None:
+        lines.append(models)
     missing = profile_line(files, store)
     if missing:
         lines.append(missing)
@@ -971,14 +1007,22 @@ def main(argv: list[str] | None = None) -> int:
         if args:
             text = "\n".join(next_step_lines(found.root, Layout(found.config)))
         else:
-            session_id = session_model_id(hook_input())
-            deadline = time.monotonic() + DEADLINE_SECONDS
+            mode, setting_error = output_mode(os.environ)
             base = base_path()
             env_file = os.environ.get("CLAUDE_ENV_FILE")
             if env_file:
                 write_env_file(env_file, env_file_line(base))
-            text = report(runner_until(deadline, str(project)), project, Layout(found.config),
-                          session_id=session_id, store=found.store, base=base)
+            layout = Layout(found.config)
+            if mode == "off":
+                lines = off_lines(base, found.store, layout)
+            else:
+                session_id = session_model_id(hook_input())
+                deadline = time.monotonic() + DEADLINE_SECONDS
+                lines = [report(runner_until(deadline, str(project)), project, layout,
+                                session_id=session_id, store=found.store, base=base, mode=mode)]
+            if setting_error:
+                lines.append(setting_error)
+            text = "\n".join(lines)
     except devflow_store.StoreError as error:
         print(f"Store: {error}. Run /devflow:setup to link this clone again.")
         return 1 if args else 0

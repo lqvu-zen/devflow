@@ -147,6 +147,32 @@ def _readme_list_errors(root: Path) -> list[str]:
     return sorted(errors)
 
 
+OPTION_REQUIRED = ("type", "title", "description")
+OPTION_ALLOWED = (
+    "type", "title", "description", "required", "default", "options", "multiple", "sensitive", "min", "max",
+)
+OPTION_TYPES = ("string", "number", "boolean", "directory", "file")
+OPTION_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]*")
+BASE_OPTIONS = ("session_start_output", "maintainer_name", "maintainer_timezone", "default_models")
+
+
+def _option_errors(options: object) -> list[str]:
+    if not isinstance(options, dict) or not options:
+        return ["userConfig: not a non-empty object"]
+    errors: list[str] = []
+    for name, option in options.items():
+        if not OPTION_NAME.fullmatch(name):
+            errors.append(f"{name}: not a valid option name")
+        if not isinstance(option, dict):
+            errors.append(f"{name}: not an object")
+            continue
+        errors += [f"{name}: no {key}" for key in OPTION_REQUIRED if not option.get(key)]
+        errors += [f"{name}: unknown key {key}" for key in option if key not in OPTION_ALLOWED]
+        if "type" in option and option["type"] not in OPTION_TYPES:
+            errors.append(f"{name}: unknown type {option['type']}")
+    return sorted(errors)
+
+
 def _write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_bytes(text.encode("utf-8"))
@@ -355,6 +381,44 @@ class TestMovedNames(unittest.TestCase):
         self.assertIn("The UI review prompts need the `devflow-ui` plugin", prompts)
         self.assertIn("where the `devflow-release` plugin is installed, `/devflow-release:release`", read("templates/STATUS.md"))
         self.assertIn("without it the maintainer releases by hand as **Release** says", read("skills/manage-project/SKILL.md"))
+
+
+class TestUserConfig(unittest.TestCase):
+    def _options(self) -> dict:
+        return _load_json(ROOT / ".claude-plugin" / "plugin.json").get("userConfig")
+
+    def test_each_option_has_the_required_keys_and_no_unknown_one(self):
+        self.assertEqual(_option_errors(self._options()), [])
+
+    def test_the_base_declares_these_options(self):
+        self.assertEqual(tuple(self._options()), BASE_OPTIONS)
+
+    def test_no_option_offers_a_pick_list_and_only_the_output_has_a_default(self):
+        options = self._options()
+        self.assertEqual([name for name, option in options.items() if "options" in option], [])
+        self.assertEqual({name: option["default"] for name, option in options.items() if "default" in option},
+                         {"session_start_output": "full"})
+
+    def test_the_domain_plugins_declare_none(self):
+        manifests = sorted(ROOT.glob("plugins/*/.claude-plugin/plugin.json"))
+        self.assertTrue(manifests)
+        for path in manifests:
+            with self.subTest(path.parts[-3]):
+                self.assertNotIn("userConfig", _load_json(path))
+
+    def test_a_bad_option_is_named(self):
+        found = _option_errors({
+            "bad-name": {"type": "string", "title": "t", "description": "d"},
+            "b": {"type": "text", "title": "t", "nope": 1},
+            "c": "x",
+        })
+        self.assertEqual(found, [
+            "b: no description",
+            "b: unknown key nope",
+            "b: unknown type text",
+            "bad-name: not a valid option name",
+            "c: not an object",
+        ])
 
 
 class TestReadmeLists(unittest.TestCase):

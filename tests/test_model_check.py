@@ -12,12 +12,33 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "tools"))
 
 import model_check
 import session_extract
+
+_SAVED_ENV: dict[str, str | None] = {}
+_USER_CONFIG: list[tempfile.TemporaryDirectory] = []
+
+
+def setUpModule():
+    _USER_CONFIG.append(tempfile.TemporaryDirectory(prefix="devflow-user-config-"))
+    names = [name for name in os.environ if name.startswith(model_check.OPTION_PREFIX)] + ["CLAUDE_CONFIG_DIR"]
+    for name in names:
+        _SAVED_ENV[name] = os.environ.pop(name, None)
+    os.environ["CLAUDE_CONFIG_DIR"] = _USER_CONFIG[0].name
+
+
+def tearDownModule():
+    os.environ.pop("CLAUDE_CONFIG_DIR", None)
+    for name, value in _SAVED_ENV.items():
+        if value is not None:
+            os.environ[name] = value
+    _SAVED_ENV.clear()
+    _USER_CONFIG.pop().cleanup()
 
 PINS = {
     "designer": "model: opus\r\neffort: medium\r\n",
@@ -630,6 +651,178 @@ class TestCheckAgainstBoard(BoardFixture):
                          ["opus", "max", "board", 'model: "opus", effort: "max"'])
         code, output = self.check("--diagnosis")
         self.assertEqual(rows(output)["designer"][4], "opus, max (board)")
+
+
+ENV = model_check.USER_MODELS_ENV
+
+
+class TestUserDefaults(BoardFixture):
+    def setUp(self):
+        super().setUp()
+        self.write_board(None)
+        self.settings_dir = self.base / "user-config"
+        self.settings_dir.mkdir()
+
+    def user(self, text: str):
+        return mock.patch.dict(os.environ, {ENV: text})
+
+    def settings(self, data, encoding: str = "utf-8") -> Path:
+        path = self.settings_dir / "settings.json"
+        text = data if isinstance(data, str) else json.dumps(data)
+        path.write_text(text, encoding=encoding)
+        return path
+
+    def test_the_test_run_never_reads_the_real_settings(self):
+        self.assertEqual(model_check.default_user_settings(), Path(_USER_CONFIG[0].name) / "settings.json")
+        self.assertNotIn(ENV, os.environ)
+
+    def test_a_user_default_moves_a_role(self):
+        with self.user("implementer: Opus, high; tester: haiku"):
+            code, output = self.board()
+        table = board_table(output)
+        self.assertEqual(code, 0, output)
+        self.assertEqual(table["implementer"][1:5], ["opus", "high", "user", 'model: "opus", effort: "high"'])
+        self.assertEqual(table["tester"][1:5], ["haiku", "medium", "user", 'model: "haiku", effort: "medium"'])
+        self.assertEqual(table["designer"][3], "pin")
+        lines = output.splitlines()
+        self.assertTrue(lines[0].startswith("model board: "), output)
+        self.assertEqual(lines[1], f'user defaults: {ENV} "implementer: Opus, high; tester: haiku"')
+
+    def test_the_board_wins_and_a_board_default_falls_through(self):
+        with self.user("implementer: Opus, high; designer: sonnet, low"):
+            self.write_board({"implementer": "Sonnet, low", "designer": "default"})
+            table = board_table(self.board()[1])
+        self.assertEqual(table["implementer"][1:4], ["sonnet", "low", "board"])
+        self.assertEqual(table["designer"][1:4], ["sonnet", "low", "user"])
+
+    def test_a_model_line_goes_over_a_user_default(self):
+        with self.user("implementer: Opus, high"):
+            table = board_table(self.board("--model", "implementer: Sonnet, low; small")[1])
+        self.assertEqual(table["implementer"][1:4], ["sonnet", "low", "Model line"])
+
+    def test_the_floors_hold_user_defaults(self):
+        with self.user("reviewer: sonnet, medium; designer.diagnosis: sonnet, low; planner: opus, low"):
+            table = board_table(self.board()[1])
+        self.assertEqual(table["reviewer"][1:4], ["opus", "high", "floor (your default said sonnet, medium)"])
+        self.assertEqual(table["designer.diagnosis"][1:4], ["opus", "medium", "floor (your default said sonnet, low)"])
+        self.assertEqual(table["planner"][1:4], ["opus", "high", "floor (your default said opus, low)"])
+
+    def test_check_mode_judges_against_the_user_row(self):
+        session = make_board_session(self.base / "sessions")
+        with self.user("designer: sonnet, medium; implementer: opus, high"):
+            code, output = run([str(session), "--agents", str(self.agents),
+                                "--config", str(self.project / ".claude" / "devflow.json")])
+        found = rows(output)
+        self.assertEqual(code, 0, output)
+        self.assertIn(f'model_check: user defaults: {ENV} "designer: sonnet, medium; implementer: opus, high"', output)
+        self.assertEqual(found["designer"][4:], ["sonnet, medium (user)", "ok"])
+        self.assertEqual(found["implementer"][4:], ["opus, high (user)", "ok"])
+
+    def test_bad_entries_are_ignored(self):
+        text = "builder: opus; designer: gpt; orchestrator: opus, high; nonsense; implementer: default; tester: x, y"
+        with self.user(text):
+            output = self.board()[1]
+        table = board_table(output)
+        ignored = [line for line in output.splitlines() if line.startswith("ignored: ")]
+        self.assertEqual(len(ignored), 5, output)
+        for start in ("ignored: your default builder: unknown key", "ignored: your default designer: unknown model",
+                      "ignored: your default orchestrator: 'opus, high': the orchestrator takes a model only",
+                      "ignored: your default 'nonsense': not",
+                      "ignored: your default tester: "):
+            self.assertTrue(any(line.startswith(start) for line in ignored), start)
+        for key in ("designer", "implementer", "tester"):
+            self.assertEqual(table[key][3], "pin", key)
+        self.assertEqual(table["orchestrator"][3], "default")
+
+    def test_a_placeholder_or_empty_text_sets_nothing(self):
+        for text in ("${user_config.default_models}", "", "   "):
+            with self.subTest(text=text), self.user(text):
+                output = self.board()[1]
+                self.assertIn(f"user defaults: none set ({ENV})", output)
+                self.assertIn("ignored: nothing", output)
+                self.assertNotIn("| user |", output)
+        self.assertEqual(model_check.parse_user_defaults("${user_config.default_models}"), ({}, []))
+        self.assertEqual(model_check.parse_user_defaults(None), ({}, []))
+
+    def test_the_settings_file(self):
+        options = {"options": {"default_models": "tester: haiku"}}
+        path = self.settings({"pluginConfigs": {"devflow@devflow": options}}, encoding="utf-8-sig")
+        self.assertEqual(model_check.read_user_defaults({}, path),
+                         ("tester: haiku", f"{path} pluginConfigs devflow@devflow", []))
+        self.settings("{not json")
+        raw, where, notes = model_check.read_user_defaults({}, path)
+        self.assertEqual((raw, where), (None, str(path)))
+        self.assertEqual(len(notes), 1)
+        self.assertTrue(notes[0].startswith("not JSON"))
+        self.settings({"pluginConfigs": {"other@devflow": options}, "enabledPlugins": {"other@devflow": True}})
+        raw, where, notes = model_check.read_user_defaults({}, path)
+        self.assertEqual((raw, len(notes)), (None, 1))
+        for data in ([1], {"pluginConfigs": []}, {"pluginConfigs": {"devflow@devflow": {"options": "x"}}}):
+            self.settings(data)
+            self.assertEqual(model_check.read_user_defaults({}, path)[0], None, data)
+        self.settings({"pluginConfigs": {"devflow@devflow": {"options": {"default_models": 3}}}})
+        self.assertEqual(len(model_check.read_user_defaults({}, path)[2]), 1)
+        self.assertEqual(model_check.read_user_defaults({}, self.settings_dir / "missing.json")[:2],
+                         (None, str(self.settings_dir / "missing.json")))
+
+    def test_two_marketplaces_take_the_enabled_one(self):
+        configs = {"devflow@a": {"options": {"default_models": "tester: haiku"}},
+                   "devflow@b": {"options": {"default_models": "tester: opus"}}}
+        path = self.settings({"pluginConfigs": configs, "enabledPlugins": {"devflow@a": False, "devflow@b": True}})
+        self.assertEqual(model_check.read_user_defaults({}, path)[:2], ("tester: opus", f"{path} pluginConfigs devflow@b"))
+        path = self.settings({"pluginConfigs": configs})
+        self.assertEqual(model_check.read_user_defaults({}, path)[0], "tester: haiku")
+
+    def test_the_env_var_wins_over_the_file(self):
+        path = self.settings({"pluginConfigs": {"devflow@devflow": {"options": {"default_models": "tester: opus"}}}})
+        self.assertEqual(model_check.read_user_defaults({ENV: "tester: haiku"}, path), ("tester: haiku", ENV, []))
+
+    def test_board_reads_the_settings_file_without_the_env_var(self):
+        self.settings({"pluginConfigs": {"devflow@devflow": {"options": {"default_models": "tester: haiku"}}}})
+        with mock.patch.dict(os.environ, {"CLAUDE_CONFIG_DIR": str(self.settings_dir)}):
+            output = self.board()[1]
+        self.assertIn(f'user defaults: {self.settings_dir / "settings.json"} pluginConfigs devflow@devflow '
+                      f'"tester: haiku"', output)
+        self.assertEqual(board_table(output)["tester"][1:4], ["haiku", "medium", "user"])
+        output = self.board()[1]
+        self.assertIn(f"user defaults: none set ({Path(_USER_CONFIG[0].name) / 'settings.json'}; no file)", output)
+
+    def test_the_summary_names_user_defaults(self):
+        pins = model_check.load_pins(self.agents)
+        user = model_check.parse_user_defaults("implementer: Opus, high; reviewer: sonnet, medium")
+        self.assertEqual(model_check.board_summary({}, pins, None, [], "v.py", user=user),
+                         "Models: the plugin's pins (no board in .claude/devflow.json); your defaults move "
+                         "implementer to opus, high; reviewer kept on opus, high (floor). Full view: python v.py --board")
+        self.assertEqual(model_check.board_summary({"models": {"implementer": "Sonnet, low"}}, pins, None, [], "v.py",
+                                                   user=user),
+                         "Models: board moves implementer to sonnet, low; reviewer kept on opus, high (floor). "
+                         "Full view: python v.py --board")
+        self.assertEqual(model_check.board_summary({}, pins, None, [], "v.py"),
+                         model_check.board_summary({}, pins, None, [], "v.py", user=({}, [])))
+
+    def test_the_summary_warns_on_a_user_orchestrator(self):
+        pins = model_check.load_pins(self.agents)
+        user = model_check.parse_user_defaults("orchestrator: opus")
+        line = model_check.board_summary({}, pins, None, [], "v.py", "sonnet", user=user)
+        self.assertIn("This session runs on sonnet; your default orchestrator is opus (/model switches it).", line)
+        self.assertIn("your defaults move orchestrator to opus", line)
+
+    def test_a_quiet_summary_only_warns(self):
+        pins = model_check.load_pins(self.agents)
+        moved = model_check.parse_user_defaults("implementer: opus, high")
+        self.assertIsNone(model_check.board_summary({}, pins, None, [], "v.py", user=moved, quiet=True))
+        self.assertIsNone(model_check.board_summary({"models": {"designer": "Sonnet, low"}}, pins, 12,
+                                                    ["implementer: Opus, medium; x"], "v.py", quiet=True))
+        for config, user, session, step_lines in (
+                ({}, model_check.parse_user_defaults("reviewer: sonnet"), None, []),
+                ({}, model_check.parse_user_defaults("builder: opus"), None, []),
+                ({"models": {"builder": "opus"}}, None, None, []),
+                ({}, None, "opus", []),
+                ({}, None, None, ["reviewer: Sonnet, low; x"])):
+            with self.subTest(config=config, user=user, session=session, step_lines=step_lines):
+                line = model_check.board_summary(config, pins, 12, step_lines, "v.py", session, user=user, quiet=True)
+                self.assertEqual(line, model_check.board_summary(config, pins, 12, step_lines, "v.py", session,
+                                                                 user=user))
 
 
 class TestBoardFileEncoding(BoardFixture):

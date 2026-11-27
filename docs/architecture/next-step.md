@@ -42,6 +42,9 @@ Adding a reason a step cannot start:
 - **Gate wording matters.** A Gate is cleared only by a `Cleared YYYY-MM-DD` clause; a Gate saying "at the design stop" or "before implementation" lets the step start and stop itself at the design, and a row `stopped` there holds it until the maintainer answers.
 - **The start line is read twice.** Its text up to `...` is read exactly by WF-27's tests, and its `(started …)` stamp by `run-plan`'s mid-run answer, which subtracts it from `date "+%Y-%m-%d %H:%M:%S %z"`; change the format in both or neither.
 
+- **The output setting only drops summary lines.** [`output_mode`](../../hooks/session_start.py) chooses `full`, `short` or `off` for the session-start summary; it never changes which step is chosen, and `--next-step` ignores it, so the runner sees the same lines whatever the user set.
+- **The runner's model can come from the user.** [`orchestrator_model`](../../tools/plan_runner.py) takes the board's `orchestrator`, else the user's `default_models` orchestrator; see [model-board.md](model-board.md).
+
 ## Flagged / unverified
 
 - None.
