@@ -111,6 +111,7 @@ class StepRow(NamedTuple):
     cost: float | None
     session: str | None = None
     decisions: tuple[str, ...] = ()
+    refused: tuple[str, ...] = ()
 
 
 def _git(project: Path, *args: str) -> str | None:
@@ -481,6 +482,12 @@ def limit_stop(project: Path, root: Path, layout, plan: str, number: int, messag
     return why + _foreign_clause(foreign) + limit_advice(foreign, retakes, session)
 
 
+def denial_clause(result: SessionResult) -> str:
+    if not result.denials:
+        return ""
+    return "; the session met permission asks it could not answer: " + ", ".join(result.denials)
+
+
 def step_outcome(project: Path, root: Path, layout, plan: str, number: int, result: SessionResult,
                  ci: Callable[[Path, str], str]) -> tuple[str, str | None]:
     session_start = _session_start()
@@ -488,27 +495,28 @@ def step_outcome(project: Path, root: Path, layout, plan: str, number: int, resu
         return "stopped", limit_stop(project, root, layout, plan, number, result.limit, result.session_id)
     if result.timed_out is not None:
         return "stopped", timeout_stop(project, layout, number, result.timed_out)
-    if result.denials:
-        return "stopped", "the session met permission asks it could not answer: " + ", ".join(result.denials)
+    refusals = denial_clause(result)
     state = row_state(root, plan, number)
     if state is None:
-        return "stopped", f"step {number}'s Status row is missing from {plan}"
+        return "stopped", f"step {number}'s Status row is missing from {plan}" + refusals
     if WAITING in state.lower().replace("’", "'"):
-        return "stopped", f"step {number}'s code commit waits for the maintainer's yes"
+        return "stopped", f"step {number}'s code commit waits for the maintainer's yes" + refusals
     if session_start.is_open(state):
-        return "stopped", f"step {number} ended `{state.strip()}`, not done" + session_trouble(result)
+        why = f"step {number} ended `{state.strip()}`, not done"
+        return "stopped", why + session_trouble(result) + refusals
     foreign = foreign_changes(project, layout)
     if foreign is None:
-        return "stopped", "git status failed after the session"
+        return "stopped", "git status failed after the session" + refusals
     if foreign:
-        return "stopped", "the session left changes beyond the status and plan files: " + ", ".join(foreign)
+        left = "the session left changes beyond the status and plan files: " + ", ".join(foreign)
+        return "stopped", left + refusals
     branch = current_branch(project)
     if branch != BRANCH:
-        return "stopped", f"the branch is now {branch or 'unknown'}, not {BRANCH}"
+        return "stopped", f"the branch is now {branch or 'unknown'}, not {BRANCH}" + refusals
     head = head_of(project)
     conclusion = ci(project, head)
     if conclusion != "success":
-        return "stopped", f"CI on HEAD {head[:7] or 'unknown'} is {conclusion}, not green"
+        return "stopped", f"CI on HEAD {head[:7] or 'unknown'} is {conclusion}, not green" + refusals
     return "done", None
 
 
@@ -522,6 +530,10 @@ def decisions_in(state: str | None) -> tuple[str, ...]:
 
 def decision_lines(row: StepRow) -> list[str]:
     return [f"  - decided {decision}" for decision in row.decisions]
+
+
+def refusal_lines(row: StepRow) -> list[str]:
+    return [f"  - refused {text}" for text in row.refused]
 
 
 def commits_since(project: Path, before: str) -> list[str]:
@@ -599,10 +611,11 @@ def run_plan(project: Path, steps: int | None, dollars: float | None, commit_fla
         outcome, why = step_outcome(project, found.root, layout, step.plan, step.number, result, ci)
         row = StepRow(step.plan, step.number, step.title, outcome, why, commits_since(project, before),
                       result.cost, result.session_id,
-                      decisions_in(row_state(found.root, step.plan, step.number)))
+                      decisions_in(row_state(found.root, step.plan, step.number)),
+                      tuple(result.denials) if outcome == "done" else ())
         rows.append(row)
         say(row_line(row))
-        for line in decision_lines(row):
+        for line in decision_lines(row) + refusal_lines(row):
             say(line)
         taken.add((step.plan, step.number))
         if why is not None:
@@ -623,6 +636,7 @@ def summary(rows: Sequence[StepRow], reason: str, flag: bool, spent: float | Non
     for row in rows:
         lines.append(row_line(row))
         lines += decision_lines(row)
+        lines += refusal_lines(row)
     lines.append(f"Stopped: {reason.rstrip('.')}.")
     if rows and rows[-1].outcome != "done" and rows[-1].session:
         lines.append(f"To answer step {rows[-1].number}'s session: claude --resume {rows[-1].session}")

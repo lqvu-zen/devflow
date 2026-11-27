@@ -1224,6 +1224,7 @@ RUN_PLAN_MID_RUN = (
     "output so far",
     "as printed",
     "`Running step ",
+    "  - refused ",
     "`date \"+%Y-%m-%d %H:%M:%S %z\"`",
     "(started …)",
     "which step is running and for how long",

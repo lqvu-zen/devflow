@@ -18,13 +18,13 @@ One decision, which plan step runs next, is made in one place and read by three:
    - [`plan_lines`](../../hooks/session_start.py) prints the summary's plan lines from the same [`Choice`](../../hooks/session_start.py);
    - [`next_step_lines`](../../hooks/session_start.py) prints `Plan:`, `Step:`, `Run:` or `Stop: … Next: …`, adding `Design:` when the Gate is cleared and the design file from [`design_file`](../../hooks/session_start.py) exists;
    - the runner's [`ask_next_step`](../../tools/plan_runner.py) runs `session_start.py --next-step` as a subprocess and parses those lines.
-5. **The runner's loop.** [`run_plan`](../../tools/plan_runner.py) asks for the next step, starts one session for it, and then [`step_outcome`](../../tools/plan_runner.py) judges it: the usage limit, a timeout, permission denials, the step's Status row read back with [`row_state`](../../tools/plan_runner.py) (missing, waiting for the maintainer's yes, or still open), changes beyond the status and plan files ([`foreign_changes`](../../tools/plan_runner.py)), the branch, and CI on the new HEAD ([`ci_conclusion`](../../tools/plan_runner.py)). Anything but `done` ends the run; a step offered twice ends it too. Each step's start line carries the local time with its offset from [`started_stamp`](../../tools/plan_runner.py), and a usage-limit stop from [`limit_stop`](../../tools/plan_runner.py) ends with advice to resume the cut-off session or run the plan again.
+5. **The runner's loop.** [`run_plan`](../../tools/plan_runner.py) asks for the next step, starts one session for it, and then [`step_outcome`](../../tools/plan_runner.py) judges it: the usage limit, a timeout, the step's Status row read back with [`row_state`](../../tools/plan_runner.py) (missing, waiting for the maintainer's yes, or still open), changes beyond the status and plan files ([`foreign_changes`](../../tools/plan_runner.py)), the branch, and CI on the new HEAD ([`ci_conclusion`](../../tools/plan_runner.py)). Anything but `done` ends the run; a step offered twice ends it too. Permission asks the session could not answer stop nothing by themselves: [`denial_clause`](../../tools/plan_runner.py) adds them to the reason of any stop from the row check on, and a `done` step lists them under it ([`refusal_lines`](../../tools/plan_runner.py)) while the run goes on. Each step's start line carries the local time with its offset from [`started_stamp`](../../tools/plan_runner.py), and a usage-limit stop from [`limit_stop`](../../tools/plan_runner.py) ends with advice to resume the cut-off session or run the plan again.
 
 ## Invariants
 
 - **One decision, three readers.** The summary, `--next-step` and the runner must never disagree about the next step, so none of them re-implements the choice: the summary and `--next-step` call [`choose_step`](../../hooks/session_start.py), and the runner reads `--next-step`'s output rather than the plan.
 - **The runner never writes the plan, except one row.** The session it starts claims and updates its own row. The only write is [`mark_for_retake`](../../tools/plan_runner.py): when the usage limit cuts off a claimed step, and only while the row still reads exactly the claim the session left.
-- **Only the Status table says done.** The runner trusts a step's Status row, not the session's own result, and then checks the tree, the branch and CI itself.
+- **Only the Status table says done.** The runner trusts a step's Status row, not the session's own result, and then checks the tree, the branch and CI itself. A refused permission ask does not override a done row; those checks still apply.
 - **The plan's headings are a contract.** `Order`, `Status`, `Who does what` and the `### N` step headings with their bold fields are read by exact name; renaming one in `templates/plan.md` silently makes every plan unreadable (`couldn't read the Order and Status`).
 
 ## Recipe
@@ -44,6 +44,7 @@ Adding a reason a step cannot start:
 
 - **The output setting only drops summary lines.** [`output_mode`](../../hooks/session_start.py) chooses `full`, `short` or `off` for the session-start summary; it never changes which step is chosen, and `--next-step` ignores it, so the runner sees the same lines whatever the user set.
 - **The runner's model can come from the user.** [`orchestrator_model`](../../tools/plan_runner.py) takes the board's `orchestrator`, else the user's `default_models` orchestrator; see [model-board.md](model-board.md).
+- **A refused command did not run.** A `done` step with refusals relies on the session's own row plus the runner's tree, branch and CI checks; a refused push shows up as CI missing on HEAD.
 
 ## Flagged / unverified
 

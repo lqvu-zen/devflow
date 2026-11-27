@@ -53,9 +53,9 @@ When the run stopped at the usage limit, pass on the runner's advice from its St
 Only while a run this session started is still going. If its output already has `Plan runner:` or `Plan runner refused:`, follow "3. When it ends" instead.
 
 - Read the background task's output so far, from the output file the shell tool named when it started the run.
-- Paste, in a code block, the step lines printed so far, as printed: the lines starting `Running step `, `- <number> ` and `  - decided `. Leave out the sessions' own stderr.
+- Paste, in a code block, the step lines printed so far, as printed: the lines starting `Running step `, `- <number> `, `  - decided ` and `  - refused `. Leave out the sessions' own stderr.
 - The running step is the last `Running step ` line with no `- <number>` line after it. Get the time now with `date "+%Y-%m-%d %H:%M:%S %z"`, then say which step is running and for how long, in hours and minutes, since the time in its `(started …)`.
-- With no `Running step ` line yet, say the runner has not started a step. When the last step line is a `- <number>` line, say the run is between steps, checking the last one.
+- With no `Running step ` line yet, say the runner has not started a step. When the last step line is a `- <number>` line or a line under it, say the run is between steps, checking the last one.
 - Edit nothing, start nothing, and do not stop the run: run no command but `date` and edit no file in the tree, which would count as foreign changes. Then end your turn.
 
 ## Rules

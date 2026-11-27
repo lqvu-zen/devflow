@@ -466,13 +466,41 @@ class TestStops(RunnerCase):
         self.assertIn("- 1 Alpha: stopped (step 1's code commit waits for the maintainer's yes); commits none",
                       plan_runner.summary(rows, reason, False, 0.25)[1])
 
-    def test_a_permission_denial_stops_the_run_naming_the_tool(self):
+    def test_a_done_step_with_refusals_lists_them_and_the_run_goes_on(self):
         self.calls([{"row": {"1": "done"}, "denials": ["Bash", "Bash", "Edit"]}, {"row": {"2": "done"}}])
+        said = []
+        rows, reason, code = plan_runner.run_plan(self.project, 2, None, False, None, None, self.claude, ci=green,
+                                                  say=said.append)
+        self.assertEqual(len(self.records()), 2)
+        self.assertEqual((reason, code), ("the step limit (2) is reached", 0))
+        self.assertEqual((rows[0].outcome, rows[0].refused), ("done", ("Bash", "Edit")))
+        listed = [plan_runner.row_line(rows[0]), "  - refused Bash", "  - refused Edit"]
+        for lines in (plan_runner.summary(rows, reason, False, 0.5), said):
+            at = lines.index(listed[0])
+            self.assertEqual(lines[at:at + 3], listed)
+
+    def test_a_not_done_step_names_its_refusals_in_its_stop(self):
+        claim = "in progress (2026-11-27 10:00)"
+        self.calls([{"row": {"1": claim}, "denials": [["Bash", {"command": "sed -n 1p x"}]]},
+                    {"row": {"2": "done"}}])
         rows, reason, code = self.run_plan()
         self.assertEqual(len(self.records()), 1)
-        self.assertEqual((reason, code), ("the session met permission asks it could not answer: Bash, Edit", 1))
+        self.assertEqual((reason, code),
+                         (f"step 1 ended `{claim}`, not done; the session met permission asks it could not answer: "
+                          "Bash `sed -n 1p x`", 1))
+        self.assertEqual(rows[0].refused, ())
 
-    def test_a_permission_denial_names_the_command_or_file(self):
+    def test_a_done_step_with_refusals_and_red_ci_stops_naming_both(self):
+        self.calls([{"row": {"1": "done"}, "denials": ["Bash"]}, {"row": {"2": "done"}}])
+        rows, reason, code = self.run_plan(ci=lambda project, head: "CI failure")
+        head = self.git("rev-parse", "--short=7", "HEAD").strip()
+        self.assertEqual(len(self.records()), 1)
+        self.assertEqual((reason, code),
+                         (f"CI on HEAD {head} is CI failure, not green; the session met permission asks it could "
+                          "not answer: Bash", 1))
+        self.assertEqual(rows[0].refused, ())
+
+    def test_a_refusal_names_the_command_or_file(self):
         long = "git log " + "x" * 200
         self.calls([{"row": {"1": "done"}, "denials": [
             ["Bash", {"command": "git check-ignore -q docs/plans/x.md;" + chr(10) + " echo ignored=$?"}],
@@ -481,9 +509,8 @@ class TestStops(RunnerCase):
             ["Bash", {"command": long}]]}])
         rows, reason, code = self.run_plan()
         cut = " ".join(long.split())[:plan_runner.DENIAL_TEXT - 3] + "..."
-        self.assertEqual(reason, "the session met permission asks it could not answer: "
-                                 "Bash `git check-ignore -q docs/plans/x.md; echo ignored=$?`, "
-                                 f"Edit `docs/plans/x.md`, Bash `{cut}`")
+        self.assertEqual(rows[0].refused, ("Bash `git check-ignore -q docs/plans/x.md; echo ignored=$?`",
+                                           "Edit `docs/plans/x.md`", f"Bash `{cut}`"))
 
     def test_a_session_that_ends_in_an_error_says_so(self):
         self.calls([{"error": True, "subtype": "error_max_budget_usd"}])
