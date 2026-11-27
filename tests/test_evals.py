@@ -341,6 +341,7 @@ class TestGraders(unittest.TestCase):
 def depends_for_tests() -> dict:
     return {
         "every_behaviour_case": ["hooks/"],
+        "hook_files": {"hooks/guard.py": ["release"]},
         "skills": {
             "add-feature": ["skills/add-feature/", "agents/designer.md", "agents/reviewer.md"],
             "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md",
@@ -383,6 +384,7 @@ class _SelectRepo(unittest.TestCase):
             "agents/tester.md": "tester\n",
             "agents/reviewer.md": "reviewer\n",
             "hooks/guard.py": "x = 1\n",
+            "hooks/hooks.json": "{}\n",
             "README.md": "readme\n",
             "evals/fixture/build.sh": "work=1\n",
             "evals/fixture/ui/web/index.html": "<p>web</p>\n",
@@ -557,10 +559,25 @@ class TestSelect(_SelectRepo):
         self.assertIn("hooks/session_start.py since", self.reasons("behaviour")["next-step-plain"])
         self.assertEqual([], self.names("trigger"))
 
-    def test_a_hooks_change_lists_behaviour_not_trigger(self):
-        self.repo.commit("Hooks", {"hooks/guard.py": "x = 2\n"})
+    def test_a_mapped_hook_lists_only_its_groups(self):
+        self.repo.commit("Guard", {"hooks/guard.py": "x = 2\n"})
+        self.assertEqual(["release-other", "release-plain"], self.names("behaviour"))
+        self.assertEqual([], self.names("trigger"))
+        self.assertIn("hooks/guard.py since", self.reasons("behaviour")["release-plain"])
+
+    def test_an_unmapped_hooks_file_lists_every_behaviour_case(self):
+        self.repo.commit("Hooks", {"hooks/hooks.json": '{"hooks": {}}\n'})
         self.assertEqual(BEHAVIOUR, self.names("behaviour"))
         self.assertEqual([], self.names("trigger"))
+
+    def test_a_skills_own_path_still_reaches_a_hook_mapped_away_from_it(self):
+        depends = depends_for_tests()
+        depends["skills"]["fix-bug"].append("hooks/guard.py")
+        cases = ev.find_cases(self.repo_path, depends)
+        self.assertEqual(["fix-bug-plain", "release-other", "release-plain"],
+                         sorted(case.name for case in cases
+                                if case.suite == "behaviour"
+                                and ev.reaches(case, "hooks/guard.py", depends)))
 
     def test_a_change_outside_every_rule_lists_nothing(self):
         self.repo.commit("Docs", {"README.md": "readme two\n", "docs/a.md": "a\n",
@@ -670,10 +687,41 @@ class TestSelect(_SelectRepo):
         self.assertNotIn("--scaffold", trigger[0])
 
 
-def result_file(folder: Path, cases: list[dict], version: int = 1) -> Path:
-    path = folder / "aggregate-result.json"
+class TestHookFiles(_SelectRepo):
+    def test_each_tracked_hook_file_lists_its_groups_or_every_behaviour_case(self):
+        depends = json.loads((ROOT / "evals" / "depends.json").read_text(encoding="utf-8"))
+        hooks = subprocess.run(
+            ["git", "ls-files", "-z", "--", "hooks"], cwd=ROOT, capture_output=True,
+            text=True, encoding="utf-8", check=True).stdout.split("\0")
+        hooks = [path for path in hooks if path]
+        self.assertEqual(["hooks/hooks.json"],
+                         [path for path in hooks if path not in depends["hook_files"]])
+        files = {"evals/depends.json": json.dumps(depends)}
+        files.update({path: "one\n" for path in hooks})
+        groups = {f"{group}-hooked": group for group in depends["skills"]}
+        for name, group in groups.items():
+            files.update(case_files(group, "hooked", name, "behaviour", ""))
+        recorded = self.repo.commit("Real depends", files)
+        groups.update({name: name.rsplit("-", 1)[0] for name in BEHAVIOUR})
+        self.write_passes({name: recorded for name in list(groups) + [
+            "trigger-release-1-fires", "trigger-add-feature-5-near-miss"]})
+        self.assertEqual([], self.names("behaviour"))
+        for path in hooks:
+            with self.subTest(path):
+                self.repo.write({path: "two\n"})
+                listed = depends["hook_files"].get(path, list(depends["skills"]))
+                self.assertEqual(sorted(name for name, group in groups.items() if group in listed),
+                                 self.names("behaviour"))
+                self.assertEqual([], self.names("trigger"))
+                self.repo.write({path: "one\n"})
+
+
+def result_file(folder: Path, cases: list[dict], version: int = 1,
+                name: str = "aggregate-result.json",
+                started: str = "2026-11-05T09:30:00.000Z") -> Path:
+    path = folder / name
     path.write_text(json.dumps({"schemaVersion": version,
-                                "startedAt": "2026-11-05T09:30:00.000Z",
+                                "startedAt": started,
                                 "cases": cases}), encoding="utf-8")
     return path
 
@@ -688,6 +736,12 @@ def result_case(name: str, *runs: dict) -> dict:
 
 
 class TestRecord(_SelectRepo):
+    def run_record(self, *paths: Path) -> subprocess.CompletedProcess:
+        return subprocess.run(
+            [sys.executable, str(SELECT_PATH), "record", *map(str, paths),
+             "--repo", self.repo_path],
+            capture_output=True, text=True, encoding="utf-8")
+
     def test_records_only_cases_whose_every_run_scored_one(self):
         path = result_file(self.tmp, [
             result_case("release-plain", run(), run()),
@@ -696,42 +750,123 @@ class TestRecord(_SelectRepo):
             result_case("add-feature-plain", run(skipped=True)),
             result_case("add-feature-ui"),
         ])
-        recorded, refused, skipped = ev.record(self.repo_path, [path])
+        result = ev.record(self.repo_path, [path])
         head = self.repo.git("rev-parse", "HEAD")
         self.assertEqual({"release-plain": {"commit": head, "date": "2026-11-05", "runs": 2}},
-                         recorded)
-        self.assertEqual([], refused)
+                         result.recorded)
+        self.assertEqual([], result.refused)
+        self.assertEqual([("release-other", "run 2 scored 0.8")], result.reruns)
         self.assertEqual([
-            "release-other: run 2 scored 0.8",
             "fix-bug-plain: run 1 has an error",
             "add-feature-plain: run 1 skipped paid graders",
             "add-feature-ui: no runs",
-        ], skipped)
+        ], result.skipped)
+
+    def test_one_failure_asks_for_two_reruns(self):
+        for runs in ((run(0.5),), (run(), run(0.5))):
+            with self.subTest(runs=len(runs)):
+                path = result_file(self.tmp, [result_case("release-plain", *runs)])
+                result = ev.record(self.repo_path, [path])
+                self.assertEqual({}, result.recorded)
+                self.assertEqual([("release-plain", f"run {len(runs)} scored 0.5")], result.reruns)
+                self.assertEqual([], result.failing)
+                self.assertEqual([], result.skipped)
+
+    def test_one_failure_and_two_passing_reruns_is_kept_with_the_clean_runs(self):
+        first = result_file(self.tmp, [result_case("release-plain", run(0.5))])
+        second = result_file(self.tmp, [result_case("release-plain", run(), run())],
+                             name="rerun.json", started="2026-11-07T10:00:00.000Z")
+        head = self.repo.git("rev-parse", "HEAD")
+        for paths, failed in (((first, second), 1), ((second, first), 3)):
+            with self.subTest(failed=failed):
+                result = ev.record(self.repo_path, list(paths))
+                self.assertEqual(
+                    {"release-plain": {"commit": head, "date": "2026-11-07", "runs": 2}},
+                    result.recorded)
+                self.assertEqual({"release-plain": f"run {failed} scored 0.5"}, result.retried)
+                self.assertEqual(([], [], [], []),
+                                 (result.reruns, result.failing, result.skipped, result.refused))
+        completed = self.run_record(first, second)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("recorded release-plain, one run failed: run 1 scored 0.5", completed.stdout)
+        self.assertNotIn("two more runs", completed.stdout)
+
+    def test_a_repeated_failure_is_failing(self):
+        first = result_file(self.tmp, [result_case("release-plain", run(0.5))])
+        second = result_file(self.tmp, [result_case("release-plain", run(), run(0))],
+                             name="rerun.json")
+        result = ev.record(self.repo_path, [first, second])
+        self.assertEqual({}, result.recorded)
+        self.assertEqual([], result.reruns)
+        self.assertEqual(["release-plain: runs 1 and 3 scored 0.5 and 0"], result.failing)
+        completed = self.run_record(first, second)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("failing release-plain: runs 1 and 3 scored 0.5 and 0", completed.stdout)
+        self.assertNotIn("two more runs", completed.stdout)
+        stored = json.loads((self.tmp / "evals" / "passes.json").read_text(encoding="utf-8"))
+        self.assertEqual(self.c1, stored["release-plain"]["commit"])
+
+    def test_a_trigger_case_keeps_one_run(self):
+        path = result_file(self.tmp, [
+            result_case("trigger-release-1-fires", run(0), run(), run())])
+        result = ev.record(self.repo_path, [path])
+        self.assertEqual({}, result.recorded)
+        self.assertEqual(["trigger-release-1-fires: run 1 scored 0"], result.skipped)
+        self.assertEqual(([], []), (result.reruns, result.failing))
+
+    def test_an_error_still_skips_whatever_the_scores(self):
+        first = result_file(self.tmp, [result_case("release-plain", run(0.5), run(0))])
+        second = result_file(self.tmp, [result_case("release-plain", run(error="timeout"))],
+                             name="rerun.json")
+        result = ev.record(self.repo_path, [first, second])
+        self.assertEqual({}, result.recorded)
+        self.assertEqual(["release-plain: run 3 has an error"], result.skipped)
+        self.assertEqual(([], []), (result.reruns, result.failing))
+
+    def test_a_dirty_mapped_hook_refuses_only_the_cases_it_reaches(self):
+        self.repo.write({"hooks/guard.py": "x = 2\n"})
+        path = result_file(self.tmp, [
+            result_case("release-plain", run()), result_case("fix-bug-plain", run())])
+        result = ev.record(self.repo_path, [path])
+        self.assertEqual(["fix-bug-plain"], sorted(result.recorded))
+        self.assertEqual(["release-plain: hooks/guard.py differs from HEAD, commit first"],
+                         result.refused)
+
+    def test_main_prints_the_rerun_command_and_exits_zero(self):
+        path = result_file(self.tmp, [result_case("release-plain", run(0.5))])
+        completed = self.run_record(path)
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertIn("rerun release-plain: run 1 scored 0.5\n\ntwo more runs for each rerun case, "
+                      "then record the first result file and the new one together:\n", completed.stdout)
+        self.assertIn('--tag behaviour --case "release-plain" --runs 2 ', completed.stdout)
+        self.assertNotIn("--tag trigger", completed.stdout)
 
     def test_refuses_a_case_that_is_not_on_disk(self):
-        path = result_file(self.tmp, [result_case("ghost-case", run())])
-        recorded, refused, skipped = ev.record(self.repo_path, [path])
-        self.assertEqual({}, recorded)
-        self.assertEqual([], skipped)
-        self.assertEqual(1, len(refused))
-        self.assertIn("ghost-case", refused[0])
+        for runs in ((run(),), (run(0.5),)):
+            with self.subTest(score=runs[0]["score"]):
+                path = result_file(self.tmp, [result_case("ghost-case", *runs)])
+                result = ev.record(self.repo_path, [path])
+                self.assertEqual({}, result.recorded)
+                self.assertEqual(([], []), (result.skipped, result.reruns))
+                self.assertEqual(1, len(result.refused))
+                self.assertIn("ghost-case", result.refused[0])
 
     def test_refuses_a_case_with_uncommitted_inputs(self):
         self.repo.write({"skills/release/SKILL.md": skill_file("release", "ships", "edited")})
         path = result_file(self.tmp, [
             result_case("release-plain", run()), result_case("fix-bug-plain", run())])
-        recorded, refused, _ = ev.record(self.repo_path, [path])
-        self.assertEqual(["fix-bug-plain"], sorted(recorded))
-        self.assertEqual(1, len(refused))
-        self.assertIn("release-plain", refused[0])
-        self.assertIn("commit first", refused[0])
+        result = ev.record(self.repo_path, [path])
+        self.assertEqual(["fix-bug-plain"], sorted(result.recorded))
+        self.assertEqual(1, len(result.refused))
+        self.assertIn("release-plain", result.refused[0])
+        self.assertIn("commit first", result.refused[0])
 
     def test_refuses_a_trigger_case_whose_front_matter_is_uncommitted(self):
         self.repo.write({"skills/release/SKILL.md": skill_file("release", "ships more", "body one")})
         path = result_file(self.tmp, [result_case("trigger-release-1-fires", run())])
-        recorded, refused, _ = ev.record(self.repo_path, [path])
-        self.assertEqual({}, recorded)
-        self.assertIn("front matter", refused[0])
+        result = ev.record(self.repo_path, [path])
+        self.assertEqual({}, result.recorded)
+        self.assertIn("front matter", result.refused[0])
 
     def test_writes_sorted_lf_one_line_per_case(self):
         passes = {"b-case": {"commit": FAKE, "date": "2026-11-05", "runs": 1},
@@ -748,9 +883,9 @@ class TestRecord(_SelectRepo):
 
     def test_refuses_another_schema_version(self):
         path = result_file(self.tmp, [result_case("release-plain", run())], version=2)
-        recorded, refused, _ = ev.record(self.repo_path, [path])
-        self.assertEqual({}, recorded)
-        self.assertIn("schemaVersion 2", refused[0])
+        result = ev.record(self.repo_path, [path])
+        self.assertEqual({}, result.recorded)
+        self.assertIn("schemaVersion 2", result.refused[0])
 
     def test_refuses_a_file_with_a_missing_or_malformed_started_at(self):
         for started in (None, "", "yesterday", "2026-13-40T00:00:00Z", "2026-11-5", "20261105"):
@@ -759,21 +894,20 @@ class TestRecord(_SelectRepo):
             if started is not None:
                 data["startedAt"] = started
             path.write_text(json.dumps(data), encoding="utf-8")
-            recorded, refused, skipped = ev.record(self.repo_path, [path])
-            self.assertEqual({}, recorded, started)
-            self.assertEqual([], skipped, started)
-            self.assertEqual(1, len(refused), started)
-            self.assertIn("startedAt", refused[0])
+            result = ev.record(self.repo_path, [path])
+            self.assertEqual({}, result.recorded, started)
+            self.assertEqual([], result.skipped, started)
+            self.assertEqual(1, len(result.refused), started)
+            self.assertIn("startedAt", result.refused[0])
 
     def test_main_prints_why_a_case_was_skipped_and_exits_zero(self):
         path = result_file(self.tmp, [
-            result_case("fix-bug-plain", run()), result_case("release-plain", run(), run(0.5))])
-        completed = subprocess.run(
-            [sys.executable, str(SELECT_PATH), "record", str(path), "--repo", self.repo_path],
-            capture_output=True, text=True, encoding="utf-8")
+            result_case("fix-bug-plain", run()),
+            result_case("release-plain", run(), run(error="timeout"))])
+        completed = self.run_record(path)
         self.assertEqual(0, completed.returncode, completed.stderr)
         self.assertIn("recorded fix-bug-plain", completed.stdout)
-        self.assertIn("skipped release-plain: run 2 scored 0.5", completed.stdout)
+        self.assertIn("skipped release-plain: run 2 has an error", completed.stdout)
         self.assertNotIn("refused", completed.stdout)
 
     def test_main_exits_one_when_it_refused_a_case_and_still_keeps_the_rest(self):
@@ -885,8 +1019,17 @@ class TestEvalFiles(unittest.TestCase):
         entries = list(self.depends["every_behaviour_case"])
         for paths in self.depends["skills"].values():
             entries.extend(paths)
+        entries.extend(self.depends["hook_files"])
         for entry in entries:
             self.assertTrue((ROOT / entry).exists(), entry)
+
+    def test_hook_files_name_hooks_and_known_groups(self):
+        for path, groups in self.depends["hook_files"].items():
+            with self.subTest(path):
+                self.assertTrue(path.startswith("hooks/"), path)
+                self.assertTrue((ROOT / path).is_file(), path)
+                self.assertEqual([], sorted(set(groups) - set(self.depends["skills"])))
+                self.assertEqual(len(groups), len(set(groups)))
 
     def test_every_behaviour_group_has_a_depends_entry(self):
         groups = {case.skill for case in self.cases if case.suite == "behaviour"}

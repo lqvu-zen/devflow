@@ -1,5 +1,10 @@
 {
   "every_behaviour_case": ["hooks/"],
+  "hook_files": {
+    "hooks/devflow_store.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "run-plan", "setup"],
+    "hooks/guard.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "setup"],
+    "hooks/session_start.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "run-plan", "setup"]
+  },
   "skills": {
     "add-feature": ["skills/add-feature/", "skills/next-step/SKILL.md", "references/ui/core.md", "references/ui/build.md", "references/ui/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py", "tools/plan_runner.py"],
     "fix-bug": ["skills/fix-bug/", "skills/add-feature/SKILL.md", "skills/next-step/SKILL.md", "references/ui/core.md", "references/ui/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py", "tools/plan_runner.py"],

@@ -11,6 +11,7 @@ import sys
 import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import NamedTuple
 
 FIXTURE = "evals/fixture/"
 FIXTURE_UI = "evals/fixture/ui/"
@@ -289,10 +290,11 @@ def find_cases(repo: str | Path, depends: dict) -> list[Case]:
     return cases
 
 
-def case_paths(case: Case, depends: dict) -> list[str]:
+def case_paths(case: Case, depends: dict, every: bool = True) -> list[str]:
     paths = [case.rel + "/"]
     if case.suite == "behaviour":
-        paths.extend(depends.get("every_behaviour_case", []))
+        if every:
+            paths.extend(depends.get("every_behaviour_case", []))
         paths.extend(depends.get("skills", {}).get(case.skill or "", []))
     if case.scaffolded:
         paths.append(FIXTURE)
@@ -301,7 +303,11 @@ def case_paths(case: Case, depends: dict) -> list[str]:
 
 
 def reaches(case: Case, path: str, depends: dict) -> bool:
-    for prefix in case_paths(case, depends):
+    groups = depends.get("hook_files", {}).get(path)
+    mapped = case.suite == "behaviour" and groups is not None
+    if mapped and case.skill in groups:
+        return True
+    for prefix in case_paths(case, depends, every=not mapped):
         if prefix == FIXTURE and path.startswith(FIXTURE_UI):
             continue
         if prefix.endswith("/"):
@@ -409,18 +415,19 @@ def case_globs(selected: set[str], suite_names: list[str], prefixes: list[str]) 
     return globs
 
 
-def command_for(suite: str, glob: str, scaffold: bool) -> str:
+def command_for(suite: str, glob: str, scaffold: bool, runs: int = 1) -> str:
     case = f' --case "{glob}"' if glob else ""
     if suite == "behaviour":
-        return (f"TMPDIR=$HOME/ev claude plugin eval . --tag behaviour{case} --runs 1 "
+        return (f"TMPDIR=$HOME/ev claude plugin eval . --tag behaviour{case} --runs {runs} "
                 "--ablation none --scaffold --allow-tools Bash Write Edit --trust-plugin "
                 "--no-publish -j 2 --judge-model sonnet --max-cost-usd 25")
     extra = " --scaffold" if scaffold else ""
-    return (f"claude plugin eval . --tag trigger{case} --ablation none --runs 1{extra} "
+    return (f"claude plugin eval . --tag trigger{case} --ablation none --runs {runs}{extra} "
             "--trust-plugin --no-publish -j 2")
 
 
-def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case]) -> list[str]:
+def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case],
+             runs: int = 1) -> list[str]:
     lines: list[str] = []
     for suite in ("behaviour", "trigger"):
         in_suite = [case for case in cases if case.suite == suite]
@@ -432,11 +439,11 @@ def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case]) -> 
         for glob in case_globs(selected, names, prefixes):
             covered = [case for case in in_suite
                        if not glob or fnmatch.fnmatchcase(case.name, glob)]
-            lines.append(command_for(suite, glob, any(case.scaffolded for case in covered)))
+            lines.append(command_for(suite, glob, any(case.scaffolded for case in covered), runs))
     return lines
 
 
-def unclean_reason(runs: list[dict]) -> str | None:
+def unfinished_reason(runs: list[dict]) -> str | None:
     if not runs:
         return "no runs"
     for number, item in enumerate(runs, 1):
@@ -444,9 +451,30 @@ def unclean_reason(runs: list[dict]) -> str | None:
             return f"run {number} has an error"
         if item.get("skippedPaidGraders"):
             return f"run {number} skipped paid graders"
-        if item.get("score") != 1:
-            return f"run {number} scored {item.get('score')}"
     return None
+
+
+def listed(items: list[str]) -> str:
+    return " and ".join([", ".join(items[:-1]), items[-1]]) if len(items) > 1 else items[0]
+
+
+def case_verdict(runs: list[dict], suite: str) -> tuple[str, str | None]:
+    reason = unfinished_reason(runs)
+    if reason:
+        return "skipped", reason
+    failed = [(str(number), str(item.get("score")))
+              for number, item in enumerate(runs, 1) if item.get("score") != 1]
+    if not failed:
+        return "kept", None
+    first = f"run {failed[0][0]} scored {failed[0][1]}"
+    if suite == "trigger":
+        return "skipped", first
+    if len(failed) > 1:
+        numbers, scores = (listed(list(column)) for column in zip(*failed))
+        return "failing", f"runs {numbers} scored {scores}"
+    if len(runs) - len(failed) >= 2:
+        return "retried", first
+    return "rerun", first
 
 
 def started_date(data: dict) -> str | None:
@@ -462,46 +490,67 @@ def started_date(data: dict) -> str | None:
     return text[:10]
 
 
-def record(repo: str | Path, result_paths: list[str | Path]
-           ) -> tuple[dict[str, dict], list[str], list[str]]:
+class RecordResult(NamedTuple):
+    recorded: dict[str, dict]
+    refused: list[str]
+    skipped: list[str]
+    retried: dict[str, str]
+    reruns: list[tuple[str, str]]
+    failing: list[str]
+
+
+def record(repo: str | Path, result_paths: list[str | Path]) -> RecordResult:
     depends = load_depends(repo)
     cases = {case.name: case for case in find_cases(repo, depends)}
     head = git(repo, "rev-parse", "HEAD").strip()
     cache: dict = {}
     dirty = changed_paths(repo, head, cache) or set()
-    recorded: dict[str, dict] = {}
-    refused: list[str] = []
-    skipped: list[str] = []
+    result = RecordResult({}, [], [], {}, [], [])
+    gathered: dict[str, list[dict]] = {}
+    dates: dict[str, str] = {}
     for result_path in result_paths:
         data = json.loads(Path(result_path).read_text(encoding="utf-8"))
         if data.get("schemaVersion") != 1:
-            refused.append(f"{result_path}: schemaVersion {data.get('schemaVersion')} is not 1")
+            result.refused.append(
+                f"{result_path}: schemaVersion {data.get('schemaVersion')} is not 1")
             continue
         date = started_date(data)
         if date is None:
-            refused.append(f"{result_path}: startedAt {data.get('startedAt')!r} is not YYYY-MM-DD")
+            result.refused.append(
+                f"{result_path}: startedAt {data.get('startedAt')!r} is not YYYY-MM-DD")
             continue
         for entry in data.get("cases", []):
             name = entry.get("name", "")
-            runs = entry.get("arms", {}).get("with", [])
-            reason = unclean_reason(runs)
-            if reason:
-                skipped.append(f"{name}: {reason}")
-                continue
-            case = cases.get(name)
-            if case is None:
-                refused.append(f"{name}: no such case on disk")
-                continue
-            moved = next((path for path in sorted(dirty) if reaches(case, path, depends)), None)
-            if moved is None:
-                moved = next((f"{skill_path(repo, skill)} front matter"
-                              for skill in case_skill_frontmatters(case)
-                              if frontmatter_changed(repo, head, skill)), None)
-            if moved:
-                refused.append(f"{name}: {moved} differs from HEAD, commit first")
-                continue
-            recorded[name] = {"commit": head, "date": date, "runs": len(runs)}
-    return recorded, refused, skipped
+            gathered.setdefault(name, []).extend(entry.get("arms", {}).get("with", []))
+            dates[name] = max(date, dates.get(name, date))
+    for name, runs in gathered.items():
+        case = cases.get(name)
+        verdict, reason = case_verdict(runs, case.suite if case else "behaviour")
+        if verdict == "skipped":
+            result.skipped.append(f"{name}: {reason}")
+            continue
+        if verdict == "failing":
+            result.failing.append(f"{name}: {reason}")
+            continue
+        if case is None:
+            result.refused.append(f"{name}: no such case on disk")
+            continue
+        if verdict == "rerun":
+            result.reruns.append((name, reason))
+            continue
+        moved = next((path for path in sorted(dirty) if reaches(case, path, depends)), None)
+        if moved is None:
+            moved = next((f"{skill_path(repo, skill)} front matter"
+                          for skill in case_skill_frontmatters(case)
+                          if frontmatter_changed(repo, head, skill)), None)
+        if moved:
+            result.refused.append(f"{name}: {moved} differs from HEAD, commit first")
+            continue
+        clean = sum(1 for item in runs if item.get("score") == 1)
+        result.recorded[name] = {"commit": head, "date": dates[name], "runs": clean}
+        if verdict == "retried":
+            result.retried[name] = reason
+    return result
 
 
 def write_passes(repo: str | Path, passes: dict[str, dict]) -> None:
@@ -540,6 +589,27 @@ def print_selection(repo: str, release: bool) -> None:
         print(line)
 
 
+def print_record(repo: str, result: RecordResult) -> None:
+    for name in sorted(result.recorded):
+        note = f", one run failed: {result.retried[name]}" if name in result.retried else ""
+        print(f"recorded {name}{note}")
+    for note in result.skipped:
+        print(f"skipped {note}")
+    for name, reason in result.reruns:
+        print(f"rerun {name}: {reason}")
+    for note in result.failing:
+        print(f"failing {note}")
+    for problem in result.refused:
+        print(f"refused {problem}")
+    if result.reruns:
+        print()
+        print("two more runs for each rerun case, then record the first result file "
+              "and the new one together:")
+        cases = find_cases(repo, load_depends(repo))
+        for line in commands({"behaviour": result.reruns}, cases, runs=2):
+            print(line)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Pick and record the evals a change can reach.")
     sub = parser.add_subparsers(dest="action", required=True)
@@ -556,18 +626,13 @@ def main(argv: list[str] | None = None) -> int:
         if args.action == "select":
             print_selection(args.repo, args.release)
             return 0
-        recorded, refused, skipped = record(args.repo, args.results)
-        if recorded:
+        result = record(args.repo, args.results)
+        if result.recorded:
             passes = load_passes(args.repo)
-            passes.update(recorded)
+            passes.update(result.recorded)
             write_passes(args.repo, passes)
-        for name in sorted(recorded):
-            print(f"recorded {name}")
-        for note in skipped:
-            print(f"skipped {note}")
-        for problem in refused:
-            print(f"refused {problem}")
-        return 1 if refused else 0
+        print_record(args.repo, result)
+        return 1 if result.refused else 0
     except GitError as error:
         print(f"eval_select {args.action}: {error}")
         return 2
