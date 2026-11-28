@@ -156,6 +156,30 @@ class TestSummary(unittest.TestCase):
         data = result([case("ok", [run(True, 1)])])
         self.assertNotIn("errors:", self.lines(data))
 
+    def test_cost_counts_the_judge_inside_each_runs_cost(self):
+        data = result([
+            case("case-a", [{**run(True, 1), "costUsd": 0.5, "judgeCostUsd": 0.05},
+                            {**run(False, 0, LIMIT_A), "costUsd": 0.01, "judgeCostUsd": 0.01}]),
+            case("case-b", [{**run(True, 1), "costUsd": 0.25}], arm="without"),
+        ])
+        self.assertIn("Cost: $0.7600 (runs $0.7000, judge $0.0600)", self.lines(data))
+
+    def test_cost_comes_between_the_table_and_the_errors(self):
+        data = fixture()
+        data["cases"][0]["arms"]["with"][0]["costUsd"] = 0.4
+        lines = self.lines(data)
+        at = lines.index("Cost: $0.4000 (runs $0.4000, judge $0.0000)")
+        self.assertTrue(lines[at - 1].startswith("total"))
+        self.assertEqual(["", "errors:"], lines[at + 1:at + 3])
+
+    def test_cost_not_recorded(self):
+        self.assertIn("Cost: not recorded", self.lines(fixture()))
+        self.assertIn("Cost: not recorded", self.lines(result([case("only", [])])))
+
+    def test_a_zero_cost_is_recorded(self):
+        data = result([case("free", [{**run(True, 1), "costUsd": 0, "judgeCostUsd": 0}])])
+        self.assertIn("Cost: $0.0000 (runs $0.0000, judge $0.0000)", self.lines(data))
+
     def test_other_arm_is_labelled(self):
         data = result([case("case-x", [run(True, 1)], arm="without")])
         rows, _, _ = es.summarise(data)

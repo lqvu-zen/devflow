@@ -352,6 +352,9 @@ def skill_path(repo: str | Path, skill: str) -> str:
     found = sorted((Path(repo) / "plugins").glob(f"*/skills/{skill}/SKILL.md"))
     if found:
         return found[0].relative_to(repo).as_posix()
+    local = f".claude/skills/{skill}/SKILL.md"
+    if (Path(repo) / local).is_file():
+        return local
     return root
 
 
@@ -415,19 +418,19 @@ def case_globs(selected: set[str], suite_names: list[str], prefixes: list[str]) 
     return globs
 
 
-def command_for(suite: str, glob: str, scaffold: bool, runs: int = 1) -> str:
+def command_for(suite: str, glob: str, scaffold: bool, runs: int = 1, jobs: int = 2) -> str:
     case = f' --case "{glob}"' if glob else ""
     if suite == "behaviour":
         return (f"TMPDIR=$HOME/ev claude plugin eval . --tag behaviour{case} --runs {runs} "
                 "--ablation none --scaffold --allow-tools Bash Write Edit --trust-plugin "
-                "--no-publish -j 2 --judge-model sonnet --max-cost-usd 25")
+                f"--no-publish -j {jobs} --judge-model sonnet --max-cost-usd 25")
     extra = " --scaffold" if scaffold else ""
     return (f"claude plugin eval . --tag trigger{case} --ablation none --runs {runs}{extra} "
-            "--trust-plugin --no-publish -j 2")
+            f"--trust-plugin --no-publish -j {jobs}")
 
 
 def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case],
-             runs: int = 1) -> list[str]:
+             runs: int = 1, jobs: int = 2, each: bool = False) -> list[str]:
     lines: list[str] = []
     for suite in ("behaviour", "trigger"):
         in_suite = [case for case in cases if case.suite == suite]
@@ -436,10 +439,12 @@ def commands(selection: dict[str, list[tuple[str, str]]], cases: list[Case],
         skills = sorted({case.skill for case in in_suite if case.skill})
         prefixes = [(f"trigger-{skill}-" if suite == "trigger" else f"{skill}-")
                     for skill in skills]
-        for glob in case_globs(selected, names, prefixes):
+        globs = sorted(selected) if each else case_globs(selected, names, prefixes)
+        for glob in globs:
             covered = [case for case in in_suite
                        if not glob or fnmatch.fnmatchcase(case.name, glob)]
-            lines.append(command_for(suite, glob, any(case.scaffolded for case in covered), runs))
+            scaffold = any(case.scaffolded for case in covered)
+            lines.append(command_for(suite, glob, scaffold, runs, jobs))
     return lines
 
 
@@ -572,7 +577,8 @@ def write_passes(repo: str | Path, passes: dict[str, dict]) -> None:
         raise
 
 
-def print_selection(repo: str, release: bool) -> None:
+def print_selection(repo: str, release: bool, runs: int = 1, jobs: int = 2,
+                    each: bool = False) -> None:
     selection = select(repo, release)
     cases = find_cases(repo, load_depends(repo))
     for suite in ("behaviour", "trigger"):
@@ -580,7 +586,7 @@ def print_selection(repo: str, release: bool) -> None:
         print(f"{suite}: {len(selection[suite])} of {total} cases")
         for name, reason in selection[suite]:
             print(f"  {name}: {reason}")
-    lines = commands(selection, cases)
+    lines = commands(selection, cases, runs, jobs, each)
     print()
     if not lines:
         print("nothing to run")
@@ -589,7 +595,7 @@ def print_selection(repo: str, release: bool) -> None:
         print(line)
 
 
-def print_record(repo: str, result: RecordResult) -> None:
+def print_record(repo: str, result: RecordResult, jobs: int = 2) -> None:
     for name in sorted(result.recorded):
         note = f", one run failed: {result.retried[name]}" if name in result.retried else ""
         print(f"recorded {name}{note}")
@@ -606,7 +612,7 @@ def print_record(repo: str, result: RecordResult) -> None:
         print("two more runs for each rerun case, then record the first result file "
               "and the new one together:")
         cases = find_cases(repo, load_depends(repo))
-        for line in commands({"behaviour": result.reruns}, cases, runs=2):
+        for line in commands({"behaviour": result.reruns}, cases, runs=2, jobs=jobs):
             print(line)
 
 
@@ -615,23 +621,27 @@ def main(argv: list[str] | None = None) -> int:
     sub = parser.add_subparsers(dest="action", required=True)
     pick = sub.add_parser("select")
     pick.add_argument("--release", action="store_true")
+    pick.add_argument("--each", action="store_true")
+    pick.add_argument("--runs", type=int, default=1)
+    pick.add_argument("--jobs", type=int, default=2)
     pick.add_argument("--repo", default=".")
     keep = sub.add_parser("record")
     keep.add_argument("results", nargs="+")
+    keep.add_argument("--jobs", type=int, default=2)
     keep.add_argument("--repo", default=".")
     args = parser.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     try:
         if args.action == "select":
-            print_selection(args.repo, args.release)
+            print_selection(args.repo, args.release, args.runs, args.jobs, args.each)
             return 0
         result = record(args.repo, args.results)
         if result.recorded:
             passes = load_passes(args.repo)
             passes.update(result.recorded)
             write_passes(args.repo, passes)
-        print_record(args.repo, result)
+        print_record(args.repo, result, args.jobs)
         return 1 if result.refused else 0
     except GitError as error:
         print(f"eval_select {args.action}: {error}")

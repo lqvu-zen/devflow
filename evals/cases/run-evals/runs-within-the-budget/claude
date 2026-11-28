@@ -1,0 +1,64 @@
+#!/usr/bin/env python3
+import datetime
+import fnmatch
+import json
+import sys
+from pathlib import Path
+
+SCORES = {"case-a": [1, 1], "case-b": [0.5, 0.5], "case-c": [1, 1]}
+RUN_COST = 0.20
+JUDGE_COST = 0.02
+
+
+def option(args, flag, default=None):
+    if flag in args:
+        at = args.index(flag)
+        if at + 1 < len(args):
+            return args[at + 1]
+    return default
+
+
+def main(argv):
+    if argv[:2] != ["plugin", "eval"]:
+        print(f"claude stand-in: only 'claude plugin eval' is here, not {' '.join(argv)}", file=sys.stderr)
+        return 2
+    args = argv[2:]
+    glob = option(args, "--case", "*")
+    names = [name for name in SCORES if fnmatch.fnmatchcase(name, glob)]
+    if not names:
+        print(f"No cases match --case {glob}")
+        return 1
+    runs = int(option(args, "--runs", "3"))
+    ceiling = option(args, "--max-cost-usd")
+    limit = float(ceiling) if ceiling is not None else None
+    spent = 0.0
+    partial = False
+    cases = []
+    for name in names:
+        results = []
+        for number in range(runs):
+            if limit is not None and spent >= limit:
+                partial = True
+                break
+            score = SCORES[name][number % len(SCORES[name])]
+            results.append({"score": score, "passed": score == 1, "error": None,
+                            "costUsd": RUN_COST, "judgeCostUsd": JUDGE_COST})
+            spent += RUN_COST
+        mean = sum(item["score"] for item in results) / len(results) if results else 0
+        cases.append({"name": name, "arms": {"with": results}, "aggregates": {"score": mean}})
+        print(f"{name}: {len(results)} runs, mean score {mean:.2f}")
+    stamp = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H-%M-%S-%fZ")
+    folder = Path("evals") / "results" / stamp
+    folder.mkdir(parents=True, exist_ok=True)
+    result = {"schemaVersion": 1, "startedAt": "2026-10-22T10:00:00.000Z", "partial": partial,
+              "cases": cases}
+    (folder / "aggregate-result.json").write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+    print(f"Cost: ${spent:.2f}")
+    print(f"Results: {folder.as_posix()}/aggregate-result.json")
+    if partial:
+        return 2
+    return 0 if all(item["score"] == 1 for case in cases for item in case["arms"]["with"]) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

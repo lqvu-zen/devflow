@@ -1,9 +1,9 @@
 {
   "every_behaviour_case": ["hooks/"],
   "hook_files": {
-    "hooks/devflow_store.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "run-plan", "setup"],
+    "hooks/devflow_store.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "run-evals", "run-plan", "setup"],
     "hooks/guard.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "setup"],
-    "hooks/session_start.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "run-plan", "setup"]
+    "hooks/session_start.py": ["add-feature", "fix-bug", "manage-project", "next-step", "release", "run-evals", "run-plan", "setup"]
   },
   "skills": {
     "add-feature": ["skills/add-feature/", "skills/next-step/SKILL.md", "references/ui/core.md", "references/ui/build.md", "references/ui/motion.md", "agents/locator.md", "agents/designer.md", "agents/implementer.md", "agents/reviewer.md", "tools/model_check.py", "tools/plan_runner.py"],
@@ -12,6 +12,7 @@
     "review-ui": ["plugins/devflow-ui/skills/review-ui/"],
     "manage-project": ["skills/manage-project/", "agents/planner.md", "tools/model_check.py", "templates/plan.md", "tools/session_extract.py"],
     "next-step": ["skills/next-step/", "skills/add-feature/SKILL.md", "skills/fix-bug/SKILL.md", "agents/designer.md", "tools/plan_runner.py"],
+    "run-evals": [".claude/skills/run-evals/", "skills/next-step/SKILL.md", "skills/add-feature/SKILL.md", "tools/eval_select.py", "tools/eval_summary.py"],
     "run-plan": ["skills/run-plan/", "tools/plan_runner.py"],
     "setup": ["skills/setup/", "templates/", "tools/model_check.py", "tools/devflow_checks.py"]
   },

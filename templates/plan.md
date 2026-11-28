@@ -21,6 +21,8 @@ _Created <YYYY-MM-DD> by the project manager from <the brief / the maintainer's 
 | 2 <title> | coding session | `/devflow:add-feature` |
 | 3 Release X.Y.Z | coding session + maintainer | `/devflow-release:release`; the maintainer names the version |
 
+A coding-session row may also name a skill of the project's own as `` `/<name>` ``, when `.claude/skills/<name>/SKILL.md` exists; `/devflow:next-step` runs it as it runs `add-feature`.
+
 ## Review Focus
 
 _Optional; leave it out when nothing needs naming. Two to five ways this release could go wrong that a test can catch. A step whose work could cause one names it in its Done when, in its own words, so the reviewer checks it._
@@ -51,6 +53,7 @@ Behaviour map: <IDs to add or update, and their surfaces>.
 **Escalate:** <only for an area Escalate names>.
 **Model:** <optional; one line per role, as `designer: Sonnet, medium; a one-line wording fix`. Any role may move up; only the designer, implementer and tester may move down, and never a fix-bug diagnosis below Opus, medium. Overrides the board and Escalate for this step>.
 **Gate:** <only when the maintainer must do or decide something: what they do or decide. When what they approve is the step's own design, add "at the design stop" and a session starts the step and stops there; without those words the step waits until the Gate is cleared. A cleared Gate gets `Cleared YYYY-MM-DD HH:MM: <answer>.` appended; a step stopped there waits for that line, and its design is kept in `<plans folder>/designs/`>.
+**Budget:** <only for a step that spends money, such as paid eval runs: `$<amount> for <what it pays for>`. The step waits until the maintainer approves it, which appends `; approved YYYY-MM-DD HH:MM by the maintainer`; "(proposed)", "not approved" or an undated "approved" keeps it waiting>.
 **Done when** <what a test proves>; <every surface>; the new map entries with their tests; <for each Review Focus item the step could cause, "a test pins R1: <the failure mode>">.
 **Tried:** <optional; written by a coding session that stopped. One clause per approach: what it was and why it failed (output: <path>); a later stop adds to the end>.
 

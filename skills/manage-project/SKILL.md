@@ -14,19 +14,19 @@ The paths: the **status file** is `docs/STATUS.md` and the **plans folder** is `
 - **You edit only** the status file and the plans folder, the prompt book (`docs/PROMPTS.md`), plus the GitHub issues you are asked to comment on or label.
 - **You never** edit code, tests, `.claude/`, `CLAUDE.md` or user docs, except the prompt book below. You never build, release, tag or change the version. If something needs one of those, it becomes a plan step or a prompt for the coding session.
 - **Plans are edited, not rewritten.** Edit plans with the Edit tool, a section at a time; never rewrite a plan file with Write, a script, sed or a regex. A split, move or renumbering is a series of Edits, after a copy of the file to your scratchpad.
-- **The status file is the master record.** Keep it current every time something changes. Plan progress lives in each plan's own Status table; the status file summarises it.
+- **The status file is the master record.** Keep it current. Plan progress lives in each plan's own Status table; the status file summarises it.
 
 ## Committing your edits
 
-A coding session is usually working in the same folder, so other people's files may be modified or staged.
+A coding session often works in the same folder, so others' files may be modified or staged.
 
 - **Commit only the files you changed, by path:** `git commit -m "Status: …" -- <status file> <plan>`. Never `git add -A` or `git add .`, and never commit anything outside the status file, the plans folder and the prompt book.
-- **Don't push.** The coding session pushes with its next change. If the maintainer asks you to push and the tree has other people's uncommitted work, say so and push only your commits.
+- **Don't push.** The coding session pushes with its next change. If asked to push while the tree holds others' uncommitted work, say so and push only your commits.
 - **Never revert or overwrite** a coding session's edits to a plan's Status table. Merge: re-read the file right before you edit it.
 
 ## The prompt book
 
-`docs/PROMPTS.md` holds paste-ready prompts for every kind of session. You keep it: when a new kind of prompt proves useful, add it to the section it belongs in, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, only to add or fix prompts. Its `continue the plan` prompts (`/devflow:next-step` and the long form beside it) must stay the same as the ones in the status file's Working practices.
+`docs/PROMPTS.md` holds paste-ready prompts for every kind of session. You keep it: when a new kind of prompt proves useful, add it to its section, in the same plain form, with `{braces}` for what the maintainer fills in. It is the one other file you may edit and commit, only to add or fix prompts. Its `continue the plan` prompts (`/devflow:next-step` and the long form beside it) must stay the same as the ones in the status file's Working practices.
 
 ## Starting a session
 
@@ -55,7 +55,7 @@ For each issue not yet in the status file:
 - **Several things in one issue:** split them into separate steps.
 - **A duplicate or already fixed:** say which commit or step covers it.
 
-Ask before adding anything to a plan; then add it as "Adding a plan step" describes.
+Ask before adding anything to a plan; then follow "Adding a plan step".
 
 ## Logging a decision
 
@@ -63,18 +63,18 @@ Every decision the maintainer makes goes into the status file's **Decision log**
 
 Things that are decisions: what goes in which release, dropping or parking an idea, naming, defaults, a process change, and "do it the better way" (record which way that was).
 
-An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date and let the maintainer decide it. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise. An entry without a date needs nothing.
+An entry, or a Parked item, may end with `Review by YYYY-MM-DD`. Add one when the maintainer gives a date, or when the decision says "for now" or "until": suggest a date for the maintainer to decide. When the maintainer answers a review, log the answer (stay, change or drop) as a new entry that names the old entry's date, and remove the `Review by` date from the old entry only then; never change the old entry otherwise. An entry without a date needs nothing.
 
 ## Adding a plan step
 
 Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the plugin's `templates/plan.md` (or the latest archived plan, once there is one). A new step needs **all** of the following:
 
-1. **A new number** (never renumber existing steps), a heading `### N — <short title>`, and an italic line saying where it came from: `_Added YYYY-MM-DD from issue #N / the maintainer's decision / user feedback._`
+1. **A new number** (never renumber existing steps), a heading `### N — <short title>`, and an italic source line: `_Added YYYY-MM-DD from issue #N / the maintainer's decision / user feedback._`
 2. **What and why,** with facts the team needs: files and modules if you know them, related `docs/BEHAVIOUR.md` entries and their surfaces, earlier commits. Don't prescribe the design.
 3. **A `**Files:**` line:** the paths the step edits, checked against the code (open them; don't guess), with "possibly …" for the ones you can't confirm. When the plan has a "Parallel lanes and merging" section, compare the new line with the open steps' Files lines and update that section: which lane the step joins, or which shared file keeps it in sequence. When the step uses or makes a name another step relies on (a function, option, file, setting or map ID), add an `**Interfaces:**` line with the exact names and the step each comes from or goes to.
 4. **A testable "Done when":** what a test proves, every surface it must work on, and the map entry added or updated; when the plan has a **Review Focus** section, "a test pins R<n>: <the failure mode>" for each item the step's work could cause.
-5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else. Note escalation (the board's `implementer.escalate` model) for any area **Escalate** names. To move a role off the board for this step, propose a `**Model:** <role>: <Model>, <effort>; <why>` line, one role per line, with the reason: any role may move up; only the designer, implementer and tester may move down, and never `fix-bug`'s diagnosis below Opus, medium; it overrides **Escalate** for that step.
-6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on. When they approve the step's own design, say "at the design stop": the session starts and stops there; any other Gate is met before a session starts. Clearing appends `Cleared YYYY-MM-DD HH:MM: <answer>.` A step stopped at its design waits for that line; to have it designed again, set its row back to `—`.
+5. **Which skill:** `/devflow:fix-bug` for a bug, `/devflow:add-feature` for anything else, or the row's `` `/<name>` `` for a skill in `.claude/skills/`. Note escalation (the board's `implementer.escalate` model) for any area **Escalate** names. To move a role off the board for this step, propose a `**Model:** <role>: <Model>, <effort>; <why>` line, one role per line, with the reason: any role may move up; only the designer, implementer and tester may move down, and never `fix-bug`'s diagnosis below Opus, medium; it overrides **Escalate** for that step.
+6. **A `**Gate:**` line** if the maintainer must do or decide something before the step can go on. When they approve the step's own design, say "at the design stop": the session starts and stops there; any other Gate is met before a session starts. Clearing appends `Cleared YYYY-MM-DD HH:MM: <answer>.` A step stopped at its design waits for that line; to have it designed again, set its row back to `—`. A paid step gets `**Budget:** $<amount>`; append `; approved YYYY-MM-DD HH:MM by the maintainer` only on their words.
 7. **The plan's other sections updated to match:**
    - the **Goals** list, if it adds a goal;
    - the **Who does what** table;
@@ -84,7 +84,7 @@ Plans live in the plans folder as `release-X.Y.Z.md` and use the format of the p
 
 A new step has no `**Tried:**` line; coding sessions write it when they stop. When you edit an existing step, keep its Tried line exactly as it is.
 
-Then give the maintainer the paste-ready prompt for the coding session.
+Then give the maintainer the coding session's paste-ready prompt.
 
 ## When to call the planner agent
 
@@ -117,7 +117,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
 
 ## Process escapes: review recent sessions
 
-`docs/BEHAVIOUR.md` § Harness escapes turns each process rule a session broke into a check. This review only reports: you propose lines for it, the maintainer decides.
+`docs/BEHAVIOUR.md` § Harness escapes turns each process rule a session broke into a check. You only propose lines; the maintainer decides.
 
 **When:** on request; suggest it after a release or every couple of weeks.
 
@@ -126,14 +126,14 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
    python <plugin>/tools/session_extract.py <project path> --count 15 --out <scratchpad>/sessions --exclude <this session's id>
    ```
    Subagent records are kept, marked `[sub]`. It prints each file's size; with no folder found, say so and stop. **Never commit transcript text**, or quote more than the short examples below. Then run `python <plugin>/tools/model_check.py <project path> --count 15 --exclude <this session's id>`: per agent call, the model it ran on, its effort where recorded, and what the board says it should have run on.
-2. **Read them in batches.** Group the files by size into batches of roughly 200 KB each and give each to a `general-purpose` agent with what the board's `manage-project.readers` row passes, in parallel. Paste into every brief, verbatim:
+2. **Read them in batches.** Batch the files by size, roughly 200 KB each, and give each to a `general-purpose` agent with what the board's `manage-project.readers` row passes, in parallel. Paste into every brief, verbatim:
    - the profile's **Architecture rules**, **Edit bounds** and **Standing rules**;
    - the project's `CLAUDE.md`;
    - the rules every skill shares, from `add-feature`'s "Stop rules", "Before you start, and where you stop", "The workflow" and its orchestrator paragraph: the orchestrator delegates and does not design, implement, test or review itself; claim the step first and, where the plan is committed, commit that one line alone; check CI on HEAD first; stop at a `**Gate:**`; the stop rules (two fix rounds, one more round after BLOCKERS); a stopped step gets a `**Tried:**` line; a step's Files line limits what is edited; status and plan edits are never reverted; no code commit without the maintainer's yes.
    - the plan-edit rule from "Before you start, and where you stop", verbatim: **Edit the plan one row at a time.** Change only your step's Status row and its `**Tried:**` line, in place, with the Edit tool. Never rewrite a plan file with Write, a script, `sed` or a regex. Where the plan is gitignored (`git check-ignore -q <plan>` succeeds), save the edit and don't commit or push it; where it is committed, commit and push it as before.
    - that a SessionStart `H` line holding "CI on HEAD" is the session's CI check on HEAD at its start, so the check is not missing there.
 
-   Each agent returns, per file, every place a session broke one of those rules: the rule, the file name, the line, and a quote of at most 200 characters. It reports facts, and does not judge whether the rule is a good one.
+   Each agent returns, per file, every place a session broke one of those rules: the rule, the file name, the line, and a quote of at most 200 characters. It reports facts, never whether the rule is a good one.
 3. **Merge the findings** into one report. For each broken rule:
    - **how often**, and in how many sessions;
    - **one short quoted example,** with its session id;
@@ -141,7 +141,7 @@ If `devflow:planner` isn't available, use `subagent_type: "general-purpose"` wit
 
    Add the model check's mismatches as findings, leaving out each one that the step's Model line, a design's part, an **Escalate** area or `fix-bug`'s diagnosis accounts for, and each from a session that ran before the pin or the board last changed.
 
-   Then list the **rules nobody needed** (no session came near them), as a note and not a proposal to remove them.
+   Then list the **rules nobody needed** (no session came near them), as a note, not a proposal to remove them.
 4. **Gate: the maintainer approves each proposal,** one at a time. Log each decision. An approved one becomes a plan step in the way "Adding a plan step" describes, with the guard, check or wording change as its content; a `deny` or `ask` rule is marked an **Escalate** step (Opus) with a `**Gate:**`. The coding session that carries out the step adds the § Harness escapes line in the same commit as the change; you don't edit `docs/BEHAVIOUR.md`. Rejected proposals are logged and not raised again unless the same break shows up in later sessions.
 
 Finish with the paste-ready prompt for the first approved step.

@@ -103,6 +103,37 @@ def cells_of(t: Tally) -> list[str]:
     return [str(t.runs), cell(t.finished, t.runs), cell(t.passed, t.runs), graders(t)]
 
 
+def amount(value) -> float | None:
+    if isinstance(value, (int, float)) and not isinstance(value, bool):
+        return float(value)
+    return None
+
+
+def cost_line(data: dict) -> str:
+    total = 0.0
+    judge_total = 0.0
+    recorded = False
+    for case in data.get("cases") or []:
+        arms = case.get("arms") if isinstance(case, dict) else None
+        if not isinstance(arms, dict):
+            continue
+        for runs in arms.values():
+            for run in runs if isinstance(runs, list) else []:
+                if not isinstance(run, dict):
+                    continue
+                cost = amount(run.get("costUsd"))
+                judge = amount(run.get("judgeCostUsd"))
+                if cost is None and judge is None:
+                    continue
+                recorded = True
+                judge_total += judge or 0.0
+                total += judge if cost is None else cost
+    if not recorded:
+        return "Cost: not recorded"
+    own = max(0.0, total - judge_total)
+    return f"Cost: ${total:.4f} (runs ${own:.4f}, judge ${judge_total:.4f})"
+
+
 def format_summary(data: dict, source: str) -> list[str]:
     rows, total, reasons = summarise(data)
     started = data.get("startedAt")
@@ -127,6 +158,7 @@ def format_summary(data: dict, source: str) -> list[str]:
             lines.append(f"{label.ljust(label_width)}  0 runs")
         else:
             lines.append(label.ljust(label_width) + "  " + "  ".join(c.rjust(w) for c, w in zip(cells, widths)))
+    lines.append(cost_line(data))
     if reasons:
         count_width = max(len(str(n)) for n in reasons.values())
         lines.append("")

@@ -335,12 +335,29 @@ MOVED = {("devflow", "release"): "/devflow-release:release",
          ("devflow", "review-ui"): "/devflow-ui:review-ui"}
 
 
-def runner(who: str, how: str) -> tuple[str | None, str | None]:
+_LOCAL_SKILL = re.compile(r"`/([\w-]+)`")
+PROJECT_SKILLS_DIR = Path(".claude") / "skills"
+
+
+def project_skills(project: Path) -> frozenset[str]:
+    folder = Path(project) / PROJECT_SKILLS_DIR
+    try:
+        names = {entry.name for entry in folder.iterdir() if (entry / "SKILL.md").is_file()}
+    except OSError:
+        return frozenset()
+    return frozenset(name for name in names if name not in RUN_SKILLS)
+
+
+def runner(who: str, how: str, local: frozenset[str] = frozenset()) -> tuple[str | None, str | None]:
     both = f"{who} {how}".lower()
     if "by hand" in how.lower():
         return None, "is done by hand"
     if "manage-project" in both or "project manager" in both:
         return None, "is the project manager's"
+    if "coding session" in who.lower():
+        named = [name for name in _LOCAL_SKILL.findall(how) if name in local]
+        if named:
+            return named[0], None
     skills = _SKILL.findall(how)
     runnable = [skill for plugin, skill in skills if plugin == "devflow" and skill in RUN_SKILLS]
     if runnable and "coding session" in who.lower():
@@ -442,6 +459,17 @@ def _held_gate(view: PlanView, number: int) -> str | None:
     return None
 
 
+_AMOUNT = re.compile(r"\$\s?\d+(?:[.,]\d+)?")
+_APPROVED = re.compile(r"(?:^|[.;!?]\s+)(?:\*\*\s*)?approved\s+\d{4}-\d{2}-\d{2}", re.IGNORECASE)
+
+
+def budget_approved(section: str) -> bool:
+    budget = step_field(section, "Budget")
+    if budget is None:
+        return True
+    return bool(_AMOUNT.search(budget) and _APPROVED.search(budget))
+
+
 def _not_done(states: dict[int, tuple[str, str]], number: int) -> bool:
     return number not in states or is_open(states[number][1])
 
@@ -499,19 +527,21 @@ InProgress = list[tuple[str, Optional[list[str]]]]
 
 def blockers(view: PlanView, number: int, other: PlanView | None,
              in_progress: InProgress | None = None, layout: Layout = DEFAULT_LAYOUT,
-             archived: Sequence[PlanView] = ()) -> list[str]:
+             archived: Sequence[PlanView] = (), local: frozenset[str] = frozenset()) -> list[str]:
     reasons: list[str] = []
+    section = view.sections.get(number, "")
     if is_claimed(view.states.get(number, ("", ""))[1]):
         reasons.append("is claimed by another tab")
     if _held_gate(view, number) is not None:
         reasons.append("is stopped at its design Gate")
     elif _open_gate(view, number) is not None:
         reasons.append("is at an uncleared Gate")
+    if not budget_approved(section):
+        reasons.append("has no approved Budget")
     row = view.who.get(number)
-    reason = runner(*row)[1] if row else "has no Who does what row"
+    reason = runner(*row, local)[1] if row else "has no Who does what row"
     if reason:
         reasons.append(reason)
-    section = view.sections.get(number, "")
     text = step_field(section, "Needs")
     if text:
         plans = [plan for plan in (view, other, *archived) if plan is not None]
@@ -559,6 +589,8 @@ DESIGN_ACTION = ("the maintainer answers the design the step's Tried line names:
                  "appends `Cleared YYYY-MM-DD HH:MM: <answer>.` to the Gate, or sets the row back to — to have "
                  "it designed again; then run /devflow:next-step again")
 IN_PROGRESS_ACTION = "the steps in progress land first"
+BUDGET_ACTION = ("the maintainer approves the Budget: /devflow:manage-project appends `; approved "
+                 "YYYY-MM-DD HH:MM by the maintainer` to the step's Budget line, then run /devflow:next-step again")
 
 
 def next_action(reason: str) -> str:
@@ -566,6 +598,8 @@ def next_action(reason: str) -> str:
         return GATE_ACTION
     if reason.startswith("is stopped at its design Gate"):
         return DESIGN_ACTION
+    if reason.startswith("has no approved Budget"):
+        return BUDGET_ACTION
     if reason.startswith("is done by hand"):
         return "the maintainer does it by hand, as the plan says"
     if reason.startswith("is the project manager's") or reason.startswith("has no Who does what row"):
@@ -582,9 +616,10 @@ def next_action(reason: str) -> str:
 
 
 def _take(view: PlanView, number: int, why: list[str] | None = None,
-          skipped: list[str] | None = None, fallback: bool = False) -> Choice:
+          skipped: list[str] | None = None, fallback: bool = False,
+          local: frozenset[str] = frozenset()) -> Choice:
     title, state = view.states[number]
-    skill = runner(*view.who[number])[0]
+    skill = runner(*view.who[number], local)[0]
     return Choice(view.path, number, title, state.strip() if has_note(state) else "", skill,
                   None, None, None, why, skipped or [], fallback)
 
@@ -605,18 +640,18 @@ def _why_text(why: list[str] | None) -> str:
 
 
 def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAULT_LAYOUT,
-                archived: Sequence[PlanView] = ()) -> Choice:
+                archived: Sequence[PlanView] = (), local: frozenset[str] = frozenset()) -> Choice:
     ordered = _in_order(current.order, current.states)
     open_steps = [n for n in ordered if is_open(current.states[n][1])]
     if not open_steps:
         return _stop(current, None, f"every step of {current.path} is done",
                      "run /devflow:manage-project to close the plan")
     candidates = [n for n in open_steps if not is_claimed(current.states[n][1])]
-    reasons = {n: blockers(current, n, nxt, layout=layout, archived=archived) for n in candidates}
+    reasons = {n: blockers(current, n, nxt, layout=layout, archived=archived, local=local) for n in candidates}
     if candidates:
         first = candidates[0]
         if not reasons[first]:
-            return _take(current, first)
+            return _take(current, first, local=local)
         if any(not reasons[n] for n in candidates[1:]):
             return _stop(current, first, f"step {first} {reasons[first][0]}", next_action(reasons[first][0]))
     why = [f"{n} {reasons[n][0]}" for n in candidates]
@@ -628,9 +663,9 @@ def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAUL
             state = nxt.states[number][1]
             if not is_open(state) or is_claimed(state):
                 continue
-            found = blockers(nxt, number, current, in_progress, layout, archived)
+            found = blockers(nxt, number, current, in_progress, layout, archived, local)
             if not found:
-                return _take(nxt, number, why, skipped, True)
+                return _take(nxt, number, why, skipped, True, local)
             skipped.append(f"{number} {found[0]}")
         stop += f"; nor can any step of the next plan, {nxt.path}"
         if skipped:
@@ -641,17 +676,19 @@ def choose_step(current: PlanView, nxt: PlanView | None, layout: Layout = DEFAUL
 
 
 def _choice(plan: str | None, plan_md: str | None, next_path: str | None, next_md: str | None,
-            layout: Layout, archived: Sequence[PlanView] = ()) -> Choice | None:
+            layout: Layout, archived: Sequence[PlanView] = (),
+            local: frozenset[str] = frozenset()) -> Choice | None:
     current = _readable(plan, plan_md)
     nxt = _readable(next_path, next_md)
     if current is None or nxt is None:
         return None
-    return choose_step(current, nxt, layout, archived)
+    return choose_step(current, nxt, layout, archived, local)
 
 
 def plan_lines(plan: str | None, plan_md: str | None,
                layout: Layout = DEFAULT_LAYOUT, next_path: str | None = None,
-               next_md: str | None = None, archived: Sequence[PlanView] = ()) -> list[str]:
+               next_md: str | None = None, archived: Sequence[PlanView] = (),
+               local: frozenset[str] = frozenset()) -> list[str]:
     if not plan:
         return [f"Plan: none found in {layout.status_file}."]
     lines = [f"Plan: {plan}"]
@@ -665,7 +702,7 @@ def plan_lines(plan: str | None, plan_md: str | None,
                         f"read {layout.status_file}."]
     claimed = started(order, states)
     number = next_open(order, states)
-    choice = _choice(plan, plan_md, next_path, next_md, layout, archived)
+    choice = _choice(plan, plan_md, next_path, next_md, layout, archived, local)
     if choice is not None and choice.fallback:
         lines.append(f"Next open step in Order: {choice.number} {choice.title}, from the next plan "
                      f"{choice.plan} (no step of {plan} can start: {_why_text(choice.why)})")
@@ -919,8 +956,9 @@ def report(run: Runner, project: Path, layout: Layout = DEFAULT_LAYOUT,
     next_path = next_plan(status_md, plan, layout) if status_md and plan else None
     next_md = _read(files / next_path) if next_path else None
     archived = archived_plans(files, status_md, layout)
-    lines += plan_lines(plan, plan_md, layout, next_path, next_md, archived)
-    choice = _choice(plan, plan_md, next_path, next_md, layout, archived)
+    local = project_skills(project)
+    lines += plan_lines(plan, plan_md, layout, next_path, next_md, archived, local)
+    choice = _choice(plan, plan_md, next_path, next_md, layout, archived, local)
     if choice is not None and choice.fallback:
         models = models_line(layout, next_md, choice.number, session_id, quiet=short)
     else:
@@ -950,7 +988,14 @@ def _approved_design(project: Path, choice: Choice, layout: Layout) -> str | Non
     return path if (project / path).is_file() else None
 
 
-def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]:
+def run_line(run: str) -> str:
+    return f"Run: /devflow:{run}" if run in RUN_SKILLS else f"Run: /{run}"
+
+
+def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT,
+                    local: frozenset[str] | None = None) -> list[str]:
+    if local is None:
+        local = project_skills(project)
     status_md = _read(project / layout.status_file)
     plan = current_plan(status_md, layout) if status_md else None
     if not plan:
@@ -963,8 +1008,13 @@ def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]
     next_path = next_plan(status_md, plan, layout)
     nxt = _readable(next_path, _read(project / next_path) if next_path else None)
     archived = archived_plans(project, status_md, layout)
-    choice = choose_step(current, nxt, layout, archived)
+    choice = choose_step(current, nxt, layout, archived, local)
     lines = [f"Plan: {choice.plan}" + (" (the next plan)" if choice.fallback else "")]
+    chosen = nxt if choice.fallback and nxt is not None else current
+    budget = None
+    if choice.number is not None:
+        budget = step_field(chosen.sections.get(choice.number, ""), "Budget")
+    budget_lines = [] if budget is None else [f"Budget: {budget}"]
     if choice.run:
         if choice.fallback:
             lines.append(f"Why: no step of {plan} can start: {_why_text(choice.why)}")
@@ -976,12 +1026,14 @@ def next_step_lines(project: Path, layout: Layout = DEFAULT_LAYOUT) -> list[str]
         design = _approved_design(project, choice, layout)
         if design:
             lines.append(f"Design: {design}")
-        lines.append(f"Run: /devflow:{choice.run}")
+        lines += budget_lines
+        lines.append(run_line(choice.run))
         return lines
     if choice.number is not None:
         lines.append(f"Step: {choice.number} {choice.title}")
     if choice.gate:
         lines.append(f"Gate: {choice.gate}")
+    lines += budget_lines
     lines.append(f"Stop: {choice.stop}. Next: {choice.next_action}.")
     return lines
 
@@ -1005,7 +1057,7 @@ def main(argv: list[str] | None = None) -> int:
                 return 1
             return 0
         if args:
-            text = "\n".join(next_step_lines(found.root, Layout(found.config)))
+            text = "\n".join(next_step_lines(found.root, Layout(found.config), project_skills(project)))
         else:
             mode, setting_error = output_mode(os.environ)
             base = base_path()

@@ -594,7 +594,131 @@ THREE_STATUS = f"""# Status
 """
 
 
+MEDIAN_ROW = "| 2 Median | coding session | `/devflow:add-feature` |"
+MEDIAN_NEEDS = "### 2 — Median\n\n**Files:** `tally/core.py`, `tests/test_core.py`, `docs/BEHAVIOUR.md`.\n**Needs** nothing."
+APPROVED_BUDGET = ("$1.00 for the eval runs, cases and judge (this session's own cost not counted); "
+                   "approved 2026-10-21 09:00 by the maintainer")
+PROPOSED_BUDGET = "$8 (proposed)"
+BUDGET_STOP = "step 2 has no approved Budget"
+BUDGET_ACTION = ("the maintainer approves the Budget: /devflow:manage-project appends `; approved "
+                 "YYYY-MM-DD HH:MM by the maintainer` to the step's Budget line, then run /devflow:next-step again")
+
+
+def eval_step(plan_md: str, budget: str | None = APPROVED_BUDGET, how: str = "`/run-evals`") -> str:
+    assert MEDIAN_ROW in plan_md and MEDIAN_NEEDS in plan_md
+    plan_md = plan_md.replace(MEDIAN_ROW, f"| 2 Median | coding session | {how} |")
+    if budget is not None:
+        plan_md = plan_md.replace(MEDIAN_NEEDS, f"{MEDIAN_NEEDS}\n**Budget:** {budget}")
+    return with_states(plan_md, {1: "done"})
+
+
+def with_skill(project: Path, name: str = "run-evals") -> Path:
+    folder = project / ".claude" / "skills" / name
+    folder.mkdir(parents=True, exist_ok=True)
+    (folder / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
+    return project
+
+
+LOCAL = frozenset({"run-evals"})
+
+
 class TestNextStep(unittest.TestCase):
+    def test_a_coding_session_row_runs_a_project_skill_that_exists(self):
+        self.assertEqual(session_start.runner("coding session", "`/run-evals`", LOCAL), ("run-evals", None))
+        self.assertEqual(session_start.runner("coding session", "`/run-evals`"), (None, "waits on coding session"))
+        self.assertEqual(session_start.runner("maintainer", "`/run-evals`", LOCAL), (None, "waits on maintainer"))
+        self.assertEqual(session_start.runner("coding session", "`/other`", LOCAL), (None, "waits on coding session"))
+        self.assertEqual(session_start.runner("coding session", "by hand, `/run-evals`", LOCAL),
+                         (None, "is done by hand"))
+        self.assertEqual(session_start.runner("coding session", "`/devflow:add-feature`", LOCAL),
+                         ("add-feature", None))
+        plan = view(CURRENT_PATH, eval_step(CURRENT))
+        choice = session_start.choose_step(plan, None, local=LOCAL)
+        self.assertEqual((choice.number, choice.run, choice.stop), (2, "run-evals", None))
+        choice = session_start.choose_step(plan, None)
+        self.assertEqual((choice.number, choice.run, choice.stop), (2, None, "step 2 waits on coding session"))
+
+    def test_project_skills_reads_the_project_folder_and_leaves_out_the_run_skills(self):
+        project = Path(tempfile.mkdtemp(prefix="devflow-skills-"))
+        self.addCleanup(shutil.rmtree, project, ignore_errors=True)
+        self.assertEqual(session_start.project_skills(project), frozenset())
+        with_skill(project)
+        with_skill(project, "add-feature")
+        (project / ".claude" / "skills" / "empty").mkdir()
+        self.assertEqual(session_start.project_skills(project), LOCAL)
+
+    def test_a_budget_needs_an_amount_and_a_dated_approval(self):
+        section = session_start.step_sections
+        for budget, approved in ((APPROVED_BUDGET, True), (PROPOSED_BUDGET, False),
+                                 ("approved 2026-10-21 by the maintainer", False),
+                                 ("$8; not approved 2026-10-21", False),
+                                 ("$8; **not** approved 2026-11-01", False),
+                                 ("$8 **(proposed)** approved 2026-11-01 if asked", False),
+                                 ("$8 for the runs; **approved 2026-11-01** by the maintainer", True),
+                                 ("$8 for the runs; not yet approved", False),
+                                 ("$8, approved by the maintainer", False),
+                                 ("$8 for the runs. Approved 2026-10-21 09:00 by the maintainer", True),
+                                 ("approved 2026-10-21: $8 for the runs", True)):
+            plan = eval_step(CURRENT, budget)
+            self.assertEqual(session_start.budget_approved(section(plan)[2]), approved, budget)
+            reasons = session_start.blockers(view(CURRENT_PATH, plan), 2, None, local=LOCAL)
+            self.assertEqual(reasons, [] if approved else ["has no approved Budget"], budget)
+        self.assertTrue(session_start.budget_approved(section(CURRENT)[2]))
+
+    def test_an_unapproved_budget_stops_the_step_after_the_gate(self):
+        plan = view(CURRENT_PATH, eval_step(CURRENT, PROPOSED_BUDGET))
+        choice = session_start.choose_step(plan, None, local=LOCAL)
+        self.assertEqual((choice.number, choice.run, choice.stop, choice.next_action),
+                         (2, None, BUDGET_STOP, BUDGET_ACTION))
+        gated = eval_step(CURRENT, PROPOSED_BUDGET).replace(
+            MEDIAN_NEEDS, f"{MEDIAN_NEEDS}\n**Gate:** Ada signs off the cases.")
+        self.assertEqual(session_start.blockers(view(CURRENT_PATH, gated), 2, None, local=LOCAL),
+                         ["is at an uncleared Gate", "has no approved Budget"])
+
+    def test_an_eval_step_in_the_next_plan_needs_its_budget_approved(self):
+        nxt = NEXT.replace("| 2 Range | coding session | `/devflow:add-feature` |",
+                           "| 2 Range | coding session | `/run-evals` |")
+        old = "### 2 — Range\n\n**Files:** `tally/core.py`, `tests/test_core.py`.\n**Needs** nothing."
+        self.assertIn(old, nxt)
+        stuck = with_states(BLOCKED, {2: "done", 3: "done", 5: "done"})
+        for budget, expected in ((APPROVED_BUDGET, (NEXT_PATH, 2, "run-evals", True)),
+                                 (PROPOSED_BUDGET, (NEXT_PATH, 3, "add-feature", True))):
+            plan = nxt.replace(old, f"{old}\n**Budget:** {budget}")
+            choice = session_start.choose_step(view(CURRENT_PATH, stuck), view(NEXT_PATH, plan), local=LOCAL)
+            self.assertEqual((choice.plan, choice.number, choice.run, choice.fallback), expected, budget)
+            self.assertEqual("2 has no approved Budget" in choice.skipped, budget == PROPOSED_BUDGET, budget)
+        project = with_skill(self.project_with(stuck, nxt.replace(old, f"{old}\n**Budget:** {APPROVED_BUDGET}")))
+        lines = session_start.next_step_lines(project)
+        self.assertEqual((lines[0], lines[-3:]), (f"Plan: {NEXT_PATH} (the next plan)",
+                                                   ["Step: 2 Range", f"Budget: {APPROVED_BUDGET}", "Run: /run-evals"]))
+
+    def test_the_flag_prints_the_project_skill_and_the_budget(self):
+        project = with_skill(self.project_with(eval_step(CURRENT), None))
+        self.assertEqual(session_start.next_step_lines(project), [
+            f"Plan: {CURRENT_PATH}",
+            "Step: 2 Median",
+            f"Budget: {APPROVED_BUDGET}",
+            "Run: /run-evals",
+        ])
+        self.assertEqual(session_start.next_step_lines(project, local=frozenset())[-1],
+                         "Stop: step 2 waits on coding session. Next: it waits on coding session.")
+        unapproved = with_skill(self.project_with(eval_step(CURRENT, PROPOSED_BUDGET), None))
+        self.assertEqual(session_start.next_step_lines(unapproved), [
+            f"Plan: {CURRENT_PATH}",
+            "Step: 2 Median",
+            f"Budget: {PROPOSED_BUDGET}",
+            f"Stop: {BUDGET_STOP}. Next: {BUDGET_ACTION}.",
+        ])
+        feature = self.project_with(eval_step(CURRENT, how="`/devflow:add-feature`"), None)
+        self.assertEqual(session_start.next_step_lines(feature)[-2:],
+                         [f"Budget: {APPROVED_BUDGET}", "Run: /devflow:add-feature"])
+
+    def test_the_summary_is_unchanged_without_project_skills(self):
+        layout = session_start.DEFAULT_LAYOUT
+        for plan in (CURRENT, BLOCKED, with_states(CURRENT, {1: "done"})):
+            self.assertEqual(session_start.plan_lines(CURRENT_PATH, plan, layout, NEXT_PATH, NEXT, local=LOCAL),
+                             session_start.plan_lines(CURRENT_PATH, plan, layout, NEXT_PATH, NEXT))
+
     def test_the_next_plan_is_the_other_plan_in_a_status_table(self):
         self.assertEqual(session_start.next_plan(TWO_STATUS, CURRENT_PATH), NEXT_PATH)
         self.assertIsNone(session_start.next_plan(STATUS, "docs/plans/release-2.4.0.md"))
@@ -1108,6 +1232,49 @@ class TestMain(unittest.TestCase):
             self.assertEqual((result.returncode, result.stderr), (0, ""), how)
             self.assertIn(f"Stop: no step of {CURRENT_PATH} can start: {reason}. "
                           f"Next: the maintainer runs {skill} when ready.\n", result.stdout, how)
+
+    def eval_project(self, budget: str) -> None:
+        (self.project / ".claude").mkdir(exist_ok=True)
+        (self.project / ".claude" / "devflow.json").write_text(json.dumps({"name": "tally"}), encoding="utf-8")
+        (self.project / "docs" / "plans").mkdir(parents=True, exist_ok=True)
+        (self.project / "docs" / "STATUS.md").write_text(TWO_STATUS, encoding="utf-8")
+        (self.project / CURRENT_PATH).write_text(eval_step(CURRENT, budget), encoding="utf-8")
+
+    def test_next_step_flag_runs_a_project_skill_with_its_budget(self):
+        self.eval_project(APPROVED_BUDGET)
+        result = self.run_next_step()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nBudget: {APPROVED_BUDGET}\n"
+                                        "Stop: step 2 waits on coding session. Next: it waits on coding session.\n")
+        with_skill(self.project)
+        result = self.run_next_step()
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nBudget: {APPROVED_BUDGET}\n"
+                                        "Run: /run-evals\n")
+
+    def test_next_step_flag_stops_at_an_unapproved_budget(self):
+        for budget in (PROPOSED_BUDGET, "$8; not approved 2026-10-21", "approved 2026-10-21 by the maintainer"):
+            self.eval_project(budget)
+            with_skill(self.project)
+            result = self.run_next_step()
+            self.assertEqual((result.returncode, result.stderr), (0, ""), budget)
+            self.assertEqual(result.stdout, f"Plan: {CURRENT_PATH}\nStep: 2 Median\nBudget: {budget}\n"
+                                            f"Stop: {BUDGET_STOP}. Next: {BUDGET_ACTION}.\n", budget)
+
+    def test_next_step_flag_reads_project_skills_from_the_clone_never_the_store(self):
+        main = self.project / "main"
+        store = self.tally_store()
+        (store / CURRENT_PATH).write_text(eval_step(CURRENT), encoding="utf-8")
+        with_skill(store)
+        link(main / ".git", store)
+        wt = worktree(main, self.project / "wt")
+        result = self.run_in(wt, "--next-step")
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertIn("Stop: step 2 waits on coding session.", result.stdout)
+        with_skill(wt)
+        result = self.run_in(wt, "--next-step")
+        self.assertEqual((result.returncode, result.stderr), (0, ""))
+        self.assertTrue(result.stdout.endswith("Run: /run-evals\n"), result.stdout)
 
     def test_next_step_flag_without_a_config(self):
         result = self.run_next_step()

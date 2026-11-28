@@ -456,6 +456,33 @@ class TestSelect(_SelectRepo):
         self.repo.commit("Shadow", {"skills/y/SKILL.md": skill_file("y", "root", "body")})
         self.assertEqual("skills/y/SKILL.md", ev.skill_path(self.repo_path, "y"))
 
+    def test_skill_path_finds_a_project_skill_after_the_shipped_ones(self):
+        self.repo.commit("Local", {
+            **self._plugin_files(),
+            ".claude/skills/local/SKILL.md": skill_file("local", "runs", "body one"),
+            ".claude/skills/release/SKILL.md": skill_file("release", "shadow", "body one"),
+            ".claude/skills/y/SKILL.md": skill_file("y", "shadow", "body one")})
+        self.assertEqual(".claude/skills/local/SKILL.md", ev.skill_path(self.repo_path, "local"))
+        self.assertEqual("skills/release/SKILL.md", ev.skill_path(self.repo_path, "release"))
+        self.assertEqual("plugins/x/skills/y/SKILL.md", ev.skill_path(self.repo_path, "y"))
+
+    def test_a_project_skills_trigger_case_is_listed_when_its_front_matter_changes(self):
+        recorded = self.repo.commit("Local", {
+            ".claude/skills/local/SKILL.md": skill_file("local", "runs", "body one"),
+            **case_files("trigger", "local-1-fires", "trigger-local-1-fires", "trigger", None)})
+        passes = {name: self.c1 for name in BEHAVIOUR + [
+            "trigger-release-1-fires", "trigger-add-feature-5-near-miss"]}
+        self.write_passes({**passes, "trigger-local-1-fires": recorded})
+        self.assertEqual([], self.names("trigger"))
+        self.repo.commit("Body", {
+            ".claude/skills/local/SKILL.md": skill_file("local", "runs", "body two")})
+        self.assertEqual([], self.names("trigger"))
+        self.repo.commit("Description", {
+            ".claude/skills/local/SKILL.md": skill_file("local", "changed", "body two")})
+        self.assertEqual(["trigger-local-1-fires"], self.names("trigger"))
+        reason = self.reasons("trigger")["trigger-local-1-fires"]
+        self.assertTrue(reason.startswith(".claude/skills/local/SKILL.md front matter since "), reason)
+
     def test_a_plugin_skills_trigger_case_is_listed_when_its_front_matter_changes(self):
         self._record_plugin_cases()
         self.assertEqual([], self.names("trigger"))
@@ -676,6 +703,45 @@ class TestSelect(_SelectRepo):
         self.assertTrue(any("--tag behaviour" in line for line in seen))
         self.assertTrue(any("--tag trigger" in line for line in seen))
 
+    def run_select(self, *flags: str) -> list[str]:
+        completed = subprocess.run(
+            [sys.executable, str(SELECT_PATH), "select", *flags, "--repo", self.repo_path],
+            capture_output=True, text=True, encoding="utf-8")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        return [line for line in completed.stdout.splitlines() if "claude plugin eval" in line]
+
+    def test_default_commands_are_unchanged(self):
+        self.repo.commit("Fixture", {"evals/fixture/build.sh": "work=2\n"})
+        self.assertEqual([
+            "TMPDIR=$HOME/ev claude plugin eval . --tag behaviour --runs 1 --ablation none "
+            "--scaffold --allow-tools Bash Write Edit --trust-plugin --no-publish -j 2 "
+            "--judge-model sonnet --max-cost-usd 25",
+            'claude plugin eval . --tag trigger --case "trigger-release-1-fires" --ablation none '
+            "--runs 1 --scaffold --trust-plugin --no-publish -j 2",
+        ], self.run_select())
+
+    def test_each_prints_one_command_per_case_with_its_runs_and_jobs(self):
+        self.repo.commit("Fixture", {"evals/fixture/build.sh": "work=2\n"})
+        self.repo.commit("Description", {
+            "skills/add-feature/SKILL.md": skill_file("add-feature", "adds more", "body one")})
+        lines = self.run_select("--each", "--runs", "3", "--jobs", "1")
+        self.assertEqual(
+            BEHAVIOUR + ["trigger-add-feature-5-near-miss", "trigger-release-1-fires"],
+            [re.search(r'--case "([^"]*)"', line).group(1) for line in lines])
+        for line in lines:
+            self.assertEqual(["3"], re.findall(r"--runs (\d+)", line))
+            self.assertEqual(["1"], re.findall(r"-j (\d+)", line))
+        self.assertNotIn("--scaffold", lines[-2])
+        self.assertIn("--scaffold", lines[-1])
+
+    def test_runs_and_jobs_alone_keep_the_globs(self):
+        self.repo.commit("Body", {
+            "skills/release/SKILL.md": skill_file("release", "ships", "body two")})
+        lines = self.run_select("--runs", "2", "--jobs", "4")
+        self.assertEqual(1, len(lines))
+        self.assertIn('--case "release-*" --runs 2 ', lines[0])
+        self.assertIn(" -j 4 ", lines[0])
+
     def test_a_trigger_glob_without_a_scaffolded_case_has_no_scaffold_flag(self):
         self.repo.commit("Description", {
             "skills/add-feature/SKILL.md": skill_file("add-feature", "adds more", "body one")})
@@ -736,7 +802,7 @@ def result_case(name: str, *runs: dict) -> dict:
 
 
 class TestRecord(_SelectRepo):
-    def run_record(self, *paths: Path) -> subprocess.CompletedProcess:
+    def run_record(self, *paths: Path | str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, str(SELECT_PATH), "record", *map(str, paths),
              "--repo", self.repo_path],
@@ -839,7 +905,15 @@ class TestRecord(_SelectRepo):
         self.assertIn("rerun release-plain: run 1 scored 0.5\n\ntwo more runs for each rerun case, "
                       "then record the first result file and the new one together:\n", completed.stdout)
         self.assertIn('--tag behaviour --case "release-plain" --runs 2 ', completed.stdout)
+        self.assertIn(" -j 2 ", completed.stdout)
         self.assertNotIn("--tag trigger", completed.stdout)
+
+    def test_the_rerun_command_takes_records_jobs(self):
+        path = result_file(self.tmp, [result_case("release-plain", run(0.5))])
+        completed = self.run_record(path, "--jobs", "1")
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        self.assertEqual(["1"], re.findall(r"-j (\d+)", completed.stdout))
+        self.assertIn('--case "release-plain" --runs 2 ', completed.stdout)
 
     def test_refuses_a_case_that_is_not_on_disk(self):
         for runs in ((run(),), (run(0.5),)):

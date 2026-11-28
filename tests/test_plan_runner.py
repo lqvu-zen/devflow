@@ -447,6 +447,26 @@ class TestStops(RunnerCase):
                       "says, then runs /devflow:next-step again.", out)
         self.assertIn("0 steps", out)
 
+    def test_a_step_with_a_budget_stops_the_run_before_its_session_starts(self):
+        budget = "$1.00 for the eval runs; approved 2026-10-21 09:00 by the maintainer"
+        text = plan_md().replace("**Files:** `b.txt`.\n**Needs** nothing.\n",
+                                 f"**Files:** `b.txt`.\n**Needs** nothing.\n**Budget:** {budget}\n")
+        self.assertIn("**Budget:**", text)
+        (self.project / PLAN).write_text(text, encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "budget step")
+        self.calls([{"row": {"1": "done"}, "commit": "a.txt"}, {"row": {"2": "done"}}])
+        code, out = self.main("--steps", "3", "--dollars", "5")
+        self.assertEqual(len(self.records()), 1)
+        self.assertEqual(code, 0)
+        self.assertIn("- 1 Alpha: done", out)
+        self.assertIn(f"Stopped: step 2 has a Budget of its own ({budget}): its spend is outside --dollars and "
+                      "its runs outlive a headless turn; take it with /devflow:next-step in a session.", out)
+        self.assertEqual(plan_runner.ask_next_step(self.project).budget, budget)
+
+    def test_a_step_without_a_budget_reads_none(self):
+        self.assertIsNone(plan_runner.ask_next_step(self.project).budget)
+
     def test_a_session_that_leaves_its_row_not_done_ends_the_run_and_names_the_step(self):
         self.calls([{"row": {"1": "stopped: still red, see Tried"}}, {"row": {"2": "done"}}])
         rows, reason, code = self.run_plan()

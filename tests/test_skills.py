@@ -5,6 +5,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -86,6 +87,7 @@ MANAGER_PLAN_EDIT_RULE = (
     "scratchpad."
 )
 LF_ONLY = re.compile(rb"(?<!\r)\n")
+PROJECT_SKILLS = Path(".claude") / "skills"
 
 
 def _plugin_dirs(root: Path) -> list[Path]:
@@ -98,6 +100,8 @@ def _plugin_dirs(root: Path) -> list[Path]:
 def _skill_roots(root: Path = ROOT) -> list[Path]:
     roots = [root / "skills"]
     roots += [plugin / "skills" for plugin in _plugin_dirs(root) if (plugin / "skills").is_dir()]
+    if (root / PROJECT_SKILLS).is_dir():
+        roots.append(root / PROJECT_SKILLS)
     return roots
 
 
@@ -565,7 +569,8 @@ def _cross_citation_errors(skills_dir: Path) -> list[str]:
         for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
             for by_path, cited, names in _cross_citations(line):
                 target = skills_dir / cited / "SKILL.md"
-                if not target.is_file() and skills_dir.parent.parent.name == "plugins":
+                outside_the_base = skills_dir.parent.parent.name == "plugins" or skills_dir.parent.name == ".claude"
+                if not target.is_file() and outside_the_base:
                     target = ROOT / "skills" / cited / "SKILL.md"
                 if not target.is_file():
                     if by_path:
@@ -1699,6 +1704,156 @@ class TestKnowledgeDocsRules(unittest.TestCase):
                      TEMPLATES / "architecture" / "README.md"):
             with self.subTest(path=path.name):
                 self.assertIn(ROUTING_NAME, path.read_text(encoding="utf-8"))
+
+
+RUN_EVALS = ROOT / PROJECT_SKILLS / "run-evals" / "SKILL.md"
+RUN_EVALS_CASE = ROOT / "evals" / "cases" / "run-evals" / "runs-within-the-budget"
+SESSION_START = ROOT / "hooks" / "session_start.py"
+EVAL_SELECT = ROOT / "tools" / "eval_select.py"
+APPROVAL_CLAUSE = "`; approved YYYY-MM-DD HH:MM by the maintainer`"
+VERIFY_SENTENCE = (
+    "A coding session runs them only from an eval step (an `**Evals:**` line and a `**Budget:**` the "
+    "maintainer approved), through `/devflow:next-step`, which runs this repo's `/run-evals`; the format is "
+    "in `README.md` under Skill evals."
+)
+RUN_EVALS_SECTIONS = {
+    "## 1. Refuse without the format": (
+        "no `**Evals:**` line",
+        "a dated `approved YYYY-MM-DD` clause at the start of the field or after `.`, `;`, `!` or `?`",
+        "\"not approved\"",
+        "\"**not** approved\"",
+        "the first one, if it has more, as `--next-step` reads it",
+        "editing and claiming nothing",
+    ),
+    "## 2. Claim the step and check CI": (
+        "`add-feature`'s \"Before you start, and where you stop\"",
+        "check CI on HEAD first",
+    ),
+    "## 3. Where the commands run": ("`wsl.exe -e bash -lc '<command>'`", "`wsl.exe wslpath -a", "TMPDIR=$HOME/ev"),
+    "## 4. The frozen checkout": (
+        "`$EVAL_DEVFLOW_CHECKOUT`, relative to the repo root",
+        "`$HOME/devflow-eval`",
+        "`git -C <checkout> checkout -q --detach <sha>`",
+    ),
+    "## 5. The cases": (
+        "--each --runs <N> --jobs <J>",
+        "a behaviour command ends `--max-cost-usd 25`; replace that value",
+        "append `--max-cost-usd <left>`. Never two.",
+        "`--model sonnet`",
+    ),
+    "## 6. The budget loop": (
+        "Start it only while `left`, rounded down to the cent, is at least 0.01 and at least `dearest`",
+        "so `--max-cost-usd 0` is never passed",
+        "`left` (the budget, from the step's first `**Budget:**` line)",
+        "When no new result folder appeared since the command started, stop the loop as for `Cost: not recorded`",
+        "Set its `--max-cost-usd` to `left`",
+        "`run_in_background: true`",
+        "Never run two at once",
+        "`python3 tools/eval_summary.py <that file>`",
+        "names a usage or session limit stops the loop",
+    ),
+    "## 7. Record, and the commit": (
+        "`python3 tools/eval_select.py record <every result file> --jobs <J>`",
+        "a glob becomes one command per rerun case it covers",
+        "Run no other rerun",
+        "`add-feature`'s \"6. Commit and push\"",
+        "the mode takes this yes and nothing else here",
+        "show section 8's full report",
+        "`git cherry-pick FETCH_HEAD`",
+    ),
+    "## 8. The Status row and the report": (
+        "`done: <n> recorded, $<spent> of $<budget>`",
+        "`stopped (YYYY-MM-DD HH:MM): <n> recorded; failing <case>: <reason>, for the maintainer to rule on; "
+        "not run (budget spent): <cases>; $<spent> of $<budget>; see Tried`",
+        "`; cut by the usage limit at <case>; retake it`",
+    ),
+    "## Never": (
+        "never call it flaky, or a grader or judge wrong",
+        "Edit a case, grader, skill, fixture or tool, or the step's Evals or Budget lines",
+        "Rerun anything `record` doesn't ask for",
+    ),
+}
+
+
+def _session_start():
+    spec = importlib.util.spec_from_file_location("devflow_session_start_budget", SESSION_START)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestRunEvals(unittest.TestCase):
+    def test_the_project_skill_is_linted_with_the_shipped_ones(self):
+        self.assertIn(ROOT / PROJECT_SKILLS, _skill_roots())
+        self.assertIn(RUN_EVALS, _skill_mds())
+
+    def test_a_project_skills_folder_is_a_lint_root_only_when_present(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            _skill(root / "skills", "ok", "name: ok\r\ndescription: " + "d" * 300 + "\r\n")
+            self.assertEqual(_skill_roots(root), [root / "skills"])
+            _skill(root / PROJECT_SKILLS, "local", "name: other\r\ndescription: " + "d" * 300 + "\r\n")
+            self.assertEqual(_skill_roots(root), [root / "skills", root / PROJECT_SKILLS])
+            found = _across_roots(_front_matter_errors, root)
+        self.assertEqual(found, [".claude/skills/local: name is 'other', not the folder name"])
+
+    def test_the_result_is_never_guessed_from_the_newest_folder(self):
+        self.assertNotIn("else the newest", _section(RUN_EVALS, "## 6. The budget loop"))
+
+    def test_each_section_says_what_the_design_gives_it(self):
+        for heading, phrases in RUN_EVALS_SECTIONS.items():
+            section = _section(RUN_EVALS, heading)
+            for words in phrases:
+                with self.subTest(heading=heading, words=words):
+                    self.assertIn(words, section)
+
+    def test_the_cost_cap_it_replaces_is_the_one_select_prints(self):
+        spec = importlib.util.spec_from_file_location("devflow_eval_select_cap", EVAL_SELECT)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules[spec.name] = module
+        self.addCleanup(sys.modules.pop, spec.name, None)
+        spec.loader.exec_module(module)
+        behaviour = module.command_for("behaviour", "x", True, 2, 1)
+        trigger = module.command_for("trigger", "trigger-x", False, 2, 1)
+        self.assertTrue(behaviour.endswith(" --max-cost-usd 25"), behaviour)
+        self.assertNotIn("--max-cost-usd", trigger)
+        self.assertNotIn("--model", behaviour + trigger)
+        section = _section(RUN_EVALS, "## 5. The cases")
+        self.assertIn(behaviour.split("claude plugin eval", 1)[1].replace('"x"', '"<name>"').replace(
+            "--runs 2", "--runs <N>").replace("-j 1", "-j <J>"), section)
+
+    def test_the_approval_clause_is_the_same_words_where_it_is_written(self):
+        self.assertIn(APPROVAL_CLAUSE, _session_start().BUDGET_ACTION)
+        for path in (MANAGE_PROJECT, TEMPLATES / "plan.md"):
+            with self.subTest(path=path.name):
+                self.assertIn(APPROVAL_CLAUSE, path.read_text(encoding="utf-8"))
+        self.assertIn("only on their words", _section(MANAGE_PROJECT, "## Adding a plan step"))
+
+    def test_next_step_runs_the_project_skill_and_keeps_its_description(self):
+        text = _reattached_text(NEXT_STEP)
+        self.assertIn("`Run: /<name>`, a project skill in `.claude/skills/<name>/`", text)
+        self.assertIn("When the output has a `Budget:` line, say the approved budget first.", text)
+        self.assertIn("Call the Skill tool with the skill the `Run:` line names", text)
+        description = NEXT_STEP.read_text(encoding="utf-8").split("---")[1]
+        for words in ("run-evals", "Budget", "project skill"):
+            with self.subTest(words=words):
+                self.assertNotIn(words, description)
+
+    def test_the_profile_says_a_session_runs_them_from_an_eval_step(self):
+        verify = _section(ROOT / ".claude" / "devflow.md", "## Verify")
+        self.assertIn(VERIFY_SENTENCE, verify)
+        self.assertNotIn("Run them only when the plan step says so", verify)
+
+    def test_the_cases_step_is_approved_and_runs_the_copied_skill(self):
+        scaffold = (RUN_EVALS_CASE / "scaffold.sh").read_text(encoding="utf-8")
+        budget = next(line for line in scaffold.splitlines() if line.startswith("**Budget:**"))
+        module = _session_start()
+        self.assertTrue(module.budget_approved(budget.replace("\\$", "$")))
+        self.assertEqual(module.runner("coding session", "`/run-evals`", frozenset({"run-evals"})), ("run-evals", None))
+        self.assertIn('cp "$repo/.claude/skills/run-evals/SKILL.md"', scaffold)
+        self.assertIn("**Evals:** cases case-a, case-b, case-c; runs 2;", scaffold)
+        prompt = (RUN_EVALS_CASE / "prompt.md").read_text(encoding="utf-8")
+        self.assertIn("env: {EVAL_DEVFLOW_CHECKOUT: .frozen}", prompt)
 
 
 if __name__ == "__main__":

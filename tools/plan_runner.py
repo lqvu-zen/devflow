@@ -87,6 +87,7 @@ class NextStep(NamedTuple):
     stop: str | None
     lines: list[str]
     code: int
+    budget: str | None = None
 
 
 class SessionResult(NamedTuple):
@@ -141,7 +142,7 @@ def ask_next_step(project: Path) -> NextStep:
         return NextStep(None, None, "", None,
                         f"session_start.py --next-step exited {result.returncode}: {said or 'no output'}",
                         lines, result.returncode)
-    plan = number = run = stop = None
+    plan = number = run = stop = budget = None
     title = ""
     for line in lines:
         if line.startswith("Plan: "):
@@ -156,13 +157,15 @@ def ask_next_step(project: Path) -> NextStep:
             run = line[len("Run: "):].strip()
         elif line.startswith("Stop: "):
             stop = line[len("Stop: "):].strip()
+        elif line.startswith("Budget: "):
+            budget = line[len("Budget: "):].strip()
     if run is None and stop is None:
         stop = "session_start.py --next-step printed neither Run nor Stop: " + (" ".join(lines) or "no output")
         return NextStep(plan, number, title, None, stop, lines, 1)
     if run is not None and (plan is None or number is None):
         return NextStep(plan, number, title, None,
                         "session_start.py --next-step named a skill but no plan or step", lines, 1)
-    return NextStep(plan, number, title, run, stop, lines, 0)
+    return NextStep(plan, number, title, run, stop, lines, 0, budget)
 
 
 def foreign_changes(project: Path, layout) -> list[str] | None:
@@ -593,6 +596,10 @@ def run_plan(project: Path, steps: int | None, dollars: float | None, commit_fla
             return rows, f"step {step.number} offered again; not retried", 1
         if steps is not None and len(rows) >= steps:
             return rows, f"the step limit ({steps}) is reached", 0
+        if step.budget is not None:
+            return rows, (f"step {step.number} has a Budget of its own ({step.budget}): its spend is outside "
+                          "--dollars and its runs outlive a headless turn; take it with /devflow:next-step "
+                          "in a session"), 0
         budget = None
         if dollars is not None:
             if any(row.cost is None for row in rows):

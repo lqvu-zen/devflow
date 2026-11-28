@@ -63,7 +63,7 @@ When a change edits a skill's `description`, also run that skill's trigger cases
 claude plugin eval . --tag trigger --case "trigger-<skill>-*" --ablation none --runs 1 --trust-plugin --no-publish -j 2
 ```
 
-Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_select.py select` lists the behaviour and trigger cases a change can reach, with the commands to run. Evals run from a checkout frozen at one `develop` commit, never from the working folder where coding sessions commit, because a skill edit during a run spoils it. `select`, the eval commands and `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` all run there, and the record commit is cherry-picked onto `develop`. Run them only when the plan step says so; the details are in `README.md` under Skill evals. There is no lint or type check.
+Behaviour evals cost money (a full run is about $11 to $14). `python tools/eval_select.py select` lists the behaviour and trigger cases a change can reach, with the commands to run. Evals run from a checkout frozen at one `develop` commit, never from the working folder where coding sessions commit, because a skill edit during a run spoils it. `select`, the eval commands and `python tools/eval_select.py record evals/results/<timestamp>/aggregate-result.json` all run there, and the record commit is cherry-picked onto `develop`. A coding session runs them only from an eval step (an `**Evals:**` line and a `**Budget:**` the maintainer approved), through `/devflow:next-step`, which runs this repo's `/run-evals`; the format is in `README.md` under Skill evals. There is no lint or type check.
 
 ## Edit bounds
 
