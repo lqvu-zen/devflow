@@ -869,6 +869,17 @@ class TestNextStep(unittest.TestCase):
         plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {GATE} Cleared 2026-11-24 10:00: yes.")
         self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None), [])
 
+    def test_a_bolded_negation_is_not_cleared(self):
+        for words in ("Ada writes the wording; **not** cleared 2026-11-01.",
+                      "Ada writes the wording. **(pending)** cleared 2026-11-01 if approved.",
+                      "Ada writes the wording, **not yet** cleared 2026-11-01."):
+            plan = CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {words}")
+            self.assertEqual(session_start.blockers(view(CURRENT_PATH, plan), 4, None),
+                             ["is at an uncleared Gate"], words)
+        held = self.design_gated(STOPPED_AT_DESIGN, f"{DESIGN_GATE} **not** cleared 2026-11-24 11:00.")
+        self.assertEqual(session_start.blockers(view(CURRENT_PATH, held), 4, None),
+                         ["is stopped at its design Gate"])
+
     def test_the_flag_names_a_design_gated_step(self):
         plan = with_states(CURRENT.replace(f"**Gate:** {GATE}", f"**Gate:** {DESIGN_GATE}"),
                            {1: "done", 2: "done", 3: "done"})
